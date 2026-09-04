@@ -47,3 +47,10 @@ def test_live_api_client_logs(live_server: ApiClient):
     logs = live_server.get_logs(limit=10)
     assert "items" in logs
     assert "total" in logs
+
+
+def test_api_client_context_manager():
+    with ApiClient(base_url="http://127.0.0.1:8000") as client:
+        assert client.client is not None
+        assert not client.client.is_closed
+    assert client.client.is_closed

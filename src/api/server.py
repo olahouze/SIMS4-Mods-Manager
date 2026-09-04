@@ -54,14 +54,14 @@ class ApiServer:
         """Polls the fast ping endpoint until the server is up or timeout occurs."""
         url = f"http://{host}:{port}/api/system/ping"
         deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                with httpx.Client(timeout=0.5) as client:
+        with httpx.Client(timeout=0.5) as client:
+            while time.time() < deadline:
+                try:
                     resp = client.get(url)
                     if resp.status_code == 200:
                         return True
-            except Exception:
-                time.sleep(0.1)
+                except Exception:
+                    time.sleep(0.1)
         logger.warning(f"Le serveur API n'a pas répondu dans le délai imparti de {timeout}s.")
         return False
 

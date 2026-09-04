@@ -233,6 +233,16 @@ class AccountsView(QWidget):
             msg = res.get("message", "")
             if ok:
                 QMessageBox.information(self, "Test de session réussi", f"Statut : {msg}")
+                # Auto-trigger background sync if not already running
+                try:
+                    sync_st = self.api_client.get_catalog_sync_status()
+                    if not sync_st.get("is_running", False):
+                        self.api_client.start_catalog_sync(max_pages=0)
+                        logger.info(
+                            f"Synchronisation automatique du catalogue lancée suite au test validé de {provider_name}."
+                        )
+                except Exception as e:
+                    logger.debug(f"Impossible de démarrer la synchro auto après test: {e}")
             else:
                 QMessageBox.warning(self, "Test de session échoué", f"Statut : {msg}")
         except Exception as e:
@@ -261,11 +271,11 @@ class AccountsView(QWidget):
         self.refresh_statuses()
 
         if success:
-            # Trigger background catalog synchronization immediately
+            # Trigger background catalog synchronization immediately for all pages
             try:
-                self.api_client.start_catalog_sync(max_pages=5)
+                self.api_client.start_catalog_sync(max_pages=0)
                 logger.info(
-                    f"Synchronisation automatique du catalogue lancée suite à l'authentification réussie de {p_name}."
+                    f"Synchronisation automatique intégrale du catalogue lancée suite à l'authentification de {p_name}."
                 )
             except Exception as e:
                 logger.error(f"Impossible de lancer la synchronisation automatique: {e}")

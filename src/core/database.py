@@ -1,4 +1,7 @@
 import json
+import re
+import threading
+import urllib.parse
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from sqlalchemy import (
@@ -39,6 +42,7 @@ class CatalogMod(Base):
     version_str = Column(String(50), default="")
     patreon_status = Column(String(20), default="NONE", index=True)  # NONE, PUBLIC, UNLOCKED, LOCKED, UNKNOWN
     patreon_tier = Column(String(100), default="")
+    # Note: datetime.now without () is intentional — SQLAlchemy calls it as a factory at insert time
     last_scraped_at = Column(DateTime, default=datetime.now)
 
     __table_args__ = (Index("idx_source_remote", "source", "remote_id", unique=True),)
@@ -121,6 +125,7 @@ class AccountSession(Base):
 
 class DatabaseManager:
     _instance: Optional["DatabaseManager"] = None
+    _instance_lock = threading.Lock()
 
     def __init__(self, db_path: Optional[str] = None):
         if not db_path:
@@ -133,8 +138,11 @@ class DatabaseManager:
 
     @classmethod
     def get_instance(cls, db_path: Optional[str] = None) -> "DatabaseManager":
+        """Thread-safe singleton accessor with double-checked locking."""
         if cls._instance is None:
-            cls._instance = DatabaseManager(db_path)
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = DatabaseManager(db_path)
         return cls._instance
 
     def get_session(self) -> Session:
@@ -145,8 +153,6 @@ class DatabaseManager:
         Repairs corrupted catalog records (empty titles) from page_url slug,
         and purges known deleted ghost mods (such as remote_id 51260 / author dohmra).
         """
-        import re
-        import urllib.parse
 
         try:
             with self.get_session() as session:
@@ -193,10 +199,28 @@ class DatabaseManager:
                     else:
                         session.delete(item)
 
-                if ghosts or repaired_count:
+                # 3. Disconnect or repair mismatched catalog_mod_id foreign keys in InstalledMod
+                installed_mods = session.query(InstalledMod).filter(InstalledMod.catalog_mod_id.isnot(None)).all()
+                repaired_links = 0
+                for im in installed_mods:
+                    cm = session.query(CatalogMod).filter_by(id=im.catalog_mod_id).first()
+                    if not cm:
+                        # Stale pointer to deleted catalog mod
+                        im.catalog_mod_id = None
+                        repaired_links += 1
+                    elif im.remote_id and (cm.remote_id != im.remote_id or cm.source != im.source):
+                        logger.warning(
+                            f"Réparation clé étrangère erronée : mod installé '{im.title}' (remote_id={im.remote_id}) "
+                            f"était faussement lié au mod catalogue #{cm.id} '{cm.title}' (remote_id={cm.remote_id}). Dissociation."
+                        )
+                        true_match = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
+                        im.catalog_mod_id = true_match.id if true_match else None
+                        repaired_links += 1
+
+                if ghosts or repaired_count or repaired_links:
                     session.commit()
                     logger.info(
-                        f"Maintenance catalogue : {len(ghosts)} mod(s) fantôme(s) purgé(s), {repaired_count} titre(s) réparé(s)."
+                        f"Maintenance catalogue : {len(ghosts)} fantôme(s), {repaired_count} titre(s) réparé(s), {repaired_links} lien(s) corrigé(s)."
                     )
         except Exception as e:
             logger.debug(f"Erreur maintenance catalogue: {e}")
@@ -205,6 +229,8 @@ class DatabaseManager:
         """Purges all records from the catalog_mods table to restart from a clean catalog."""
         try:
             with self.get_session() as session:
+                # Disconnect all installed mods from catalog to prevent dangling/mismatched foreign keys
+                session.query(InstalledMod).update({InstalledMod.catalog_mod_id: None})
                 count = session.query(CatalogMod).delete()
                 session.commit()
                 logger.info(f"Purge complète du catalogue effectuée : {count} mods supprimés.")

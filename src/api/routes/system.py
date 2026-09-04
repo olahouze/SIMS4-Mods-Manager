@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+from sqlalchemy import text
+
 from src.api.models import HealthResponse
 from src.core.config import AppConfig
 from src.core.game_detector import GameDetector
@@ -26,12 +28,10 @@ def get_health():
     try:
         db = DatabaseManager.get_instance()
         with db.get_session() as session:
-            # Check basic query
-            session.execute(DatabaseManager.get_instance()._engine.connect().connection.cursor().execute("SELECT 1"))
+            session.execute(text("SELECT 1"))
             db_ok = True
     except Exception:
-        # Fallback simple check
-        db_ok = AppConfig.get_db_path().exists() or True
+        db_ok = AppConfig.get_db_path().exists()
 
     return HealthResponse(
         status="healthy",

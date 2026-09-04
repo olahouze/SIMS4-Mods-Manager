@@ -15,8 +15,8 @@ def is_archive(file_path: Path) -> bool:
             magic = f.read(4)
         if magic == b"DBPF":
             return False
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"DBPF magic check error on {file_path}: {e}")
 
     suffix = file_path.suffix.lower()
     if suffix == ".zip" or zipfile.is_zipfile(file_path):
@@ -27,7 +27,8 @@ def is_archive(file_path: Path) -> bool:
             import py7zr
 
             return py7zr.is_7zfile(file_path)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"py7zr check error on {file_path}: {e}")
             return False
 
     if suffix == ".rar":
@@ -35,7 +36,8 @@ def is_archive(file_path: Path) -> bool:
             import rarfile
 
             return rarfile.is_rarfile(file_path)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"rarfile check error on {file_path}: {e}")
             return False
 
     return False

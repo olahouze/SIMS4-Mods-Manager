@@ -72,6 +72,10 @@ def main():
     from PySide6.QtWidgets import QApplication, QMessageBox
     from PySide6.QtCore import Qt
     from src.ui.app import MainWindow
+    from src.utils.logger import attach_qt_handler
+
+    # Attach Qt log handler before QApplication so UI logs stream in real-time
+    attach_qt_handler()
 
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 

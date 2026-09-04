@@ -205,3 +205,16 @@ def test_catalog_state_filters(client):
     assert "filter_test_direct" not in sub_ids
     assert "filter_test_account" not in sub_ids
 
+
+def test_catalog_sync_default_all_pages(client):
+    """Verifies that start sync defaults to max_pages=0 (all pages detected)."""
+    from unittest.mock import patch
+
+    with patch("src.api.routes.catalog._run_catalog_sync") as mock_sync:
+        resp = client.post("/api/catalog/sync", json={})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "is_running" in data
+        assert "toutes les pages" in data["message"]
+        mock_sync.assert_called_once_with(0)
+

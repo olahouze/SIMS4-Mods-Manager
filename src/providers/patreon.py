@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from src.providers.base import BaseSourceProvider
 from src.core.session_manager import SessionManager
 from src.utils.logger import logger
+from src.utils.network import stream_download
 
 
 class PatreonProvider(BaseSourceProvider):
@@ -62,7 +63,6 @@ class PatreonProvider(BaseSourceProvider):
                 download_urls: List[Dict[str, Any]] = []
                 external_links: List[str] = []
 
-                # Extract direct post file
                 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"}
 
                 # Extract direct post file (only if NOT an image)
@@ -185,45 +185,7 @@ class PatreonProvider(BaseSourceProvider):
                         "Le lien Patreon pointe vers une image de prévisualisation et non un fichier de mod Sims 4. Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour accéder au téléchargement des fichiers .package / .zip.",
                     )
 
-                total_size = int(resp.headers.get("Content-Length") or 0)
-                downloaded = 0
-                import time
-
-                start_time = time.time()
-                last_ui_time = start_time
-                last_log_time = start_time
-
-                with open(dest_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=65536):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            now = time.time()
-                            elapsed = now - start_time
-                            speed_mb = (downloaded / (elapsed or 0.001)) / (1024 * 1024)
-                            speed_str = f"{speed_mb:.2f} Mo/s" if speed_mb >= 1.0 else f"{speed_mb * 1024:.0f} Ko/s"
-
-                            if total_size > 0:
-                                pct = min(int((downloaded / total_size) * 75), 75)
-                                down_mb = downloaded / (1024 * 1024)
-                                tot_mb = total_size / (1024 * 1024)
-                                detail = f"{down_mb:.1f} / {tot_mb:.1f} Mo • {speed_str}"
-                            else:
-                                down_mb = downloaded / (1024 * 1024)
-                                pct = min(int(down_mb * 2), 70)
-                                detail = f"{down_mb:.1f} Mo • {speed_str}"
-
-                            if progress_callback and (now - last_ui_time >= 0.2):
-                                progress_callback(pct, "Téléchargement depuis Patreon...", detail)
-                                last_ui_time = now
-
-                            if now - last_log_time >= 3.0:
-                                logger.info(f"[Téléchargement Patreon] {dest_path.name} : {detail}")
-                                last_log_time = now
-
-                size_mb = dest_path.stat().st_size / (1024 * 1024)
-                logger.info(f"Fichier Patreon téléchargé avec succès : {dest_path.name} ({size_mb:.2f} Mo).")
-                return True, str(dest_path)
+                return stream_download(resp, dest_path, progress_callback, "Téléchargement Patreon")
             else:
                 return False, f"Erreur HTTP {resp.status_code} lors du téléchargement."
         except Exception as e:

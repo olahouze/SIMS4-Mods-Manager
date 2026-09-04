@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QTextCursor, QFont
 
 from src.api.client import get_api_client
-from src.utils.logger import log_emitter, logger
+from src.utils.logger import get_qt_log_handler, logger
 
 
 class LogsView(QWidget):
@@ -27,8 +27,10 @@ class LogsView(QWidget):
         self.init_ui()
         self.load_initial_history()
 
-        # Connect real-time Qt signal
-        log_emitter.log_received.connect(self._on_log_received)
+        # Connect real-time Qt signal (handler attached in run.py before QApplication)
+        qt_handler = get_qt_log_handler()
+        if qt_handler:
+            qt_handler._emitter.log_received.connect(self._on_log_received)
 
     def init_ui(self):
         layout = QVBoxLayout(self)

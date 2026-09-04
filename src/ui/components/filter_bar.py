@@ -3,16 +3,14 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QComboBox,
-    QPushButton,
 )
 from PySide6.QtCore import Signal
 
 
 class FilterBar(QWidget):
-    """Modern filter bar with search, multi-criteria selectors and sync button."""
+    """Modern filter bar with search and multi-criteria selectors."""
 
     filters_changed = Signal()
-    sync_requested = Signal(int)  # emits number of pages to sync
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -74,37 +72,6 @@ class FilterBar(QWidget):
         )
         self.sort_combo.currentIndexChanged.connect(self._on_control_changed)
         layout.addWidget(self.sort_combo)
-
-        # Pages to sync Combo
-        self.pages_combo = QComboBox()
-        self.pages_combo.addItems(["1 page", "2 pages", "5 pages", "10 pages", "20 pages"])
-        self.pages_combo.setCurrentText("5 pages")
-        self.pages_combo.setToolTip("Nombre de pages à parcourir lors de la synchronisation")
-        self.pages_combo.setFixedWidth(105)
-        layout.addWidget(self.pages_combo)
-
-        # Sync Button
-        self.sync_btn = QPushButton("🔄 Synchroniser")
-        self.sync_btn.setProperty("class", "PrimaryBtn")
-        self.sync_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4f46e5;
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #6366f1;
-            }
-        """)
-        self.sync_btn.clicked.connect(self._on_sync_clicked)
-        layout.addWidget(self.sync_btn)
-
-    def _on_sync_clicked(self):
-        text = self.pages_combo.currentText()
-        count = int(text.split()[0])
-        self.sync_requested.emit(count)
 
     def _on_control_changed(self, *args):
         """Emits filters_changed regardless of any arguments passed by widget signals."""

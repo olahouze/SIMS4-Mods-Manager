@@ -13,6 +13,20 @@ class ApiClient:
         # High timeout for long-running actions like interactive login, downloads, sync
         self._client = httpx.Client(base_url=self.base_url, timeout=360.0)
 
+    def close(self) -> None:
+        """Closes the underlying httpx.Client and releases connection resources."""
+        self._client.close()
+
+    @property
+    def client(self) -> httpx.Client:
+        return self._client
+
+    def __enter__(self) -> "ApiClient":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     # --- System & Health ---
     def get_health(self) -> Dict[str, Any]:
         resp = self._client.get("/api/system/health")
@@ -67,7 +81,7 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
-    def start_catalog_sync(self, max_pages: int = 5) -> Dict[str, Any]:
+    def start_catalog_sync(self, max_pages: int = 0) -> Dict[str, Any]:
         resp = self._client.post("/api/catalog/sync", json={"max_pages": max_pages})
         resp.raise_for_status()
         return resp.json()

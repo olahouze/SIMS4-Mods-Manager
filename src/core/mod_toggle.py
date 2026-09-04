@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from src.core.database import DatabaseManager, InstalledMod
 from src.core.config import AppConfig
 from src.core.game_detector import GameDetector
@@ -9,7 +9,7 @@ class ModToggleManager:
     """Handles enabling and disabling installed Sims 4 mods without deletion."""
 
     @classmethod
-    def toggle_mod(cls, installed_mod_id: int, target_state: bool = None) -> Tuple[bool, str]:
+    def toggle_mod(cls, installed_mod_id: int, target_state: Optional[bool] = None) -> Tuple[bool, str]:
         """
         Toggles the enabled status of an installed mod.
         If target_state is None, inverts current state.

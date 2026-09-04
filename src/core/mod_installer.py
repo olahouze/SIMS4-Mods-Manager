@@ -166,8 +166,8 @@ class ModInstaller:
                     elif target_filename.endswith(".zip") or target_filename.startswith("mod_"):
                         clean_name = re.sub(r"[^a-zA-Z0-9_\-\. ]+", "_", custom_title or file_path.stem).strip()
                         target_filename = f"{clean_name}.package"
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Header check error on {file_path.name}: {e}")
 
                 dest_file = target_mod_dir / target_filename
                 shutil.copy2(file_path, dest_file)

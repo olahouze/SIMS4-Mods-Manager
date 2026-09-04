@@ -1,3 +1,5 @@
+import json
+import queue
 import tempfile
 import threading
 import time
@@ -5,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi.responses import FileResponse, StreamingResponse
 
 from src.api.models import (
     CatalogListResponse,
@@ -15,16 +18,21 @@ from src.api.models import (
     CatalogInstallResponse,
     ModDetailsResponse,
 )
+from src.core.config import AppConfig
 from src.core.database import DatabaseManager, CatalogMod, InstalledMod
 from src.core.mod_installer import ModInstaller
+from src.core.session_manager import SessionManager
+from src.core.update_checker import check_has_update
 from src.providers import ProviderRegistry
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
 
 
-# Global Sync Tracker State
+# Global Sync Tracker State (§3.3)
 class SyncTracker:
+    """Thread-safe tracker for catalog synchronization progress."""
+
     _lock = threading.Lock()
     is_running: bool = False
     progress_percent: int = 0
@@ -34,29 +42,99 @@ class SyncTracker:
     page1_ready: bool = False
     last_completed_at: Optional[str] = None
 
+    @classmethod
+    def start(cls, max_pages: int) -> None:
+        with cls._lock:
+            cls.is_running = True
+            cls.progress_percent = 0
+            cls.message = f"Démarrage de la synchronisation ({max_pages} pages)..."
+            cls.total_scraped = 0
+            cls.pages_completed = 0
+            cls.page1_ready = False
+
+    @classmethod
+    def update_progress(cls, percent: int, message: str) -> None:
+        with cls._lock:
+            cls.progress_percent = percent
+            cls.message = message
+
+    @classmethod
+    def record_page(cls, new_count: int, is_first_page: bool = False) -> None:
+        with cls._lock:
+            cls.pages_completed += 1
+            cls.total_scraped += new_count
+            if is_first_page:
+                cls.page1_ready = True
+
+    @classmethod
+    def set_error(cls, message: str) -> None:
+        with cls._lock:
+            cls.message = message
+
+    @classmethod
+    def finish(cls, total_new: int) -> None:
+        with cls._lock:
+            cls.progress_percent = 100
+            cls.total_scraped = total_new
+            cls.message = f"Synchronisation terminée avec succès ({total_new} nouveaux mods indexés)."
+            cls.last_completed_at = datetime.now().isoformat()
+            cls.is_running = False
+
+    @classmethod
+    def stop(cls) -> None:
+        with cls._lock:
+            cls.is_running = False
+
+    @classmethod
+    def to_response(cls) -> CatalogSyncStatusResponse:
+        with cls._lock:
+            return CatalogSyncStatusResponse(
+                is_running=cls.is_running,
+                progress_percent=cls.progress_percent,
+                message=cls.message,
+                total_scraped=cls.total_scraped,
+                pages_completed=cls.pages_completed,
+                page1_ready=cls.page1_ready,
+                last_completed_at=cls.last_completed_at,
+            )
+
 
 def _run_catalog_sync(max_pages: int):
-    """Background task for multi-source scraping with exponential backoff and progressive saving."""
-    with SyncTracker._lock:
-        SyncTracker.is_running = True
-        SyncTracker.progress_percent = 0
-        SyncTracker.message = f"Démarrage de la synchronisation ({max_pages} pages)..."
-        SyncTracker.total_scraped = 0
-        SyncTracker.pages_completed = 0
-        SyncTracker.page1_ready = False
-
+    """Background task for multi-source scraping with dynamic page count detection, exponential backoff, and progressive saving."""
     db = DatabaseManager.get_instance()
     providers = ProviderRegistry.list_providers()
     total_new = 0
 
+    # Determine page limits per provider (max_pages <= 0 means all available pages on site)
+    provider_pages = {}
+    for prov in providers:
+        if hasattr(prov, "get_total_pages"):
+            try:
+                avail = prov.get_total_pages()
+            except Exception as e:
+                logger.debug(f"Erreur détection pages pour {prov.display_name}: {e}")
+                avail = 10
+            if max_pages <= 0:
+                provider_pages[prov] = avail
+            else:
+                provider_pages[prov] = min(max_pages, avail)
+            logger.info(
+                f"Source {prov.display_name} : {avail} pages détectées au total sur le site. Synchronisation de {provider_pages[prov]} pages."
+            )
+        else:
+            provider_pages[prov] = max_pages if max_pages > 0 else 5
+
+    total_target_pages = sum(provider_pages.values()) or 1
+    SyncTracker.start(total_target_pages)
+
     try:
-        for prov_idx, provider in enumerate(providers):
-            for page in range(1, max_pages + 1):
-                pct = int(((page - 1 + (prov_idx * max_pages)) / (len(providers) * max_pages)) * 100)
-                msg = f"Synchronisation de {provider.display_name} (Page {page}/{max_pages})..."
-                with SyncTracker._lock:
-                    SyncTracker.progress_percent = pct
-                    SyncTracker.message = msg
+        completed_pages = 0
+        for prov, target_pages in provider_pages.items():
+            for page in range(1, target_pages + 1):
+                completed_pages += 1
+                pct = int((completed_pages / total_target_pages) * 100)
+                msg = f"Synchronisation de {prov.display_name} (Page {page}/{target_pages})..."
+                SyncTracker.update_progress(pct, msg)
                 logger.info(msg)
 
                 # Retry loop with exponential backoff on failure
@@ -67,26 +145,25 @@ def _run_catalog_sync(max_pages: int):
 
                 for attempt in range(max_retries):
                     try:
-                        mods = provider.scrape_catalog(page=page)
+                        mods = prov.scrape_catalog(page=page)
                         scrape_success = True
                         break
                     except Exception as e:
                         if attempt < max_retries - 1:
                             delay = base_delay * (2**attempt)
                             warn_msg = (
-                                f"Échec scraping {provider.display_name} page {page} "
+                                f"Échec scraping {prov.display_name} page {page} "
                                 f"(tentative {attempt + 1}/{max_retries}). "
                                 f"Nouvelle tentative dans {delay:.1f}s... Erreur: {e}"
                             )
                             logger.warning(warn_msg)
-                            with SyncTracker._lock:
-                                SyncTracker.message = (
-                                    f"Erreur {provider.display_name} p.{page} - Réessai dans {int(delay)}s..."
-                                )
+                            SyncTracker.update_progress(
+                                pct, f"Erreur {prov.display_name} p.{page} - Réessai dans {int(delay)}s..."
+                            )
                             time.sleep(delay)
                         else:
                             logger.error(
-                                f"Erreur définitive scraping {provider.display_name} page {page}: {e}", exc_info=True
+                                f"Erreur définitive scraping {prov.display_name} page {page}: {e}", exc_info=True
                             )
 
                 if not scrape_success and not mods:
@@ -133,26 +210,16 @@ def _run_catalog_sync(max_pages: int):
                         session.commit()
 
                     logger.info(f"Page {page} traitée : {len(mods)} mods ({new_on_page} nouveaux).")
-
-                    with SyncTracker._lock:
-                        SyncTracker.pages_completed += 1
-                        SyncTracker.total_scraped = total_new
-                        if page == 1:
-                            SyncTracker.page1_ready = True
+                    SyncTracker.record_page(new_on_page, is_first_page=(completed_pages == 1))
+                    time.sleep(0.4)
                 except Exception as e:
                     logger.error(f"Erreur enregistrement page {page} en BDD: {e}", exc_info=True)
 
-        with SyncTracker._lock:
-            SyncTracker.progress_percent = 100
-            SyncTracker.total_scraped = total_new
-            SyncTracker.message = f"Synchronisation terminée avec succès ({total_new} nouveaux mods indexés)."
-            SyncTracker.last_completed_at = datetime.now().isoformat()
+        SyncTracker.finish(total_new)
     except Exception as e:
-        with SyncTracker._lock:
-            SyncTracker.message = f"Erreur de synchronisation: {e}"
+        SyncTracker.set_error(f"Erreur de synchronisation: {e}")
     finally:
-        with SyncTracker._lock:
-            SyncTracker.is_running = False
+        SyncTracker.stop()
 
 
 @router.get("", response_model=CatalogListResponse)
@@ -165,7 +232,7 @@ def get_catalog(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """Returns catalog mods with filtering, search, status, and pagination."""
+    """Returns catalog mods with filtering, search, status, and pagination using SQL-level filtering."""
     db = DatabaseManager.get_instance()
     with db.get_session() as session:
         query = session.query(CatalogMod)
@@ -233,32 +300,56 @@ def get_catalog(
             elif acc in ["public", "gratuit"]:
                 query = query.filter(CatalogMod.patreon_status.in_(["PUBLIC", "NONE"]))
 
+        # SQL-level status filtering (§1.3)
+        if status and status.lower() not in ["all", ""]:
+            st = status.lower()
+            installed_match = (
+                (InstalledMod.source == CatalogMod.source) & (InstalledMod.remote_id == CatalogMod.remote_id)
+            ) | (
+                (InstalledMod.catalog_mod_id == CatalogMod.id)
+                & ((InstalledMod.remote_id.is_(None)) | (InstalledMod.remote_id == ""))
+            )
+
+            if st == "installed":
+                query = query.filter(session.query(InstalledMod.id).filter(installed_match).exists())
+            elif st == "not_installed":
+                query = query.filter(~session.query(InstalledMod.id).filter(installed_match).exists())
+            elif st == "updates_available":
+                has_newer = (CatalogMod.updated_date.isnot(None)) & (
+                    InstalledMod.version_date.is_(None)
+                    | (CatalogMod.updated_date > InstalledMod.version_date)
+                    | (
+                        CatalogMod.version_str.isnot(None)
+                        & InstalledMod.version_str.isnot(None)
+                        & (CatalogMod.version_str != InstalledMod.version_str)
+                    )
+                )
+                query = query.filter(session.query(InstalledMod.id).filter(installed_match, has_newer).exists())
+
         if sort == "az":
             query = query.order_by(CatalogMod.title.asc())
         else:
             query = query.order_by(CatalogMod.updated_date.desc().nullslast())
 
-        # Pre-fetch installed map
-        installed_map = {(im.source, im.remote_id): im for im in session.query(InstalledMod).all()}
+        # Efficient total count and pagination in SQL
+        total = query.count()
+        paginated_mods = query.offset((page - 1) * limit).limit(limit).all()
 
-        all_results = query.all()
-        filtered_items = []
+        # Build lookup maps for installed mods to decorate the paginated items
+        all_installed = session.query(InstalledMod).all()
+        installed_by_remote = {(im.source, im.remote_id): im for im in all_installed if im.remote_id}
+        installed_by_id = {
+            im.catalog_mod_id: im for im in all_installed if im.catalog_mod_id and not im.remote_id
+        }
 
-        for m in all_results:
-            inst = installed_map.get((m.source, m.remote_id))
+        paginated_items = []
+        for m in paginated_mods:
+            # Canonical match by (source, remote_id) first; fallback to FK only for manual/untracked mods
+            inst = installed_by_remote.get((m.source, m.remote_id)) or installed_by_id.get(m.id)
             is_installed = inst is not None
-            has_update = False
-            if is_installed and m.updated_date and inst.version_date:
-                has_update = m.updated_date > inst.version_date
+            has_update = check_has_update(inst, m) if is_installed else False
 
-            if status == "installed" and not is_installed:
-                continue
-            elif status == "not_installed" and is_installed:
-                continue
-            elif status == "updates_available" and not has_update:
-                continue
-
-            filtered_items.append(
+            paginated_items.append(
                 CatalogModItem(
                     id=m.id,
                     source=m.source,
@@ -278,10 +369,6 @@ def get_catalog(
                 )
             )
 
-        total = len(filtered_items)
-        start_idx = (page - 1) * limit
-        paginated_items = filtered_items[start_idx : start_idx + limit]
-
         return CatalogListResponse(
             total=total,
             page=page,
@@ -293,23 +380,17 @@ def get_catalog(
 @router.post("/sync", response_model=CatalogSyncStatusResponse)
 def start_sync(payload: CatalogSyncRequest, background_tasks: BackgroundTasks):
     """Triggers multi-source catalog synchronization."""
-    with SyncTracker._lock:
-        if SyncTracker.is_running:
-            return CatalogSyncStatusResponse(
-                is_running=True,
-                progress_percent=SyncTracker.progress_percent,
-                message="Une synchronisation est déjà en cours d'exécution.",
-                total_scraped=SyncTracker.total_scraped,
-                pages_completed=SyncTracker.pages_completed,
-                page1_ready=SyncTracker.page1_ready,
-                last_completed_at=SyncTracker.last_completed_at,
-            )
+    if SyncTracker.is_running:
+        resp = SyncTracker.to_response()
+        resp.message = "Une synchronisation est déjà en cours d'exécution."
+        return resp
 
     background_tasks.add_task(_run_catalog_sync, payload.max_pages)
+    page_msg = "toutes les pages détectées" if payload.max_pages <= 0 else f"{payload.max_pages} pages par source"
     return CatalogSyncStatusResponse(
         is_running=True,
         progress_percent=0,
-        message=f"Synchronisation démarrée ({payload.max_pages} pages par source).",
+        message=f"Synchronisation démarrée ({page_msg}).",
         total_scraped=0,
         pages_completed=0,
         page1_ready=False,
@@ -320,33 +401,75 @@ def start_sync(payload: CatalogSyncRequest, background_tasks: BackgroundTasks):
 @router.get("/sync/status", response_model=CatalogSyncStatusResponse)
 def get_sync_status():
     """Returns current catalog scraping progress status."""
-    with SyncTracker._lock:
-        return CatalogSyncStatusResponse(
-            is_running=SyncTracker.is_running,
-            progress_percent=SyncTracker.progress_percent,
-            message=SyncTracker.message,
-            total_scraped=SyncTracker.total_scraped,
-            pages_completed=SyncTracker.pages_completed,
-            page1_ready=SyncTracker.page1_ready,
-            last_completed_at=SyncTracker.last_completed_at,
-        )
+    return SyncTracker.to_response()
 
 
-@router.get("/{mod_id}/details", response_model=ModDetailsResponse)
+# Static sub-routes defined BEFORE parameterized /{mod_id} to prevent 422 routing collisions
+@router.get("/thumbnail")
+def get_thumbnail(source: str, remote_id: str, url: str):
+    """Fetches and caches thumbnail image for catalog mod, returning the file."""
+    cache_dir = AppConfig.get_thumbnails_cache_dir()
+    dest_path = cache_dir / f"thumb_{source}_{remote_id}.jpg"
+
+    if not dest_path.exists() or dest_path.stat().st_size < 100:
+        session = SessionManager.get_http_session(source)
+        try:
+            resp = session.get(url, timeout=15)
+            if resp.status_code == 200 and len(resp.content) > 100:
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(dest_path, "wb") as f:
+                    f.write(resp.content)
+            else:
+                raise HTTPException(status_code=404, detail="Image introuvable.")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Erreur téléchargement image: {e}") from e
+
+    media_type = "image/jpeg"
+    try:
+        with open(dest_path, "rb") as f:
+            header = f.read(12)
+        if header.startswith(b"\x89PNG"):
+            media_type = "image/png"
+        elif header.startswith(b"RIFF") and b"WEBP" in header:
+            media_type = "image/webp"
+        elif header.startswith(b"GIF8"):
+            media_type = "image/gif"
+    except Exception:
+        pass
+
+    return FileResponse(dest_path, media_type=media_type)
+
+
+@router.post("/purge")
+def purge_catalog_endpoint():
+    """Purges all catalog mods to restart from a clean catalog."""
+    db = DatabaseManager.get_instance()
+    deleted = db.purge_catalog()
+    return {"success": True, "deleted": deleted, "message": f"{deleted} mod(s) supprimé(s) du catalogue."}
+
+
+@router.get("/{mod_id:int}/details", response_model=ModDetailsResponse)
+@router.get("/{mod_id:int}", response_model=ModDetailsResponse)
 def get_catalog_mod_details(mod_id: int, force_refresh: bool = False):
-    """Returns detailed mod information including full description/message and gallery from mod page."""
+    """
+    Returns full details for a catalog mod by ID.
+    If full description is not in DB or force_refresh is requested,
+    scrapes details directly from the source site via provider.
+    """
     db = DatabaseManager.get_instance()
     with db.get_session() as session:
         m = session.query(CatalogMod).filter_by(id=mod_id).first()
         if not m:
             raise HTTPException(status_code=404, detail="Mod introuvable dans le catalogue.")
 
-        desc = m.description or ""
-        is_legacy = bool(
+        desc = m.description
+        is_legacy = (
             desc
+            and desc.strip()
             and (
-                "What's New in Version" in desc
-                or "About This File" in desc
+                len(desc.strip()) < 50
                 or "<div" not in desc
                 or "background-color:#0d0d0d" in desc
                 or "background-color:" in desc
@@ -443,8 +566,8 @@ def _perform_install(
             pkg_path = file_to_install.with_suffix(".package")
             file_to_install.replace(pkg_path)
             file_to_install = pkg_path
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Vérification DBPF échouée pour {file_to_install}: {e}")
 
     install_ok, install_msg = ModInstaller.install_mod_from_file(
         file_path=file_to_install,
@@ -464,8 +587,8 @@ def _perform_install(
     try:
         file_to_install.unlink(missing_ok=True)
         dest_file.unlink(missing_ok=True)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Nettoyage des fichiers temporaires échoué: {e}")
 
     return CatalogInstallResponse(success=install_ok, message=install_msg)
 
@@ -481,13 +604,7 @@ def install_mod(payload: CatalogInstallRequest):
 
 @router.post("/install-stream")
 def install_mod_stream(payload: CatalogInstallRequest):
-    """
-    Downloads and installs a mod while streaming real-time progress events as newline-delimited JSON.
-    """
-    import json
-    import queue
-    from fastapi.responses import StreamingResponse
-
+    """Downloads and installs a mod while streaming real-time progress events as newline-delimited JSON."""
     q = queue.Queue()
 
     def progress_cb(pct: int, status: str, details: str = ""):
@@ -512,37 +629,3 @@ def install_mod_stream(payload: CatalogInstallRequest):
             yield json.dumps(item) + "\n"
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
-
-
-@router.get("/thumbnail")
-def get_thumbnail(source: str, remote_id: str, url: str):
-    """Fetches and caches thumbnail image for catalog mod, returning the file."""
-    from fastapi.responses import FileResponse
-    from src.core.config import AppConfig
-    from src.core.session_manager import SessionManager
-
-    cache_dir = AppConfig.get_thumbnails_cache_dir()
-    dest_path = cache_dir / f"thumb_{source}_{remote_id}.jpg"
-
-    if not dest_path.exists() or dest_path.stat().st_size < 100:
-        session = SessionManager.get_http_session(source)
-        try:
-            resp = session.get(url, timeout=15)
-            if resp.status_code == 200 and len(resp.content) > 100:
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(dest_path, "wb") as f:
-                    f.write(resp.content)
-            else:
-                raise HTTPException(status_code=404, detail="Image introuvable.")
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=f"Erreur téléchargement image: {e}")
-
-    return FileResponse(dest_path, media_type="image/jpeg")
-
-
-@router.post("/purge")
-def purge_catalog_endpoint():
-    """Purges all catalog mods to restart from a clean catalog."""
-    db = DatabaseManager.get_instance()
-    deleted = db.purge_catalog()
-    return {"success": True, "deleted": deleted, "message": f"{deleted} mod(s) supprimé(s) du catalogue."}

@@ -1,5 +1,7 @@
+import copy
 import re
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional, Callable
 from bs4 import BeautifulSoup
@@ -9,6 +11,7 @@ from src.providers.base import BaseSourceProvider
 from src.providers.patreon import PatreonProvider
 from src.core.session_manager import SessionManager
 from src.utils.logger import logger
+from src.utils.network import stream_download, is_external_hosted
 
 
 class LoversLabProvider(BaseSourceProvider):
@@ -24,6 +27,27 @@ class LoversLabProvider(BaseSourceProvider):
 
     def __init__(self):
         self.patreon_provider = PatreonProvider()
+
+    def get_total_pages(self) -> int:
+        """Extracts the total number of pages available in category 161 on LoversLab."""
+        session = SessionManager.get_http_session(self.provider_name)
+        try:
+            resp = session.get(self.category_url, timeout=15)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                pag = soup.select_one("[data-pages]")
+                if pag and pag.get("data-pages"):
+                    return int(pag["data-pages"])
+                pages = []
+                for a in soup.select("ul.ipsPagination a[href*='/page/']"):
+                    m = re.search(r"/page/(\d+)", a.get("href", ""))
+                    if m:
+                        pages.append(int(m.group(1)))
+                if pages:
+                    return max(pages)
+        except Exception as e:
+            logger.debug(f"Impossible d'extraire le nombre total de pages LoversLab: {e}")
+        return 1
 
     def scrape_catalog(self, page: int = 1, limit: int = 25) -> List[Dict[str, Any]]:
         """
@@ -72,9 +96,9 @@ class LoversLabProvider(BaseSourceProvider):
                 if not title and title_elem and title_elem.get("title"):
                     raw_title = title_elem["title"]
                     cleaned = re.sub(
-                        r'^(View the file\s*|More information about\s*["\']?)', "", raw_title, flags=re.IGNORECASE
+                        r'^(View the file\s*|More information about\s*["\'\\]?)', "", raw_title, flags=re.IGNORECASE
                     )
-                    cleaned = re.sub(r'["\']?\s*$', "", cleaned)
+                    cleaned = re.sub(r'["\'\\]?\s*$', "", cleaned)
                     title = cleaned.replace("\u200b", "").replace("\ufeff", "").strip()
 
                 if not title or title in ["''", '""']:
@@ -111,7 +135,7 @@ class LoversLabProvider(BaseSourceProvider):
                 if not thumbnail_url:
                     cover_elem = item.select_one("[style*='background-image'], .cFileView_cover, .ipsCoverImage")
                     if cover_elem and cover_elem.get("style"):
-                        bg_match = re.search(r'url\(["\']?([^"\'\)]+)["\']?\)', cover_elem["style"])
+                        bg_match = re.search(r'url\(["\'\\]?([^"\'\\)]+)["\'\\]?\)', cover_elem["style"])
                         if bg_match:
                             thumbnail_url = bg_match.group(1)
 
@@ -128,7 +152,7 @@ class LoversLabProvider(BaseSourceProvider):
                     try:
                         updated_date = date_parser.parse(time_elem["datetime"]).replace(tzinfo=None)
                     except Exception:
-                        pass
+                        logger.debug(f"Could not parse date for item {remote_id}: {time_elem.get('datetime')}")
 
                 # Badges / tags
                 tags = [t.get_text(strip=True) for t in item.select(".ipsBadge, .ipsTag") if t.get_text(strip=True)]
@@ -154,7 +178,6 @@ class LoversLabProvider(BaseSourceProvider):
 
             # Parallel rapid check of download target (Patreon redirect vs direct LoversLab)
             if results:
-                from concurrent.futures import ThreadPoolExecutor
 
                 def _inspect_item_target(entry: Dict[str, Any]) -> Dict[str, Any]:
                     p_url = entry["page_url"]
@@ -325,8 +348,6 @@ class LoversLabProvider(BaseSourceProvider):
                             details["external_links"].append(href)
 
                 # 2. Clean element to produce structured HTML without changelog junk
-                import copy
-
                 clean_elem = copy.deepcopy(content_elem)
 
                 # Remove changelog blocks, menus, scripts, styles, forms, headers, and timestamps
@@ -461,16 +482,6 @@ class LoversLabProvider(BaseSourceProvider):
             )
 
             # Check for redirect to Patreon or external site
-            external_hosts = [
-                "gofile.io",
-                "mega.nz",
-                "mega.co.nz",
-                "mediafire.com",
-                "drive.google.com",
-                "dropbox.com",
-                "simfileshare.net",
-            ]
-
             if resp.status_code in [301, 302, 303, 307, 308]:
                 target = resp.headers.get("Location", "")
                 logger.info(f"Redirection détectée lors du téléchargement: {target}")
@@ -479,7 +490,7 @@ class LoversLabProvider(BaseSourceProvider):
                         target, dest_path, progress_callback=progress_callback
                     )
 
-                matched_host = next((h for h in external_hosts if h in target.lower()), None)
+                matched_host = is_external_hosted(target)
                 if matched_host:
                     msg = f"Ce contenu est hébergé sur un service externe ({matched_host}). Veuillez l'ouvrir dans votre navigateur pour le télécharger."
                     logger.warning(msg)
@@ -493,7 +504,7 @@ class LoversLabProvider(BaseSourceProvider):
             )
 
             final_url = str(getattr(resp, "url", ""))
-            matched_host = next((h for h in external_hosts if h in final_url.lower()), None)
+            matched_host = is_external_hosted(final_url)
             if matched_host:
                 msg = f"Ce contenu est hébergé sur un service externe ({matched_host}). Veuillez l'ouvrir dans votre navigateur pour le télécharger."
                 logger.warning(msg)
@@ -513,76 +524,9 @@ class LoversLabProvider(BaseSourceProvider):
             content_type = resp.headers.get("Content-Type", "").lower()
             content_disp = resp.headers.get("Content-Disposition", "").lower()
 
-            # Helper for streamed downloading with live speed and progress logging
-            def stream_response(bin_resp, phase_label="Téléchargement LoversLab") -> Tuple[bool, str]:
-                import time
-
-                total_size = int(bin_resp.headers.get("Content-Length") or 0)
-                downloaded = 0
-                start_time = time.time()
-                last_ui_time = start_time
-                last_log_time = start_time
-
-                with open(dest_path, "wb") as f:
-                    try:
-                        for chunk in bin_resp.iter_content(chunk_size=65536):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                now = time.time()
-                                elapsed = now - start_time
-                                speed_mb = (downloaded / (elapsed or 0.001)) / (1024 * 1024)
-                                speed_str = f"{speed_mb:.2f} Mo/s" if speed_mb >= 1.0 else f"{speed_mb * 1024:.0f} Ko/s"
-
-                                if total_size > 0:
-                                    pct = min(int((downloaded / total_size) * 75), 75)
-                                    down_mb = downloaded / (1024 * 1024)
-                                    tot_mb = total_size / (1024 * 1024)
-                                    detail = f"{down_mb:.1f} / {tot_mb:.1f} Mo • {speed_str}"
-                                else:
-                                    down_mb = downloaded / (1024 * 1024)
-                                    pct = min(int(down_mb * 2), 70)
-                                    detail = f"{down_mb:.1f} Mo • {speed_str}"
-
-                                if progress_callback and (now - last_ui_time >= 0.2):
-                                    progress_callback(pct, f"{phase_label} en cours...", detail)
-                                    last_ui_time = now
-
-                                if now - last_log_time >= 3.0:
-                                    logger.info(f"[{phase_label}] {dest_path.name} : {detail}")
-                                    last_log_time = now
-                    except (AssertionError, AttributeError):
-                        # curl_cffi raises AssertionError if stream=True was not specified on initial request
-                        raw = getattr(bin_resp, "content", b"") or b""
-                        chunk_size = 65536
-                        for i in range(0, len(raw), chunk_size):
-                            chunk = raw[i : i + chunk_size]
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            now = time.time()
-                            elapsed = now - start_time
-                            speed_mb = (downloaded / (elapsed or 0.001)) / (1024 * 1024)
-                            speed_str = f"{speed_mb:.2f} Mo/s" if speed_mb >= 1.0 else f"{speed_mb * 1024:.0f} Ko/s"
-                            if total_size > 0:
-                                pct = min(int((downloaded / total_size) * 75), 75)
-                                down_mb = downloaded / (1024 * 1024)
-                                tot_mb = total_size / (1024 * 1024)
-                                detail = f"{down_mb:.1f} / {tot_mb:.1f} Mo • {speed_str}"
-                            else:
-                                down_mb = downloaded / (1024 * 1024)
-                                pct = min(int(down_mb * 2), 70)
-                                detail = f"{down_mb:.1f} Mo • {speed_str}"
-                            if progress_callback and (now - last_ui_time >= 0.2):
-                                progress_callback(pct, f"{phase_label} en cours...", detail)
-                                last_ui_time = now
-
-                size_mb = dest_path.stat().st_size / (1024 * 1024)
-                logger.info(f"Fichier téléchargé avec succès : {dest_path.name} ({size_mb:.2f} Mo).")
-                return True, str(dest_path)
-
             # Case A: Directly received binary stream
             if "html" not in content_type or "attachment" in content_disp or "filename=" in content_disp:
-                return stream_response(resp, "Téléchargement Direct")
+                return stream_download(resp, dest_path, progress_callback, "Téléchargement Direct")
 
             # Case B: Invision Community confirmation or multi-file selection page
             soup = BeautifulSoup(resp.text, "html.parser")
@@ -612,7 +556,7 @@ class LoversLabProvider(BaseSourceProvider):
                     progress_callback(10, "Lien direct résolu", "Démarrage du téléchargement...")
                 bin_resp = session.get(target_link, stream=True, timeout=90, allow_redirects=True)
                 if bin_resp.status_code == 200:
-                    return stream_response(bin_resp, "Téléchargement LoversLab")
+                    return stream_download(bin_resp, dest_path, progress_callback, "Téléchargement LoversLab")
                 else:
                     return False, f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
 
@@ -627,7 +571,7 @@ class LoversLabProvider(BaseSourceProvider):
                     progress_callback(10, "Pièce jointe trouvée", "Démarrage du téléchargement...")
                 bin_resp = session.get(att_href, stream=True, timeout=90, allow_redirects=True)
                 if bin_resp.status_code == 200:
-                    return stream_response(bin_resp, "Téléchargement LoversLab")
+                    return stream_download(bin_resp, dest_path, progress_callback, "Téléchargement LoversLab")
                 else:
                     return False, f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
 

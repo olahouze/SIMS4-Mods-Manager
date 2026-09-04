@@ -60,7 +60,7 @@ class CatalogListResponse(BaseModel):
 
 
 class CatalogSyncRequest(BaseModel):
-    max_pages: int = Field(default=5, ge=1, le=50)
+    max_pages: int = Field(default=0, ge=0, le=1000, description="0 = toutes les pages disponibles")
 
 
 class CatalogSyncStatusResponse(BaseModel):

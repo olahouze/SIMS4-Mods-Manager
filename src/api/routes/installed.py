@@ -17,6 +17,7 @@ from src.core.config import AppConfig
 from src.core.game_detector import GameDetector
 from src.core.mod_installer import ModInstaller
 from src.core.mod_toggle import ModToggleManager
+from src.core.update_checker import check_has_update
 
 router = APIRouter(prefix="/installed", tags=["Installed Mods"])
 
@@ -34,8 +35,10 @@ def get_installed_mods(search: Optional[str] = None):
             )
         mods = query.order_by(InstalledMod.installed_date.desc()).all()
 
-        # Check updates mapping
-        catalog_map = {(cm.source, cm.remote_id): cm for cm in session.query(CatalogMod).all()}
+        # Pre-load all CatalogMods in a single query to avoid N+1
+        all_catalog = session.query(CatalogMod).all()
+        catalog_by_id = {cm.id: cm for cm in all_catalog}
+        catalog_by_key = {(cm.source, cm.remote_id): cm for cm in all_catalog}
 
         items = []
         enabled_count = 0
@@ -47,15 +50,23 @@ def get_installed_mods(search: Optional[str] = None):
             else:
                 disabled_count += 1
 
+            # Canonical lookup by (source, remote_id) FIRST to prevent mismatched IDs
             cat_mod = None
-            if m.catalog_mod_id:
-                cat_mod = session.query(CatalogMod).filter_by(id=m.catalog_mod_id).first()
-            elif m.remote_id:
-                cat_mod = catalog_map.get((m.source, m.remote_id))
+            if m.remote_id and m.source:
+                cat_mod = catalog_by_key.get((m.source, m.remote_id))
+                if cat_mod and m.catalog_mod_id != cat_mod.id:
+                    m.catalog_mod_id = cat_mod.id
 
-            has_update = False
-            if cat_mod and cat_mod.updated_date and m.version_date:
-                has_update = cat_mod.updated_date > m.version_date
+            # Fallback to catalog_mod_id only if verified to match
+            if not cat_mod and m.catalog_mod_id:
+                candidate = catalog_by_id.get(m.catalog_mod_id)
+                if candidate:
+                    if not m.remote_id or (candidate.remote_id == m.remote_id and candidate.source == m.source):
+                        cat_mod = candidate
+                    else:
+                        m.catalog_mod_id = None
+
+            has_update = check_has_update(m, cat_mod)
 
             files_list = m.get_installed_files_list()
             thumb_url = cat_mod.thumbnail_url if cat_mod and cat_mod.thumbnail_url else ""

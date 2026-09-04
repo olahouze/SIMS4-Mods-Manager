@@ -145,7 +145,6 @@ class CatalogView(QWidget):
         # Filter Bar
         self.filter_bar = FilterBar()
         self.filter_bar.filters_changed.connect(self._on_filters_changed)
-        self.filter_bar.sync_requested.connect(self.start_sync)
         layout.addWidget(self.filter_bar)
 
         # Scroll Area with Card Grid
@@ -311,7 +310,7 @@ class CatalogView(QWidget):
                     item.widget().deleteLater()
 
             if not items:
-                no_data = QLabel("Aucun mod trouvé. Cliquez sur 'Synchroniser' pour alimenter le catalogue.")
+                no_data = QLabel("Catalogue en cours de chargement ou aucun mod ne correspond aux filtres.")
                 no_data.setStyleSheet("font-size: 14px; color: #64748b; padding: 40px;")
                 no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.grid_layout.addWidget(no_data, 0, 0)
@@ -358,8 +357,8 @@ class CatalogView(QWidget):
         except Exception as e:
             logger.error(f"Erreur API lors du rafraîchissement du catalogue: {e}")
 
-    def start_sync(self, max_pages: int = 5):
-        """Starts background synchronization non-blockingly and activates banner monitoring."""
+    def start_sync(self, max_pages: int = 0):
+        """Starts background synchronization non-blockingly and activates banner monitoring (0 = all pages)."""
         try:
             self._page1_displayed = False
             self._last_pages_completed = 0

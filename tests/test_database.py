@@ -78,3 +78,35 @@ def test_account_session_cookies(db_session):
     loaded = db_session.query(AccountSession).filter_by(provider_name="loverslab").first()
     assert loaded is not None
     assert loaded.get_cookies_dict()["ips4_member_id"] == "999"
+
+
+def test_clean_and_repair_mismatched_foreign_keys(tmp_path):
+    db_file = tmp_path / "test_repair_fk.db"
+    db_mgr = DatabaseManager(str(db_file))
+
+    with db_mgr.get_session() as session:
+        # Create CatalogMod A (remote_id="51222")
+        cm_a = CatalogMod(source="loverslab", remote_id="51222", title="Mod A", page_url="http://a")
+        session.add(cm_a)
+        session.commit()
+        cm_a_id = cm_a.id
+
+        # Create InstalledMod B (remote_id="37829") incorrectly pointing to cm_a
+        im_b = InstalledMod(
+            title="Mod B",
+            folder_name="Mod_B",
+            source="loverslab",
+            remote_id="37829",
+            catalog_mod_id=cm_a_id,
+        )
+        session.add(im_b)
+        session.commit()
+        im_b_id = im_b.id
+
+    # Run maintenance repair
+    db_mgr.clean_and_repair_catalog()
+
+    with db_mgr.get_session() as session:
+        rechecked_im = session.query(InstalledMod).filter_by(id=im_b_id).first()
+        # Must be dissociated because remote_id 37829 does not match 51222
+        assert rechecked_im.catalog_mod_id is None

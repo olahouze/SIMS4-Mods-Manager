@@ -11,6 +11,7 @@ from src.api.models import (
 )
 from src.core.database import DatabaseManager, InstalledMod, CatalogMod
 from src.core.mod_installer import ModInstaller
+from src.core.update_checker import check_has_update, resolve_catalog_mod
 from src.providers import ProviderRegistry
 from src.utils.logger import logger
 
@@ -24,14 +25,7 @@ def _update_one_mod(installed_id: int) -> tuple[bool, str]:
         if not im:
             return False, f"Mod installé #{installed_id} introuvable."
 
-        cat_mod = None
-        if im.remote_id and im.source:
-            cat_mod = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
-            if cat_mod and im.catalog_mod_id != cat_mod.id:
-                im.catalog_mod_id = cat_mod.id
-                session.commit()
-        if not cat_mod and im.catalog_mod_id:
-            cat_mod = session.query(CatalogMod).filter_by(id=im.catalog_mod_id).first()
+        cat_mod = resolve_catalog_mod(session, im)
 
         # Fallback: if cat_mod is still not found, try fetching online details using remote_id or source
         if not cat_mod and im.remote_id and im.source == "loverslab":
@@ -110,15 +104,28 @@ def get_updates():
     items = []
     with db.get_session() as session:
         installed = session.query(InstalledMod).order_by(InstalledMod.title).all()
+
+        # Pre-load all CatalogMods in a single query to avoid N+1
+        all_catalog = session.query(CatalogMod).all()
+        catalog_by_id = {cm.id: cm for cm in all_catalog}
+        catalog_by_key = {(cm.source, cm.remote_id): cm for cm in all_catalog}
+
         for im in installed:
+            # O(1) lookup instead of per-mod SQL query
             cat_mod = None
             if im.remote_id and im.source:
-                cat_mod = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
+                cat_mod = catalog_by_key.get((im.source, im.remote_id))
                 if cat_mod and im.catalog_mod_id != cat_mod.id:
                     im.catalog_mod_id = cat_mod.id
                     session.commit()
             if not cat_mod and im.catalog_mod_id:
-                cat_mod = session.query(CatalogMod).filter_by(id=im.catalog_mod_id).first()
+                candidate = catalog_by_id.get(im.catalog_mod_id)
+                if candidate:
+                    if not im.remote_id or (candidate.remote_id == im.remote_id and candidate.source == im.source):
+                        cat_mod = candidate
+                    else:
+                        im.catalog_mod_id = None
+                        session.commit()
 
             # Format current version
             if im.version_str and im.version_str.strip():
@@ -128,21 +135,14 @@ def get_updates():
             else:
                 cur_ver = "Inconnue"
 
-            # Check new version and update flag
-            has_update = False
+            # Use shared update detection
+            has_update = check_has_update(im, cat_mod)
             new_version_date_str = None
             new_ver = "✓ À jour"
 
             if cat_mod:
                 if cat_mod.updated_date:
                     new_version_date_str = cat_mod.updated_date.strftime("%d/%m/%Y %H:%M")
-
-                if cat_mod.updated_date and im.version_date and cat_mod.updated_date > im.version_date:
-                    has_update = True
-                elif cat_mod.version_str and im.version_str and cat_mod.version_str.strip() != im.version_str.strip():
-                    has_update = True
-                elif not im.version_date and cat_mod.updated_date:
-                    has_update = True
 
                 if has_update:
                     if cat_mod.version_str and cat_mod.version_str.strip():
@@ -223,24 +223,22 @@ def update_all_mods():
     updatable_ids = []
     with db.get_session() as session:
         installed = session.query(InstalledMod).all()
+
+        # Pre-load all CatalogMods in a single query
+        all_catalog = session.query(CatalogMod).all()
+        catalog_by_id = {cm.id: cm for cm in all_catalog}
+        catalog_by_key = {(cm.source, cm.remote_id): cm for cm in all_catalog}
+
         for im in installed:
             cat_mod = None
             if im.remote_id and im.source:
-                cat_mod = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
+                cat_mod = catalog_by_key.get((im.source, im.remote_id))
             if not cat_mod and im.catalog_mod_id:
-                cat_mod = session.query(CatalogMod).filter_by(id=im.catalog_mod_id).first()
+                candidate = catalog_by_id.get(im.catalog_mod_id)
+                if candidate and (not im.remote_id or (candidate.remote_id == im.remote_id and candidate.source == im.source)):
+                    cat_mod = candidate
 
-            has_update = False
-            if cat_mod and cat_mod.updated_date and im.version_date:
-                if cat_mod.updated_date > im.version_date:
-                    has_update = True
-            elif cat_mod and cat_mod.version_str and im.version_str:
-                if cat_mod.version_str.strip() != im.version_str.strip():
-                    has_update = True
-            elif cat_mod and not im.version_date and cat_mod.updated_date:
-                has_update = True
-
-            if has_update:
+            if check_has_update(im, cat_mod):
                 updatable_ids.append((im.id, im.title))
 
     if not updatable_ids:
@@ -276,4 +274,3 @@ def update_mod(installed_id: int):
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return UpdateModResponse(success=True, message=msg)
-

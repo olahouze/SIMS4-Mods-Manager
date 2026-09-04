@@ -1,3 +1,4 @@
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -18,6 +19,7 @@ from src.ui.views.updates_view import UpdatesView
 from src.ui.views.accounts_view import AccountsView
 from src.ui.views.settings_view import SettingsView
 from src.ui.views.logs_view import LogsView
+from src.utils.logger import logger
 
 
 class MainWindow(QMainWindow):
@@ -34,6 +36,9 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.refresh_game_status()
         self.update_nav_badge()
+
+        # Automatically check and trigger background sync once connection/API is ready
+        QTimer.singleShot(1500, self.auto_start_background_sync)
 
     def init_ui(self):
         central_widget = QWidget(self)
@@ -213,3 +218,47 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Lancement du jeu", res.get("message", "Jeu lancé."))
         except Exception as e:
             QMessageBox.warning(self, "Erreur", f"Échec du lancement du jeu: {e}")
+
+    def auto_start_background_sync(self):
+        """
+        Automatically launches background catalog synchronization if the connection is OK.
+        Checks if an active session or reachable provider exists, and starts sync without blocking.
+        """
+        try:
+            # 1. Check if sync is already running
+            status = self.api_client.get_catalog_sync_status()
+            if status.get("is_running", False):
+                if hasattr(self.catalog_view, "start_sync_monitoring"):
+                    self.catalog_view.start_sync_monitoring()
+                return
+
+            # 2. Check accounts connection status
+            acc_data = self.api_client.get_accounts()
+            accounts = acc_data.get("accounts", [])
+            is_connection_ok = False
+            for acc in accounts:
+                if acc.get("is_ready", False) or acc.get("is_member", False):
+                    is_connection_ok = True
+                    break
+
+            # 3. If no saved session, check network connectivity to LoversLab
+            if not is_connection_ok:
+                try:
+                    test_res = self.api_client.test_account("loverslab")
+                    if test_res.get("success", False):
+                        is_connection_ok = True
+                except Exception:
+                    pass
+
+            if is_connection_ok:
+                self.api_client.start_catalog_sync(max_pages=0)
+                if hasattr(self.catalog_view, "start_sync_monitoring"):
+                    self.catalog_view.start_sync_monitoring()
+                logger.info(
+                    "Synchronisation automatique intégrale en tâche de fond démarrée au lancement (connexion OK)."
+                )
+            else:
+                logger.info("Synchronisation automatique en attente : session ou connexion non validée.")
+        except Exception as e:
+            logger.debug(f"Vérification automatique de synchronisation au démarrage: {e}")
+
