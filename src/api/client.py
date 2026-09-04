@@ -112,6 +112,11 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
+    def check_dependencies(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        resp = self._client.post("/api/catalog/check-dependencies", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
     def install_mod_stream(self, payload: Dict[str, Any]):
         """Streams real-time progress events from the API during mod installation."""
         import json

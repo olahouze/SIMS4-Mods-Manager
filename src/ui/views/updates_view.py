@@ -54,6 +54,7 @@ class UpdatesView(QWidget):
     """
 
     ROW_HEIGHT = 68
+    updates_applied = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -593,6 +594,7 @@ class UpdatesView(QWidget):
             self.progress_dlg.close()
         if success:
             QMessageBox.information(self, "Mise à jour", msg)
+            self.updates_applied.emit()
         else:
             QMessageBox.warning(self, "Erreur de mise à jour", msg)
         self.refresh_updates()

@@ -1,5 +1,6 @@
 import sys
 import argparse
+import atexit
 from pathlib import Path
 
 # Add project root to sys.path
@@ -11,6 +12,7 @@ from src.utils.logger import logger
 from src.utils.network import find_available_port
 from src.api.server import ApiServer
 from src.api.client import init_api_client
+from src.core.shutdown_manager import ShutdownManager
 
 
 def main():
@@ -51,10 +53,15 @@ def main():
     else:
         logger.info(f"Port {port} vérifié et disponible.")
 
+    atexit.register(ShutdownManager.trigger_shutdown)
+
     # 2. Mode Serveur Autonome (API pure, pas de GUI)
     if args.server_mode:
         logger.info(f"Mode serveur autonome activé sur http://{args.host}:{port}")
-        ApiServer.run_standalone(host=args.host, port=port)
+        try:
+            ApiServer.run_standalone(host=args.host, port=port)
+        finally:
+            ShutdownManager.trigger_shutdown()
         return
 
     # 3. Mode Par Défaut (API en tâche de fond + GUI PySide6)
@@ -116,6 +123,7 @@ def main():
     ModInstaller.start_background_installed_mods_verifier()
 
     exit_code = app.exec()
+    ShutdownManager.trigger_shutdown()
     ApiServer.stop()
     sys.exit(exit_code)
 

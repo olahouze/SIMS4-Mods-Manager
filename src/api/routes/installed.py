@@ -72,6 +72,19 @@ def get_installed_mods(search: Optional[str] = None):
             thumb_url = cat_mod.thumbnail_url if cat_mod and cat_mod.thumbnail_url else ""
             author_name = cat_mod.author if cat_mod and cat_mod.author else ""
             p_url = cat_mod.page_url if cat_mod and cat_mod.page_url else ""
+            req_text = cat_mod.requirements_text if cat_mod else None
+            req_status = cat_mod.requirements_status if cat_mod and cat_mod.requirements_status else "NONE"
+            dep_items = []
+            if cat_mod:
+                all_installed_by_remote = {(im.source, im.remote_id): im for im in mods if im.remote_id}
+                all_installed_by_title = {im.title.lower(): im for im in mods if im.title}
+                from src.api.routes.catalog import resolve_mod_dependencies
+                dep_items = resolve_mod_dependencies(
+                    cat_mod.get_requirements_mods_list(),
+                    session,
+                    all_installed_by_remote,
+                    all_installed_by_title,
+                )
 
             items.append(
                 InstalledModItem(
@@ -84,6 +97,9 @@ def get_installed_mods(search: Optional[str] = None):
                     folder_name=m.folder_name,
                     thumbnail_url=thumb_url,
                     page_url=p_url,
+                    requirements_text=req_text,
+                    requirements_status=req_status,
+                    dependencies=dep_items,
                     is_enabled=m.is_enabled,
                     installed_date=m.installed_date,
                     version_date=m.version_date,

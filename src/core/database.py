@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    text,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, Session
 from src.core.config import AppConfig
@@ -42,6 +43,9 @@ class CatalogMod(Base):
     version_str = Column(String(50), default="")
     patreon_status = Column(String(20), default="NONE", index=True)  # NONE, PUBLIC, UNLOCKED, LOCKED, UNKNOWN
     patreon_tier = Column(String(100), default="")
+    requirements_text = Column(Text, nullable=True)
+    requirements_status = Column(String(50), default="NONE")  # NONE, RESOLVED, PENDING_VERIFICATION
+    requirements_mods_json = Column(Text, default="[]")  # JSON list of resolved LoversLab dependencies
     # Note: datetime.now without () is intentional — SQLAlchemy calls it as a factory at insert time
     last_scraped_at = Column(DateTime, default=datetime.now)
 
@@ -73,6 +77,15 @@ class CatalogMod(Base):
 
     def set_external_links_list(self, links: List[str]) -> None:
         self.external_links = json.dumps(links, ensure_ascii=False)
+
+    def get_requirements_mods_list(self) -> List[Dict[str, Any]]:
+        try:
+            return json.loads(self.requirements_mods_json or "[]")
+        except Exception:
+            return []
+
+    def set_requirements_mods_list(self, reqs: List[Dict[str, Any]]) -> None:
+        self.requirements_mods_json = json.dumps(reqs, ensure_ascii=False)
 
 
 class InstalledMod(Base):
@@ -155,6 +168,18 @@ class DatabaseManager:
         """
 
         try:
+            # Auto-migrate catalog_mods schema if columns are missing
+            with self.engine.connect() as conn:
+                res = conn.execute(text("PRAGMA table_info(catalog_mods)")).fetchall()
+                col_names = {r[1] for r in res}
+                if "requirements_text" not in col_names:
+                    conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_text TEXT"))
+                if "requirements_status" not in col_names:
+                    conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_status VARCHAR(50) DEFAULT 'NONE'"))
+                if "requirements_mods_json" not in col_names:
+                    conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_mods_json TEXT DEFAULT '[]'"))
+                conn.commit()
+
             with self.get_session() as session:
                 # 1. Delete ghost mod 51260 / dohmra
                 ghosts = (
@@ -237,4 +262,12 @@ class DatabaseManager:
                 return count
         except Exception as e:
             logger.error(f"Erreur lors de la purge du catalogue : {e}")
+            return 0
+
+    def get_catalog_mods_count(self) -> int:
+        """Returns the total number of mods currently indexed in the catalog database."""
+        try:
+            with self.get_session() as session:
+                return session.query(CatalogMod).count()
+        except Exception:
             return 0

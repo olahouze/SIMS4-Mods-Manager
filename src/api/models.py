@@ -50,6 +50,30 @@ class CatalogModItem(BaseModel):
     tags: List[str] = []
     is_installed: bool = False
     has_update: bool = False
+    requirements_text: Optional[str] = None
+    requirements_status: str = "NONE"
+    dependencies: List["DependencyItem"] = []
+
+
+class DependencyItem(BaseModel):
+    source: str = "loverslab"
+    remote_id: str = ""
+    title: str
+    url: str = ""
+    is_installed: bool = False
+    status: str = "DETECTED_NOT_INSTALLED"  # "INSTALLED", "DETECTED_NOT_INSTALLED", "NOT_DETECTED_SCANNING", "NOT_DETECTED_FINISHED"
+
+
+class DependenciesCheckResponse(BaseModel):
+    mod_title: str
+    requirements_status: str
+    requirements_text: Optional[str] = None
+    can_install: bool = True
+    is_partial: bool = False
+    unfound_dependencies: List[DependencyItem] = []
+    blocking_reason: Optional[str] = None
+    already_installed_dependencies: List[DependencyItem] = []
+    missing_dependencies: List[DependencyItem] = []
 
 
 class CatalogListResponse(BaseModel):
@@ -63,14 +87,29 @@ class CatalogSyncRequest(BaseModel):
     max_pages: int = Field(default=0, ge=0, le=1000, description="0 = toutes les pages disponibles")
 
 
+class SubCategoryProgress(BaseModel):
+    id: str
+    name: str
+    pages_completed: int = 0
+    total_pages: int = 0
+    mods_count: int = 0
+    status: str = "PENDING"  # "PENDING", "IN_PROGRESS", "COMPLETED", "ERROR"
+
+
 class CatalogSyncStatusResponse(BaseModel):
     is_running: bool
     progress_percent: int
     message: str
     total_scraped: int
     pages_completed: int = 0
+    total_pages: int = 0
+    current_category: Optional[str] = None
+    has_error: bool = False
+    error_message: Optional[str] = None
     page1_ready: bool = False
     last_completed_at: Optional[str] = None
+    categories_progress: List[SubCategoryProgress] = []
+    providers_status: Dict[str, str] = {}
 
 
 class CatalogInstallRequest(BaseModel):
@@ -80,11 +119,14 @@ class CatalogInstallRequest(BaseModel):
     page_url: Optional[str] = None
     title: Optional[str] = None
     updated_date: Optional[datetime] = None
+    install_dependencies: bool = True
+    allow_partial: bool = True
 
 
 class CatalogInstallResponse(BaseModel):
     success: bool
     message: str
+    installed_dependencies: List[str] = []
 
 
 class ModDetailsResponse(BaseModel):
@@ -100,6 +142,10 @@ class ModDetailsResponse(BaseModel):
     updated_date: Optional[str] = None
     patreon_status: str = "NONE"
     patreon_tier: str = ""
+    requirements_text: Optional[str] = None
+    requirements_status: str = "NONE"
+    dependencies: List[DependencyItem] = []
+    screenshots: List[str] = []
 
 
 # --- Installed Mods ---
@@ -113,6 +159,10 @@ class InstalledModItem(BaseModel):
     folder_name: str
     thumbnail_url: str = ""
     page_url: str = ""
+    requirements_text: Optional[str] = None
+    requirements_status: str = "NONE"
+    dependencies: List[DependencyItem] = []
+    screenshots: List[str] = []
     is_enabled: bool
     installed_date: Optional[datetime] = None
     version_date: Optional[datetime] = None

@@ -21,6 +21,7 @@ class InstalledCard(QFrame):
 
     delete_requested = Signal(dict)
     open_folder_requested = Signal(str)
+    details_requested = Signal(dict)
 
     def __init__(self, mod_data: dict, parent=None):
         super().__init__(parent)
@@ -30,7 +31,7 @@ class InstalledCard(QFrame):
 
         self.setObjectName("InstalledCard")
         self.setFixedWidth(295)
-        self.setFixedHeight(350)
+        self.setFixedHeight(400)
         self.init_ui()
 
     def init_ui(self):
@@ -48,11 +49,11 @@ class InstalledCard(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         # 1. Thumbnail Image Container
         self.thumb_label = QLabel()
-        self.thumb_label.setFixedHeight(135)
+        self.thumb_label.setFixedHeight(125)
         self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.thumb_label.setStyleSheet("""
             background-color: #0b0d17;
@@ -91,7 +92,7 @@ class InstalledCard(QFrame):
         title_text = self.mod_data.get("title", "Mod sans titre")
         self.title_label = QLabel(title_text)
         self.title_label.setWordWrap(True)
-        self.title_label.setFixedHeight(38)
+        self.title_label.setFixedHeight(34)
         self.title_label.setStyleSheet("font-size: 13px; font-weight: 700; color: #f8fafc;")
         layout.addWidget(self.title_label)
 
@@ -114,6 +115,71 @@ class InstalledCard(QFrame):
         folder_lbl.setToolTip(f"Sous-dossier: {folder_name}")
         folder_lbl.setStyleSheet("font-size: 10px; color: #475569;")
         layout.addWidget(folder_lbl)
+
+        # 6. Dependencies Box if requirements exist
+        dependencies = self.mod_data.get("dependencies", [])
+        if dependencies:
+            deps_container = QFrame()
+            deps_container.setStyleSheet("""
+                QFrame {
+                    background-color: #0b0e1a;
+                    border: 1px solid #1a2035;
+                    border-radius: 6px;
+                    padding: 3px 6px;
+                }
+            """)
+            deps_layout = QVBoxLayout(deps_container)
+            deps_layout.setContentsMargins(4, 2, 4, 2)
+            deps_layout.setSpacing(2)
+
+            header_lbl = QLabel(f"🔗 Requis ({len(dependencies)}) :")
+            header_lbl.setStyleSheet("font-size: 10px; font-weight: 700; color: #94a3b8;")
+            deps_layout.addWidget(header_lbl)
+
+            max_show = 2
+            for dep in dependencies[:max_show]:
+                d_title = dep.get("title") if isinstance(dep, dict) else getattr(dep, "title", "Mod")
+                d_status = (
+                    dep.get("status") if isinstance(dep, dict) else getattr(dep, "status", "DETECTED_NOT_INSTALLED")
+                )
+                is_inst = dep.get("is_installed") if isinstance(dep, dict) else getattr(dep, "is_installed", False)
+
+                if is_inst or d_status == "INSTALLED":
+                    pill_text = f"🟢 {d_title} (Installé)"
+                    pill_style = "background-color: #064e3b; color: #a7f3d0; border: 1px solid #059669;"
+                elif d_status == "DETECTED_NOT_INSTALLED":
+                    pill_text = f"🔵 {d_title} (Détecté)"
+                    pill_style = "background-color: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb;"
+                elif d_status == "NOT_DETECTED_SCANNING":
+                    pill_text = f"🟡 {d_title} (Scan en cours)"
+                    pill_style = "background-color: #451a03; color: #fde68a; border: 1px solid #d97706;"
+                else:
+                    pill_text = f"⚪ {d_title} (Non détecté)"
+                    pill_style = "background-color: #27272a; color: #d4d4d8; border: 1px solid #52525b;"
+
+                pill = QLabel(pill_text)
+                pill.setStyleSheet(f"""
+                    font-size: 9px;
+                    font-weight: 600;
+                    border-radius: 4px;
+                    padding: 1px 4px;
+                    {pill_style}
+                """)
+                pill.setToolTip(f"Dépendance: {d_title}\nStatut: {pill_text}")
+                deps_layout.addWidget(pill)
+
+            if len(dependencies) > max_show:
+                extra_count = len(dependencies) - max_show
+                more_lbl = QLabel(f"+ {extra_count} autre{'s' if extra_count > 1 else ''}...")
+                more_lbl.setStyleSheet("font-size: 9px; color: #64748b; font-style: italic;")
+                full_tooltip = "Dépendances complètes :\n" + "\n".join(
+                    f"• {d.get('title') if isinstance(d, dict) else (d.title if hasattr(d, 'title') else str(d))}"
+                    for d in dependencies
+                )
+                more_lbl.setToolTip(full_tooltip)
+                deps_layout.addWidget(more_lbl)
+
+            layout.addWidget(deps_container)
 
         layout.addStretch()
 
@@ -201,3 +267,14 @@ class InstalledCard(QFrame):
             )
             self.thumb_label.setPixmap(scaled)
             self.thumb_label.setText("")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            child = self.childAt(event.pos())
+            if (hasattr(self, "btn_folder") and (child == self.btn_folder or self.btn_folder.isAncestorOf(child))) or (
+                hasattr(self, "btn_delete") and (child == self.btn_delete or self.btn_delete.isAncestorOf(child))
+            ):
+                super().mousePressEvent(event)
+                return
+            self.details_requested.emit(self.mod_data)
+        super().mousePressEvent(event)

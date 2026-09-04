@@ -74,7 +74,7 @@ class ModCard(QFrame):
 
         self.setObjectName("ModCard")
         self.setFixedWidth(295)
-        self.setFixedHeight(360)
+        self.setFixedHeight(410)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.init_ui()
 
@@ -107,11 +107,11 @@ class ModCard(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         # 1. Thumbnail Image Container
         self.thumb_label = QLabel()
-        self.thumb_label.setFixedHeight(145)
+        self.thumb_label.setFixedHeight(130)
         self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.thumb_label.setStyleSheet("""
             background-color: #0b0d17;
@@ -161,7 +161,7 @@ class ModCard(QFrame):
         title_text = self.mod_data.get("title", "Sans titre")
         self.title_label = QLabel(title_text)
         self.title_label.setWordWrap(True)
-        self.title_label.setMaximumHeight(42)
+        self.title_label.setMaximumHeight(38)
         self.title_label.setToolTip(title_text)
         self.title_label.setStyleSheet("font-size: 13px; font-weight: 700; color: #f8fafc; line-height: 1.2;")
         layout.addWidget(self.title_label)
@@ -173,6 +173,71 @@ class ModCard(QFrame):
         meta_label = QLabel(f"Par {author}  •  {date_str}")
         meta_label.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: 500;")
         layout.addWidget(meta_label)
+
+        # 5. Dependencies Box if requirements exist
+        dependencies = self.mod_data.get("dependencies", [])
+        if dependencies:
+            deps_container = QFrame()
+            deps_container.setStyleSheet("""
+                QFrame {
+                    background-color: #0b0e1a;
+                    border: 1px solid #1a2035;
+                    border-radius: 6px;
+                    padding: 3px 6px;
+                }
+            """)
+            deps_layout = QVBoxLayout(deps_container)
+            deps_layout.setContentsMargins(4, 2, 4, 2)
+            deps_layout.setSpacing(2)
+
+            header_lbl = QLabel(f"🔗 Requis ({len(dependencies)}) :")
+            header_lbl.setStyleSheet("font-size: 10px; font-weight: 700; color: #94a3b8;")
+            deps_layout.addWidget(header_lbl)
+
+            max_show = 2
+            for dep in dependencies[:max_show]:
+                d_title = dep.get("title") if isinstance(dep, dict) else getattr(dep, "title", "Mod")
+                d_status = (
+                    dep.get("status") if isinstance(dep, dict) else getattr(dep, "status", "DETECTED_NOT_INSTALLED")
+                )
+                is_inst = dep.get("is_installed") if isinstance(dep, dict) else getattr(dep, "is_installed", False)
+
+                if is_inst or d_status == "INSTALLED":
+                    pill_text = f"🟢 {d_title} (Installé)"
+                    pill_style = "background-color: #064e3b; color: #a7f3d0; border: 1px solid #059669;"
+                elif d_status == "DETECTED_NOT_INSTALLED":
+                    pill_text = f"🔵 {d_title} (Détecté)"
+                    pill_style = "background-color: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb;"
+                elif d_status == "NOT_DETECTED_SCANNING":
+                    pill_text = f"🟡 {d_title} (Scan en cours)"
+                    pill_style = "background-color: #451a03; color: #fde68a; border: 1px solid #d97706;"
+                else:
+                    pill_text = f"⚪ {d_title} (Non détecté)"
+                    pill_style = "background-color: #27272a; color: #d4d4d8; border: 1px solid #52525b;"
+
+                pill = QLabel(pill_text)
+                pill.setStyleSheet(f"""
+                    font-size: 9px;
+                    font-weight: 600;
+                    border-radius: 4px;
+                    padding: 1px 4px;
+                    {pill_style}
+                """)
+                pill.setToolTip(f"Dépendance: {d_title}\nStatut: {pill_text}")
+                deps_layout.addWidget(pill)
+
+            if len(dependencies) > max_show:
+                extra_count = len(dependencies) - max_show
+                more_lbl = QLabel(f"+ {extra_count} autre{'s' if extra_count > 1 else ''}...")
+                more_lbl.setStyleSheet("font-size: 9px; color: #64748b; font-style: italic;")
+                full_tooltip = "Dépendances complètes :\n" + "\n".join(
+                    f"• {d.get('title') if isinstance(d, dict) else (d.title if hasattr(d, 'title') else str(d))}"
+                    for d in dependencies
+                )
+                more_lbl.setToolTip(full_tooltip)
+                deps_layout.addWidget(more_lbl)
+
+            layout.addWidget(deps_container)
 
         layout.addStretch()
 
@@ -273,23 +338,53 @@ class ModCard(QFrame):
                 }
             """)
         else:
-            # Ready to Install
-            self.action_btn.setText("📥 Installer")
-            self.action_btn.setEnabled(True)
-            self.action_btn.setToolTip("Télécharger et installer ce mod dans Les Sims 4.")
-            self.action_btn.setStyleSheet("""
-                QPushButton {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
-                    color: #ffffff;
-                    border: 1px solid #818cf8;
-                    border-radius: 8px;
-                    font-weight: 700;
-                    font-size: 12px;
-                }
-                QPushButton:hover {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
-                }
-            """)
+            dependencies = self.mod_data.get("dependencies", [])
+            req_status = self.mod_data.get("requirements_status", "NONE")
+            has_unfound_deps = (
+                req_status == "PENDING_VERIFICATION"
+                or any(
+                    (d.get("status") if isinstance(d, dict) else getattr(d, "status", "")) in ["NOT_DETECTED_FINISHED", "NOT_DETECTED_SCANNING"]
+                    for d in dependencies
+                )
+            )
+
+            if has_unfound_deps:
+                self.action_btn.setText("⚠️ Installation Partielle")
+                self.action_btn.setEnabled(True)
+                self.action_btn.setToolTip(
+                    "Certaines dépendances sont introuvables sur LoversLab. Le mod peut être installé partiellement."
+                )
+                self.action_btn.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #b45309);
+                        color: #ffffff;
+                        border: 1px solid #f59e0b;
+                        border-radius: 8px;
+                        font-weight: 700;
+                        font-size: 11px;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b45309, stop:1 #92400e);
+                    }
+                """)
+            else:
+                # Ready to Install
+                self.action_btn.setText("📥 Installer")
+                self.action_btn.setEnabled(True)
+                self.action_btn.setToolTip("Télécharger et installer ce mod dans Les Sims 4.")
+                self.action_btn.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
+                        color: #ffffff;
+                        border: 1px solid #818cf8;
+                        border-radius: 8px;
+                        font-weight: 700;
+                        font-size: 12px;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
+                    }
+                """)
 
         self.action_btn.clicked.connect(lambda: self.install_requested.emit(self.mod_data))
         btn_layout.addWidget(self.action_btn, stretch=2)

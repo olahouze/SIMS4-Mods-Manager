@@ -19,6 +19,8 @@ from src.ui.views.updates_view import UpdatesView
 from src.ui.views.accounts_view import AccountsView
 from src.ui.views.settings_view import SettingsView
 from src.ui.views.logs_view import LogsView
+from src.ui.views.mod_detail_view import ModDetailView
+from src.core.shutdown_manager import ShutdownManager
 from src.utils.logger import logger
 
 
@@ -131,6 +133,7 @@ class MainWindow(QMainWindow):
         self.updates_view = UpdatesView()
         self.logs_view = LogsView()
         self.settings_view = SettingsView()
+        self.mod_detail_view = ModDetailView()
 
         self.stacked_widget.addWidget(self.accounts_view)  # Index 0 (Comptes)
         self.stacked_widget.addWidget(self.catalog_view)  # Index 1 (Catalogue)
@@ -138,12 +141,32 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.updates_view)  # Index 3 (Mises à jour)
         self.stacked_widget.addWidget(self.logs_view)  # Index 4 (Logs)
         self.stacked_widget.addWidget(self.settings_view)  # Index 5 (Paramètres)
+        self.stacked_widget.addWidget(self.mod_detail_view)  # Index 6 (Détails Plein Écran)
 
         content_layout.addWidget(self.stacked_widget)
         main_layout.addWidget(content_area)
 
         # Connect login signal to switch to catalog
         self.accounts_view.login_successful.connect(self._on_login_success)
+
+        # Connect detail view signals for full-page mod view (from Catalog and from Installed)
+        self.catalog_view.details_requested.connect(
+            lambda d: self.show_mod_details(d, origin_name="Catalogue", origin_index=1)
+        )
+        self.installed_view.details_requested.connect(
+            lambda d: self.show_mod_details(d, origin_name="Mes Mods", origin_index=2)
+        )
+        self.mod_detail_view.back_requested.connect(self._on_detail_back)
+        self.mod_detail_view.install_requested.connect(self._on_detail_install_requested)
+        self.mod_detail_view.open_folder_requested.connect(self.installed_view.open_mod_folder)
+
+        # Cross-view synchronization when mods are installed, uninstalled, or updated
+        self.catalog_view.install_finished.connect(self._on_mods_state_changed)
+        self.installed_view.mods_changed.connect(self._on_mods_state_changed)
+        self.updates_view.updates_applied.connect(self._on_mods_state_changed)
+
+        # Store navigation history for back button
+        self.current_origin_index = 1
 
         # Set default page to Accounts (Index 0)
         self.switch_page(0)
@@ -177,6 +200,66 @@ class MainWindow(QMainWindow):
 
         self.refresh_game_status()
         self.update_nav_badge()
+
+    def show_mod_details(self, mod_data: dict, origin_name: str = "Catalogue", origin_index: int = 1):
+        """Displays full-screen dedicated ModDetailView taking 100% of application area."""
+        self.current_origin_index = origin_index
+        for btn in self.nav_buttons:
+            btn.setChecked(False)
+        self.stacked_widget.setCurrentIndex(6)
+        self.mod_detail_view.load_mod(mod_data, origin_name=origin_name, origin_index=origin_index)
+
+    def _on_detail_back(self):
+        """Returns to previous view (Catalog or Installed Mods)."""
+        self.switch_page(self.current_origin_index)
+
+    def _on_detail_install_requested(self, mod_data: dict):
+        """
+        Installs mod from ModDetailView by delegating directly to CatalogView.
+        CatalogView handles single dependency verification and confirmation dialog.
+        """
+        self.catalog_view.install_mod(mod_data)
+
+    def _on_mods_state_changed(self, *args):
+        """Refreshes all views and navigation badges whenever mods are added, removed, or updated."""
+        self.installed_view.refresh_mods()
+        self.updates_view.refresh_updates()
+        self.catalog_view.refresh_catalog()
+        self.update_nav_badge()
+        if self.stacked_widget.currentIndex() == 6:
+            self._refresh_current_mod_detail()
+
+    def _refresh_current_mod_detail(self):
+        """Updates current mod in ModDetailView to reflect its new installation status."""
+        try:
+            curr_mod = getattr(self.mod_detail_view, "mod_data", None)
+            if not curr_mod:
+                return
+            installed_res = self.api_client.get_installed_mods()
+            installed_list = installed_res.get("items", []) if isinstance(installed_res, dict) else []
+            r_id = str(curr_mod.get("remote_id", ""))
+            m_title = curr_mod.get("title", "")
+            match = next(
+                (
+                    im
+                    for im in installed_list
+                    if (r_id and str(im.get("remote_id", "")) == r_id) or (m_title and im.get("title") == m_title)
+                ),
+                None,
+            )
+            updated_data = dict(curr_mod)
+            updated_data["is_installed"] = bool(match)
+            if match:
+                updated_data["folder_name"] = match.get("folder_name")
+            else:
+                updated_data.pop("folder_name", None)
+            self.mod_detail_view.load_mod(
+                updated_data,
+                origin_name=self.mod_detail_view.origin_name,
+                origin_index=self.mod_detail_view.origin_index,
+            )
+        except Exception as e:
+            logger.debug(f"Erreur actualisation mod_detail_view: {e}")
 
     def _on_login_success(self, provider_name: str):
         """Switches to catalog and triggers progressive loading monitoring."""
@@ -234,7 +317,7 @@ class MainWindow(QMainWindow):
 
             # 2. Check accounts connection status
             acc_data = self.api_client.get_accounts()
-            accounts = acc_data.get("accounts", [])
+            accounts = acc_data if isinstance(acc_data, list) else acc_data.get("accounts", [])
             is_connection_ok = False
             for acc in accounts:
                 if acc.get("is_ready", False) or acc.get("is_member", False):
@@ -261,4 +344,15 @@ class MainWindow(QMainWindow):
                 logger.info("Synchronisation automatique en attente : session ou connexion non validée.")
         except Exception as e:
             logger.debug(f"Vérification automatique de synchronisation au démarrage: {e}")
+
+    def closeEvent(self, event):
+        """Clean and graceful shutdown handling."""
+        logger.info("Fermeture de l'application demandée par l'utilisateur...")
+        ShutdownManager.trigger_shutdown()
+        if hasattr(self, "catalog_view") and hasattr(self.catalog_view, "monitor_timer"):
+            try:
+                self.catalog_view.monitor_timer.stop()
+            except Exception:
+                pass
+        super().closeEvent(event)
 

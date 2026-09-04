@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QMessageBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 from src.api.client import get_api_client
 from src.ui.components.installed_card import InstalledCard
@@ -21,6 +21,9 @@ class InstalledView(QWidget):
     Modern grid view managing installed Sims 4 mods.
     Displays rich cards with cover previews, metadata, direct folder access, and deletion.
     """
+
+    details_requested = Signal(dict)
+    mods_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -185,6 +188,7 @@ class InstalledView(QWidget):
             card = InstalledCard(m, parent=self)
             card.delete_requested.connect(self._on_delete_mod)
             card.open_folder_requested.connect(self.open_mod_folder)
+            card.details_requested.connect(self.details_requested.emit)
             self.grid_layout.addWidget(card, row, col)
 
             col += 1
@@ -215,6 +219,7 @@ class InstalledView(QWidget):
                 if res.get("success", False):
                     logger.info(f"Mod '{title}' désinstallé avec succès.")
                     QMessageBox.information(self, "Mod Supprimé", f"Le mod '{title}' a été supprimé avec succès.")
+                    self.mods_changed.emit()
                 else:
                     logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")
                     QMessageBox.warning(self, "Erreur", res.get("message", "Échec de la suppression."))
@@ -230,6 +235,7 @@ class InstalledView(QWidget):
             logger.info(f"Scan des mods effectué : {msg}")
             QMessageBox.information(self, "Scan Terminé", msg)
             self.refresh_mods()
+            self.mods_changed.emit()
         except Exception as e:
             logger.error(f"Erreur scan dossier Mods: {e}")
             QMessageBox.critical(self, "Erreur Scan", f"Impossible de scanner le dossier Mods: {e}")
