@@ -1,9 +1,9 @@
-from pathlib import Path
 from typing import List, Tuple
 from src.core.database import DatabaseManager, InstalledMod
 from src.core.config import AppConfig
 from src.core.game_detector import GameDetector
 from src.utils.logger import logger
+
 
 class ModToggleManager:
     """Handles enabling and disabling installed Sims 4 mods without deletion."""
@@ -50,7 +50,7 @@ class ModToggleManager:
                 else:
                     # Enabling: rename .disabled back
                     if file_path.name.lower().endswith(".package.disabled"):
-                        new_file_path = file_path.with_name(file_path.name[:-9]) # remove .disabled
+                        new_file_path = file_path.with_name(file_path.name[:-9])  # remove .disabled
                         file_path.rename(new_file_path)
                         updated_files.append(str(new_file_path.relative_to(mods_dir)))
                     elif file_path.name.lower().endswith(".ts4script.disabled"):

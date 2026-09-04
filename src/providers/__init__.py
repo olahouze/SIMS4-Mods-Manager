@@ -3,9 +3,10 @@ from src.providers.base import BaseSourceProvider
 from src.providers.loverslab import LoversLabProvider
 from src.providers.patreon import PatreonProvider
 
+
 class ProviderRegistry:
     """Registry holding all available source providers."""
-    
+
     _providers: Dict[str, BaseSourceProvider] = {}
 
     @classmethod
@@ -24,5 +25,6 @@ class ProviderRegistry:
         if not cls._providers:
             cls.initialize()
         return list(cls._providers.values())
+
 
 __all__ = ["BaseSourceProvider", "LoversLabProvider", "PatreonProvider", "ProviderRegistry"]

@@ -1,5 +1,3 @@
-import shutil
-from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -12,17 +10,17 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QFrame,
 )
-from PySide6.QtCore import Qt
 
-from src.core.config import AppConfig
-from src.core.game_detector import GameDetector
+from src.api.client import get_api_client
 from src.utils.logger import logger
 
+
 class SettingsView(QWidget):
-    """Settings page for paths, game launcher, backups, and preferences."""
+    """Settings page for paths, game launcher, backups, and preferences via API."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.api_client = get_api_client()
         self.init_ui()
 
     def init_ui(self):
@@ -34,29 +32,25 @@ class SettingsView(QWidget):
         title.setStyleSheet("font-size: 18px; font-weight: 700; color: #f8fafc;")
         layout.addWidget(title)
 
-        config = AppConfig.load()
-
         # 1. Sims 4 Mods Directory Section
         mods_frame = self._create_section_frame("Dossier des Mods Les Sims 4")
         m_layout = QVBoxLayout(mods_frame)
 
-        detected_mods = GameDetector.detect_mods_dir(config.custom_mods_dir)
-        mods_path_str = str(detected_mods) if detected_mods else ""
-
         path_h = QHBoxLayout()
-        self.mods_path_input = QLineEdit(mods_path_str)
+        self.mods_path_input = QLineEdit()
         path_h.addWidget(self.mods_path_input, stretch=3)
 
         browse_mods_btn = QPushButton("Parcourir...")
-        browse_mods_btn.setStyleSheet("background-color: #202436; color: #f1f5f9; padding: 8px 14px; border-radius: 6px;")
+        browse_mods_btn.setStyleSheet(
+            "background-color: #202436; color: #f1f5f9; padding: 8px 14px; border-radius: 6px;"
+        )
         browse_mods_btn.clicked.connect(self.browse_mods_folder)
         path_h.addWidget(browse_mods_btn)
 
         m_layout.addLayout(path_h)
 
-        status_lbl = QLabel("✓ Dossier détecté et valide" if (detected_mods and detected_mods.exists()) else "⚠️ Dossier non détecté")
-        status_lbl.setStyleSheet("color: #34d399;" if (detected_mods and detected_mods.exists()) else "color: #f87171;")
-        m_layout.addWidget(status_lbl)
+        self.mods_status_lbl = QLabel("Vérification...")
+        m_layout.addWidget(self.mods_status_lbl)
 
         layout.addWidget(mods_frame)
 
@@ -64,15 +58,14 @@ class SettingsView(QWidget):
         game_frame = self._create_section_frame("Exécutable du Jeu & Lanceur")
         g_layout = QVBoxLayout(game_frame)
 
-        detected_exe = GameDetector.detect_game_executable(config.custom_game_exe)
-        exe_path_str = str(detected_exe) if detected_exe else ""
-
         exe_h = QHBoxLayout()
-        self.exe_path_input = QLineEdit(exe_path_str)
+        self.exe_path_input = QLineEdit()
         exe_h.addWidget(self.exe_path_input, stretch=3)
 
         browse_exe_btn = QPushButton("Parcourir...")
-        browse_exe_btn.setStyleSheet("background-color: #202436; color: #f1f5f9; padding: 8px 14px; border-radius: 6px;")
+        browse_exe_btn.setStyleSheet(
+            "background-color: #202436; color: #f1f5f9; padding: 8px 14px; border-radius: 6px;"
+        )
         browse_exe_btn.clicked.connect(self.browse_game_exe)
         exe_h.addWidget(browse_exe_btn)
 
@@ -98,23 +91,25 @@ class SettingsView(QWidget):
         p_layout = QVBoxLayout(pref_frame)
         p_layout.setSpacing(12)
 
-        self.backup_chk = QCheckBox("Créer automatiquement une sauvegarde (.zip) de l'ancienne version avant mise à jour")
-        self.backup_chk.setChecked(config.auto_backup)
+        self.backup_chk = QCheckBox(
+            "Créer automatiquement une sauvegarde (.zip) de l'ancienne version avant mise à jour"
+        )
         p_layout.addWidget(self.backup_chk)
 
         self.adult_chk = QCheckBox("Activer les contenus adultes / NSFW (+18 ans) sur LoversLab")
-        self.adult_chk.setChecked(config.adult_content_enabled)
         p_layout.addWidget(self.adult_chk)
 
         # Cache clear button
         cache_h = QHBoxLayout()
-        cache_lbl = QLabel(f"Emplacement des sauvegardes : {AppConfig.get_backups_dir()}")
-        cache_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
-        cache_h.addWidget(cache_lbl)
+        self.cache_lbl = QLabel("Emplacement des sauvegardes : -")
+        self.cache_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
+        cache_h.addWidget(self.cache_lbl)
         cache_h.addStretch()
 
         clear_cache_btn = QPushButton("🗑️ Vider le cache des miniatures")
-        clear_cache_btn.setStyleSheet("background-color: #202436; color: #94a3b8; padding: 6px 12px; border-radius: 6px;")
+        clear_cache_btn.setStyleSheet(
+            "background-color: #202436; color: #94a3b8; padding: 6px 12px; border-radius: 6px;"
+        )
         clear_cache_btn.clicked.connect(self.clear_cache)
         cache_h.addWidget(clear_cache_btn)
 
@@ -139,6 +134,8 @@ class SettingsView(QWidget):
 
         layout.addStretch()
 
+        self.load_settings()
+
     def _create_section_frame(self, title: str) -> QFrame:
         frame = QFrame()
         frame.setStyleSheet("""
@@ -151,41 +148,62 @@ class SettingsView(QWidget):
         """)
         return frame
 
+    def load_settings(self):
+        """Loads settings through API /api/settings."""
+        try:
+            settings = self.api_client.get_settings()
+            mods_dir = settings.get("custom_mods_dir") or settings.get("detected_mods_dir") or ""
+            exe_path = settings.get("custom_game_exe") or settings.get("detected_game_exe") or ""
+
+            self.mods_path_input.setText(mods_dir)
+            self.exe_path_input.setText(exe_path)
+            self.backup_chk.setChecked(settings.get("auto_backup", True))
+            self.adult_chk.setChecked(settings.get("adult_content_enabled", True))
+
+            backups_dir = settings.get("backups_dir", "")
+            self.cache_lbl.setText(f"Emplacement des sauvegardes : {backups_dir}")
+
+            has_valid_mods = bool(settings.get("detected_mods_dir"))
+            self.mods_status_lbl.setText("✓ Dossier détecté et valide" if has_valid_mods else "⚠️ Dossier non détecté")
+            self.mods_status_lbl.setStyleSheet("color: #34d399;" if has_valid_mods else "color: #f87171;")
+
+        except Exception as e:
+            logger.error(f"Erreur API lors du chargement des paramètres: {e}")
+
     def browse_mods_folder(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Sélectionner le dossier Mods de Sims 4")
         if dir_path:
             self.mods_path_input.setText(dir_path)
 
     def browse_game_exe(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Sélectionner l'exécutable Sims 4", "", "Exécutables (*.exe)"
-        )
+        file_path, _ = QFileDialog.getOpenFileName(self, "Sélectionner l'exécutable Sims 4", "", "Exécutables (*.exe)")
         if file_path:
             self.exe_path_input.setText(file_path)
 
     def launch_game(self):
-        exe = self.exe_path_input.text().strip()
-        exe_path = Path(exe) if exe else None
-        ok = GameDetector.launch_game(exe_path)
-        if not ok:
-            QMessageBox.warning(self, "Erreur", "Impossible de lancer le jeu Les Sims 4. Vérifiez le chemin de l'exécutable.")
+        try:
+            res = self.api_client.launch_game()
+            QMessageBox.information(self, "Lancement", res.get("message", "Jeu lancé."))
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Impossible de lancer Les Sims 4 via l'API: {e}")
 
     def clear_cache(self):
-        cache_dir = AppConfig.get_thumbnails_cache_dir()
-        count = 0
-        for f in cache_dir.glob("*"):
-            try:
-                f.unlink()
-                count += 1
-            except Exception:
-                pass
-        QMessageBox.information(self, "Cache Vidé", f"{count} miniatures supprimées du cache.")
+        try:
+            res = self.api_client.clear_cache()
+            QMessageBox.information(self, "Cache Vidé", res.get("message", "Cache vidé."))
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Échec du vidage de cache via l'API: {e}")
 
     def save_settings(self):
-        config = AppConfig.load()
-        config.custom_mods_dir = self.mods_path_input.text().strip() or None
-        config.custom_game_exe = self.exe_path_input.text().strip() or None
-        config.auto_backup = self.backup_chk.isChecked()
-        config.adult_content_enabled = self.adult_chk.isChecked()
-        config.save()
-        QMessageBox.information(self, "Succès", "Paramètres enregistrés avec succès !")
+        payload = {
+            "custom_mods_dir": self.mods_path_input.text().strip() or None,
+            "custom_game_exe": self.exe_path_input.text().strip() or None,
+            "auto_backup": self.backup_chk.isChecked(),
+            "adult_content_enabled": self.adult_chk.isChecked(),
+        }
+        try:
+            self.api_client.update_settings(payload)
+            QMessageBox.information(self, "Succès", "Paramètres enregistrés avec succès via l'API !")
+            self.load_settings()
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Échec de l'enregistrement des paramètres via l'API: {e}")

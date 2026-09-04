@@ -1,13 +1,12 @@
 import re
-import json
-from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Callable
 from bs4 import BeautifulSoup
 
 from src.providers.base import BaseSourceProvider
 from src.core.session_manager import SessionManager
 from src.utils.logger import logger
+
 
 class PatreonProvider(BaseSourceProvider):
     """Provider for checking Patreon posts, pledge access status, and extracting download links."""
@@ -20,7 +19,7 @@ class PatreonProvider(BaseSourceProvider):
     def extract_post_id(cls, url: str) -> Optional[str]:
         """Extracts the numerical post ID from a Patreon URL."""
         # e.g. https://www.patreon.com/posts/wickedwhims-v180-102938475
-        match = re.search(r'/posts/(?:[a-zA-Z0-9_-]+-)?(\d+)', url)
+        match = re.search(r"/posts/(?:[a-zA-Z0-9_-]+-)?(\d+)", url)
         if match:
             return match.group(1)
         return None
@@ -64,38 +63,62 @@ class PatreonProvider(BaseSourceProvider):
                 external_links: List[str] = []
 
                 # Extract direct post file
+                IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"}
+
+                # Extract direct post file (only if NOT an image)
                 post_file = post_data.get("post_file")
                 if post_file and isinstance(post_file, dict):
-                    if post_file.get("url"):
-                        download_urls.append({
-                            "name": post_file.get("name", "Patreon File"),
-                            "url": post_file.get("url"),
-                            "size": post_file.get("size", 0),
-                        })
+                    file_url = post_file.get("url", "")
+                    file_name = post_file.get("name", "")
+                    clean_path = file_url.split("?")[0]
+                    ext = Path(file_name or clean_path).suffix.lower()
+                    if file_url and ext not in IMAGE_EXTENSIONS:
+                        download_urls.append(
+                            {
+                                "name": file_name or "Fichier Patreon",
+                                "url": file_url,
+                                "size": post_file.get("size", 0),
+                            }
+                        )
 
-                # Extract attachments from included
+                # Extract attachments from included (only if NOT an image)
                 for item in included:
                     if item.get("type") == "attachment":
                         attr = item.get("attributes", {})
-                        if attr.get("url"):
-                            download_urls.append({
-                                "name": attr.get("name", "Attachment"),
-                                "url": attr.get("url"),
-                                "size": attr.get("size", 0),
-                            })
+                        att_url = attr.get("url", "")
+                        att_name = attr.get("name", "")
+                        clean_path = att_url.split("?")[0]
+                        ext = Path(att_name or clean_path).suffix.lower()
+                        if att_url and ext not in IMAGE_EXTENSIONS:
+                            download_urls.append(
+                                {
+                                    "name": att_name or "Pièce jointe Patreon",
+                                    "url": att_url,
+                                    "size": attr.get("size", 0),
+                                }
+                            )
 
                 # Extract external links from post HTML content
                 if content_html:
                     soup = BeautifulSoup(content_html, "html.parser")
                     for a in soup.find_all("a", href=True):
                         href = a["href"]
-                        if any(host in href.lower() for host in ["mega.nz", "mediafire.com", "drive.google.com", "simfileshare.net", "dropbox.com"]):
+                        if any(
+                            host in href.lower()
+                            for host in [
+                                "mega.nz",
+                                "mediafire.com",
+                                "drive.google.com",
+                                "simfileshare.net",
+                                "dropbox.com",
+                            ]
+                        ):
                             external_links.append(href)
 
                 if can_view:
                     status = "PUBLIC" if min_cents == 0 else "UNLOCKED"
                 else:
-                    status = "LOCKED"
+                    status = "LOCKED" if min_cents > 0 else "PUBLIC"
 
                 tier_str = f"${min_cents / 100:.2f}/mois" if min_cents > 0 else ""
 
@@ -111,12 +134,12 @@ class PatreonProvider(BaseSourceProvider):
                 }
             elif resp.status_code in [401, 403]:
                 return {
-                    "status": "LOCKED",
+                    "status": "PUBLIC",
                     "can_view": False,
                     "title": "",
                     "download_urls": [],
                     "external_links": [],
-                    "tier_str": "Accès Patreon Requis",
+                    "tier_str": "",
                 }
         except Exception as e:
             logger.error(f"Error checking Patreon post {post_url}: {e}")
@@ -143,16 +166,63 @@ class PatreonProvider(BaseSourceProvider):
     def get_mod_details(self, mod_url: str) -> Dict[str, Any]:
         return self.check_post_access(mod_url)
 
-    def download_mod_file(self, download_url: str, dest_path: Path) -> Tuple[bool, str]:
+    def download_mod_file(
+        self,
+        download_url: str,
+        dest_path: Path,
+        progress_callback: Optional[Callable[[int, str, str], None]] = None,
+    ) -> Tuple[bool, str]:
         session = SessionManager.get_http_session("patreon")
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Lancement du téléchargement Patreon : {download_url}")
             resp = session.get(download_url, stream=True, timeout=60)
             if resp.status_code == 200:
+                content_type = resp.headers.get("Content-Type", "").lower()
+                if "image/" in content_type:
+                    return (
+                        False,
+                        "Le lien Patreon pointe vers une image de prévisualisation et non un fichier de mod Sims 4. Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour accéder au téléchargement des fichiers .package / .zip.",
+                    )
+
+                total_size = int(resp.headers.get("Content-Length") or 0)
+                downloaded = 0
+                import time
+
+                start_time = time.time()
+                last_ui_time = start_time
+                last_log_time = start_time
+
                 with open(dest_path, "wb") as f:
                     for chunk in resp.iter_content(chunk_size=65536):
                         if chunk:
                             f.write(chunk)
+                            downloaded += len(chunk)
+                            now = time.time()
+                            elapsed = now - start_time
+                            speed_mb = (downloaded / (elapsed or 0.001)) / (1024 * 1024)
+                            speed_str = f"{speed_mb:.2f} Mo/s" if speed_mb >= 1.0 else f"{speed_mb * 1024:.0f} Ko/s"
+
+                            if total_size > 0:
+                                pct = min(int((downloaded / total_size) * 75), 75)
+                                down_mb = downloaded / (1024 * 1024)
+                                tot_mb = total_size / (1024 * 1024)
+                                detail = f"{down_mb:.1f} / {tot_mb:.1f} Mo • {speed_str}"
+                            else:
+                                down_mb = downloaded / (1024 * 1024)
+                                pct = min(int(down_mb * 2), 70)
+                                detail = f"{down_mb:.1f} Mo • {speed_str}"
+
+                            if progress_callback and (now - last_ui_time >= 0.2):
+                                progress_callback(pct, "Téléchargement depuis Patreon...", detail)
+                                last_ui_time = now
+
+                            if now - last_log_time >= 3.0:
+                                logger.info(f"[Téléchargement Patreon] {dest_path.name} : {detail}")
+                                last_log_time = now
+
+                size_mb = dest_path.stat().st_size / (1024 * 1024)
+                logger.info(f"Fichier Patreon téléchargé avec succès : {dest_path.name} ({size_mb:.2f} Mo).")
                 return True, str(dest_path)
             else:
                 return False, f"Erreur HTTP {resp.status_code} lors du téléchargement."

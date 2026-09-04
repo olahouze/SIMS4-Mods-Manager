@@ -1,21 +1,23 @@
-import os
 import json
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict, fields
 from typing import Optional
 
 APP_DIR_NAME = ".sims4_mod_manager"
+
 
 @dataclass
 class AppConfig:
     custom_mods_dir: Optional[str] = None
     custom_game_exe: Optional[str] = None
+    cached_mods_dir: Optional[str] = None
+    cached_game_exe: Optional[str] = None
     auto_backup: bool = True
     adult_content_enabled: bool = True
     check_updates_on_startup: bool = True
     theme: str = "dark"
     max_workers: int = 4
-    
+
     @classmethod
     def get_app_dir(cls) -> Path:
         path = Path.home() / APP_DIR_NAME
@@ -55,7 +57,9 @@ class AppConfig:
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    return cls(**data)
+                    valid_keys = {f.name for f in fields(cls)}
+                    filtered = {k: v for k, v in data.items() if k in valid_keys}
+                    return cls(**filtered)
             except Exception:
                 return cls()
         return cls()

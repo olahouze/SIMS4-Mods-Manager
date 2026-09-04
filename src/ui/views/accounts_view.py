@@ -7,38 +7,37 @@ from PySide6.QtWidgets import (
     QFrame,
     QMessageBox,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QThread, Signal
 
-from src.core.session_manager import SessionManager
-from src.core.database import DatabaseManager, AccountSession
+from src.api.client import get_api_client
 from src.ui.components.progress_dialog import ProgressDialog
 from src.utils.logger import logger
+
 
 class LoginWorker(QThread):
     finished = Signal(bool, str)
 
-    def __init__(self, provider_name: str, target_url: str):
+    def __init__(self, provider_name: str):
         super().__init__()
         self.provider_name = provider_name
-        self.target_url = target_url
 
     def run(self):
         try:
-            ok, msg, _ = SessionManager.launch_interactive_login(
-                provider_name=self.provider_name,
-                target_url=self.target_url,
-                timeout_seconds=300
-            )
-            self.finished.emit(ok, msg)
+            client = get_api_client()
+            res = client.login_account(self.provider_name, timeout_seconds=300)
+            self.finished.emit(res.get("success", False), res.get("message", ""))
         except Exception as e:
-            self.finished.emit(False, f"Erreur lors de l'ouverture du navigateur: {e}")
+            self.finished.emit(False, f"Erreur lors de l'appel API login: {e}")
 
 
 class AccountsView(QWidget):
-    """View to manage site sessions, interactive Cloudflare solving, tests and resets."""
+    """View to manage site sessions, interactive Cloudflare solving, tests and resets via API."""
+
+    login_successful = Signal(str)  # provider_name
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.api_client = get_api_client()
         self.init_ui()
 
     def init_ui(self):
@@ -68,7 +67,6 @@ class AccountsView(QWidget):
             provider_name="loverslab",
             title="LoversLab (Forum IPS & Téléchargements The Sims 4)",
             description="Permet le passage automatique de Cloudflare, la validation de l'avertissement adulte (+18 ans) et l'accès aux téléchargements directs.",
-            login_url="https://www.loverslab.com/login/",
         )
         self.cards_layout.addWidget(self.loverslab_card)
 
@@ -77,7 +75,6 @@ class AccountsView(QWidget):
             provider_name="patreon",
             title="Patreon (Accès Créateurs & Niveaux d'Abonnement)",
             description="Permet d'identifier si votre compte Patreon a débloqué les mods réservés aux abonnés / accès anticipé et de télécharger les pièces jointes.",
-            login_url="https://www.patreon.com/login",
         )
         self.cards_layout.addWidget(self.patreon_card)
 
@@ -86,7 +83,7 @@ class AccountsView(QWidget):
 
         self.refresh_statuses()
 
-    def _create_account_card(self, provider_name: str, title: str, description: str, login_url: str) -> QFrame:
+    def _create_account_card(self, provider_name: str, title: str, description: str) -> QFrame:
         card = QFrame()
         card.setObjectName(f"card_{provider_name}")
         card.setStyleSheet("""
@@ -110,7 +107,9 @@ class AccountsView(QWidget):
 
         status_badge = QLabel("Non configuré")
         status_badge.setObjectName(f"status_{provider_name}")
-        status_badge.setStyleSheet("background-color: #334155; color: #94a3b8; border-radius: 10px; padding: 4px 14px; font-weight: 600; font-size: 12px;")
+        status_badge.setStyleSheet(
+            "background-color: #334155; color: #94a3b8; border-radius: 10px; padding: 4px 14px; font-weight: 600; font-size: 12px;"
+        )
         h_layout.addWidget(status_badge)
 
         c_layout.addLayout(h_layout)
@@ -174,71 +173,106 @@ class AccountsView(QWidget):
             }
             QPushButton:hover { background-color: #6366f1; }
         """)
-        login_btn.clicked.connect(lambda _, pn=provider_name, url=login_url: self.open_login_window(pn, url))
+        login_btn.clicked.connect(lambda _, pn=provider_name: self.open_login_window(pn))
         b_layout.addWidget(login_btn)
 
         c_layout.addLayout(b_layout)
         return card
 
     def refresh_statuses(self):
-        db = DatabaseManager.get_instance()
-        with db.get_session() as session:
-            for p_name in ["loverslab", "patreon"]:
+        """Loads account statuses through API /api/accounts."""
+        try:
+            accounts = self.api_client.get_accounts()
+            for acc in accounts:
+                p_name = acc.get("provider_name")
                 badge = self.findChild(QLabel, f"status_{p_name}")
                 if not badge:
                     continue
 
-                acc = session.query(AccountSession).filter_by(provider_name=p_name).first()
-                is_member = SessionManager.is_member_authenticated(p_name)
-                is_ready = SessionManager.is_session_ready(p_name)
+                is_member = acc.get("is_member", False)
+                is_ready = acc.get("is_ready", False)
+                display = acc.get("user_display_name", "")
 
                 if is_member:
-                    display = acc.user_display_name if (acc and acc.user_display_name) else "Actif"
-                    badge.setText(f"✓ Membre Connecté ({display})")
-                    badge.setStyleSheet("background-color: #064e3b; color: #34d399; border-radius: 10px; padding: 4px 14px; font-weight: 700;")
+                    badge.setText(f"✓ Membre Connecté ({display or 'Actif'})")
+                    badge.setStyleSheet(
+                        "background-color: #064e3b; color: #34d399; border-radius: 10px; padding: 4px 14px; font-weight: 700;"
+                    )
                 elif is_ready:
-                    badge.setText("⚠️ Anti-Bot Validé (Connexion compte requise pour télécharger)")
-                    badge.setStyleSheet("background-color: #451a03; color: #fbbf24; border-radius: 10px; padding: 4px 14px; font-weight: 700;")
+                    badge.setText("⚠️ Anti-Bot Validé (Connexion requise pour téléchargements)")
+                    badge.setStyleSheet(
+                        "background-color: #451a03; color: #fbbf24; border-radius: 10px; padding: 4px 14px; font-weight: 700;"
+                    )
                 else:
                     badge.setText("Non configuré")
-                    badge.setStyleSheet("background-color: #334155; color: #94a3b8; border-radius: 10px; padding: 4px 14px; font-weight: 600;")
+                    badge.setStyleSheet(
+                        "background-color: #334155; color: #94a3b8; border-radius: 10px; padding: 4px 14px; font-weight: 600;"
+                    )
+        except Exception as e:
+            logger.error(f"Erreur API lors du rafraîchissement des comptes: {e}")
 
     def _on_clear_clicked(self, provider_name: str):
         reply = QMessageBox.question(
             self,
             "Réinitialiser la session",
             f"Voulez-vous vraiment supprimer les cookies et réinitialiser le profil pour {provider_name} ?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            SessionManager.clear_session(provider_name)
-            self.refresh_statuses()
-            QMessageBox.information(self, "Réinitialisé", f"La session pour {provider_name} a été réinitialisée.")
+            try:
+                res = self.api_client.clear_account(provider_name)
+                self.refresh_statuses()
+                QMessageBox.information(self, "Réinitialisé", res.get("message", "Session réinitialisée."))
+            except Exception as e:
+                QMessageBox.warning(self, "Erreur", f"Échec de la réinitialisation: {e}")
 
     def _on_test_clicked(self, provider_name: str):
-        ok, msg = SessionManager.verify_session(provider_name)
-        if ok:
-            QMessageBox.information(self, "Test de session réussi", f"Statut : {msg}")
-        else:
-            QMessageBox.warning(self, "Test de session échoué", f"Statut : {msg}")
+        try:
+            res = self.api_client.test_account(provider_name)
+            ok = res.get("success", False)
+            msg = res.get("message", "")
+            if ok:
+                QMessageBox.information(self, "Test de session réussi", f"Statut : {msg}")
+            else:
+                QMessageBox.warning(self, "Test de session échoué", f"Statut : {msg}")
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur API", f"Impossible de contacter l'API: {e}")
         self.refresh_statuses()
 
-    def open_login_window(self, provider_name: str, target_url: str):
+    def open_login_window(self, provider_name: str):
         self.progress_dlg = ProgressDialog(f"Session {provider_name}", self)
         self.progress_dlg.set_status(f"Ouverture du navigateur pour {provider_name}...")
-        self.progress_dlg.set_details("Passez Cloudflare ou connectez-vous, puis fermez simplement la fenêtre du navigateur.")
+        self.progress_dlg.set_details(
+            "Passez Cloudflare ou connectez-vous, puis fermez simplement la fenêtre du navigateur."
+        )
         self.progress_dlg.set_indeterminate(True)
         self.progress_dlg.show()
 
-        self.worker = LoginWorker(provider_name, target_url)
+        self.worker = LoginWorker(provider_name)
         self.worker.finished.connect(self._on_login_finished)
         self.worker.start()
 
     def _on_login_finished(self, success: bool, msg: str):
-        if hasattr(self, 'progress_dlg'):
+        if hasattr(self, "progress_dlg"):
             self.progress_dlg.close()
+        provider = getattr(self, "worker", None)
+        p_name = provider.provider_name if provider else "compte"
+
+        self.refresh_statuses()
+
         if success:
-            QMessageBox.information(self, "Session Enregistrée", msg)
+            # Trigger background catalog synchronization immediately
+            try:
+                self.api_client.start_catalog_sync(max_pages=5)
+                logger.info(
+                    f"Synchronisation automatique du catalogue lancée suite à l'authentification réussie de {p_name}."
+                )
+            except Exception as e:
+                logger.error(f"Impossible de lancer la synchronisation automatique: {e}")
+
+            QMessageBox.information(
+                self, "Session Enregistrée", f"{msg}\n\nLa synchronisation du catalogue a démarré en arrière-plan !"
+            )
+            self.login_successful.emit(p_name)
         else:
             QMessageBox.warning(self, "Information", msg)
-        self.refresh_statuses()

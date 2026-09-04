@@ -1,7 +1,7 @@
 import re
-from datetime import datetime
+import urllib.parse
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple, Optional, Callable
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 
@@ -9,6 +9,7 @@ from src.providers.base import BaseSourceProvider
 from src.providers.patreon import PatreonProvider
 from src.core.session_manager import SessionManager
 from src.utils.logger import logger
+
 
 class LoversLabProvider(BaseSourceProvider):
     """
@@ -44,7 +45,14 @@ class LoversLabProvider(BaseSourceProvider):
             items = soup.select("li.ipsDataItem, li[data-rowid]")
 
             for item in items:
-                title_elem = item.select_one(".ipsDataItem_title a, h4.ipsDataItem_title a, a[title]")
+                title_elem = item.select_one(
+                    ".ipsDataItem_title a[href*='/files/file/'], "
+                    "h4.ipsDataItem_title a, "
+                    ".ipsDataItem_title a, "
+                    "h4 a[href*='/files/file/']"
+                )
+                if not title_elem or not title_elem.get("href"):
+                    title_elem = item.select_one("a[href*='/files/file/']")
                 if not title_elem or not title_elem.get("href"):
                     continue
 
@@ -52,25 +60,51 @@ class LoversLabProvider(BaseSourceProvider):
                 if "files/file/" not in page_url:
                     continue
 
-                title = title_elem.get_text(strip=True)
-                
                 # Extract remote ID from URL: e.g. /files/file/12345-mod-name/ -> 12345
-                remote_id_match = re.search(r'/files/file/(\d+)', page_url)
+                remote_id_match = re.search(r"/files/file/(\d+)", page_url)
                 remote_id = remote_id_match.group(1) if remote_id_match else page_url
+
+                title = title_elem.get_text(strip=True) if title_elem else ""
+                title = title.replace("\u200b", "").replace("\ufeff", "").strip()
+                if title in ["''", '""']:
+                    title = ""
+
+                if not title and title_elem and title_elem.get("title"):
+                    raw_title = title_elem["title"]
+                    cleaned = re.sub(
+                        r'^(View the file\s*|More information about\s*["\']?)', "", raw_title, flags=re.IGNORECASE
+                    )
+                    cleaned = re.sub(r'["\']?\s*$', "", cleaned)
+                    title = cleaned.replace("\u200b", "").replace("\ufeff", "").strip()
+
+                if not title or title in ["''", '""']:
+                    slug_match = re.search(r"/files/file/\d+-([^/]+)", urllib.parse.unquote(page_url))
+                    if slug_match:
+                        title = (
+                            slug_match.group(1)
+                            .replace("-", " ")
+                            .replace("—", "-")
+                            .replace("\u200b", "")
+                            .replace("\ufeff", "")
+                            .strip()
+                            .title()
+                        )
+                    else:
+                        title = f"Mod LoversLab #{remote_id}"
 
                 # Author
                 author_elem = item.select_one(".ipsDataItem_author, a[data-ipshover]")
                 author = author_elem.get_text(strip=True) if author_elem else "Inconnu"
+                author = author.replace("\u200b", "").replace("\ufeff", "").strip()
 
                 # Extract thumbnail with multiple fallbacks (data-src, src, inline background-image)
                 thumbnail_url = ""
-                thumb_elem = item.select_one("img.ipsItem_coverImage, img[data-src], img[src*='monthly_'], img[src*='uploads/'], img")
+                thumb_elem = item.select_one(
+                    "img.ipsItem_coverImage, img[data-src], img[src*='monthly_'], img[src*='uploads/'], img"
+                )
                 if thumb_elem:
                     thumbnail_url = (
-                        thumb_elem.get("data-src")
-                        or thumb_elem.get("data-loaded-src")
-                        or thumb_elem.get("src")
-                        or ""
+                        thumb_elem.get("data-src") or thumb_elem.get("data-loaded-src") or thumb_elem.get("src") or ""
                     )
 
                 # Check background-image in style
@@ -97,22 +131,51 @@ class LoversLabProvider(BaseSourceProvider):
                         pass
 
                 # Badges / tags
-                tags = [t.get_text(strip=True) for t in item.select(".ipsBadge, .ipsTag")]
+                tags = [t.get_text(strip=True) for t in item.select(".ipsBadge, .ipsTag") if t.get_text(strip=True)]
 
                 logger.debug(f"LoversLab item found: '{title}' (ID: {remote_id}, thumb: {bool(thumbnail_url)})")
 
-                results.append({
-                    "source": self.provider_name,
-                    "remote_id": remote_id,
-                    "title": title,
-                    "author": author,
-                    "category": "The Sims 4",
-                    "tags": tags,
-                    "page_url": page_url,
-                    "thumbnail_url": thumbnail_url,
-                    "updated_date": updated_date,
-                    "published_date": updated_date,
-                })
+                results.append(
+                    {
+                        "source": self.provider_name,
+                        "remote_id": remote_id,
+                        "title": title,
+                        "author": author,
+                        "category": "The Sims 4",
+                        "tags": tags,
+                        "page_url": page_url,
+                        "thumbnail_url": thumbnail_url,
+                        "updated_date": updated_date,
+                        "published_date": updated_date,
+                        "patreon_status": "NONE",
+                        "patreon_tier": "",
+                    }
+                )
+
+            # Parallel rapid check of download target (Patreon redirect vs direct LoversLab)
+            if results:
+                from concurrent.futures import ThreadPoolExecutor
+
+                def _inspect_item_target(entry: Dict[str, Any]) -> Dict[str, Any]:
+                    p_url = entry["page_url"]
+                    dl_chk = p_url.rstrip("/") + "/?do=download"
+                    try:
+                        r_chk = session.get(dl_chk, allow_redirects=False, timeout=6)
+                        loc = r_chk.headers.get("Location", "")
+                        if r_chk.status_code in [301, 302, 303, 307, 308] and "patreon.com" in loc.lower():
+                            pat_info = self.patreon_provider.check_post_access(loc)
+                            entry["patreon_status"] = pat_info.get("status", "PUBLIC")
+                            entry["patreon_tier"] = pat_info.get("tier_str", "")
+                            if "Patreon" not in entry["tags"]:
+                                entry["tags"].append("Patreon")
+                        else:
+                            entry["patreon_status"] = "NONE"
+                    except Exception:
+                        entry["patreon_status"] = "NONE"
+                    return entry
+
+                with ThreadPoolExecutor(max_workers=5) as pool:
+                    results = list(pool.map(_inspect_item_target, results))
 
             logger.info(f"LoversLab page {page} scraping finished: {len(results)} mods trouvés.")
 
@@ -143,53 +206,221 @@ class LoversLabProvider(BaseSourceProvider):
 
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # Extract remote_id
-            remote_id_match = re.search(r'/files/file/(\d+)', mod_url)
-            remote_id = remote_id_match.group(1) if remote_id_match else ""
+            # Standard direct LoversLab download endpoint & redirect detection
+            direct_dl_url = f"{mod_url.rstrip('/')}/?do=download"
+            is_direct_download = False
+            patreon_redirect_url = None
 
-            # Standard direct LoversLab download endpoint
-            if remote_id:
-                direct_dl_url = f"{self.base_url}/files/file/{remote_id}/?do=download"
-                details["download_urls"].append({
-                    "name": "Téléchargement LoversLab (Direct)",
-                    "url": direct_dl_url,
-                    "size": 0,
-                })
+            try:
+                r_chk = session.get(direct_dl_url, allow_redirects=False, timeout=8)
+                if r_chk.status_code in [301, 302, 303, 307, 308]:
+                    loc = r_chk.headers.get("Location", "")
+                    if "patreon.com" in loc.lower():
+                        patreon_redirect_url = loc
+                    elif loc:
+                        if loc not in details["external_links"]:
+                            details["external_links"].append(loc)
+                elif r_chk.status_code in [200, 403]:
+                    is_direct_download = True
+                    details["download_urls"].append(
+                        {
+                            "name": "Téléchargement LoversLab (Direct)",
+                            "url": direct_dl_url,
+                            "size": 0,
+                        }
+                    )
+            except Exception as e:
+                logger.debug(f"Redirect check error for {direct_dl_url}: {e}")
 
-            # Description content
-            content_elem = soup.select_one("[data-role='commentContent'], .ipsType_richText, .cFileView_content")
+            if patreon_redirect_url:
+                if patreon_redirect_url not in details["external_links"]:
+                    details["external_links"].append(patreon_redirect_url)
+                pat_info = self.patreon_provider.check_post_access(patreon_redirect_url)
+                details["patreon_status"] = pat_info.get("status", "LOCKED")
+                details["patreon_tier"] = pat_info.get("tier_str", "")
+                if pat_info.get("download_urls"):
+                    details["download_urls"].extend(pat_info["download_urls"])
+                else:
+                    details["download_urls"].append(
+                        {
+                            "name": "Post Patreon (Téléchargement)",
+                            "url": patreon_redirect_url,
+                            "size": 0,
+                        }
+                    )
+
+            # Description & Screenshot Gallery extraction
+            art_elem = soup.select_one("article")
+            gallery_screenshots: List[str] = []
+            carousel_candidates = []
+            if art_elem:
+                prev_car = art_elem.find_previous(class_="ipsCarousel")
+                if prev_car:
+                    carousel_candidates.append(prev_car)
+            if not carousel_candidates:
+                for car in soup.select(".cFileTop .ipsCarousel, .cFileView_screenshots"):
+                    if car not in carousel_candidates:
+                        carousel_candidates.append(car)
+
+            for car in carousel_candidates:
+                for it in car.select("[data-fullurl], li, .ipsThumb"):
+                    u = it.get("data-fullurl")
+                    if not u:
+                        f_el = it.select_one("[data-fullurl]")
+                        if f_el:
+                            u = f_el.get("data-fullurl")
+                    if not u:
+                        img_el = it.select_one("img")
+                        if img_el:
+                            u = img_el.get("data-src") or img_el.get("src")
+                    if not u:
+                        bg = it.get("style", "")
+                        m_bg = re.search(r'url\(\s*["\']?(.*?)["\']?\s*\)', bg)
+                        if m_bg:
+                            u = m_bg.group(1)
+                    if u:
+                        if u.startswith("/"):
+                            u = f"{self.base_url}{u}"
+                        if u.startswith("http") and not any(
+                            j in u.lower() for j in ["/themes/", "/reactions/", "icon_", "avatar", "logo", ".svg"]
+                        ):
+                            if u not in gallery_screenshots:
+                                gallery_screenshots.append(u)
+
+            # Target rich text container
+            content_elem = soup.select_one(
+                "article div.ipsType_richText, .cFileView_content div.ipsType_richText, [data-role='commentContent'], .ipsType_richText"
+            )
+            if not content_elem:
+                content_elem = art_elem
+
             if content_elem:
-                details["description"] = content_elem.get_text("\n", strip=True)
-
-                # Find external reference & mirror links in description
+                # 1. Extract links for Patreon/mirrors before cleaning
                 for a in content_elem.find_all("a", href=True):
                     href = a["href"]
                     if "patreon.com" in href.lower():
                         if href not in details["external_links"]:
                             details["external_links"].append(href)
-                            # Analyze Patreon access and tier
-                            patreon_info = self.patreon_provider.check_post_access(href)
-                            if patreon_info.get("status") and patreon_info.get("status") != "NONE":
-                                details["patreon_status"] = patreon_info.get("status", "UNKNOWN")
-                                details["patreon_tier"] = patreon_info.get("tier_str", "")
-                            if patreon_info.get("download_urls"):
-                                details["download_urls"].extend(patreon_info["download_urls"])
-                    elif any(domain in href.lower() for domain in ["mega.nz", "mediafire.com", "drive.google.com", "simfileshare.net", "dropbox.com"]):
+                        # Only if NOT already confirmed as direct LoversLab download and no patreon redirect
+                        if not is_direct_download and not patreon_redirect_url:
+                            post_id = self.patreon_provider.extract_post_id(href)
+                            if post_id:
+                                pat_info = self.patreon_provider.check_post_access(href)
+                                if pat_info.get("status") and pat_info.get("status") != "NONE":
+                                    details["patreon_status"] = pat_info.get("status", "LOCKED")
+                                    details["patreon_tier"] = pat_info.get("tier_str", "")
+                                if pat_info.get("download_urls"):
+                                    details["download_urls"].extend(pat_info["download_urls"])
+                    elif any(
+                        domain in href.lower()
+                        for domain in [
+                            "mega.nz",
+                            "mediafire.com",
+                            "drive.google.com",
+                            "simfileshare.net",
+                            "dropbox.com",
+                        ]
+                    ):
                         if href not in details["external_links"]:
                             details["external_links"].append(href)
 
+                # 2. Clean element to produce structured HTML without changelog junk
+                import copy
+
+                clean_elem = copy.deepcopy(content_elem)
+
+                # Remove changelog blocks, menus, scripts, styles, forms, headers, and timestamps
+                for junk in clean_elem.select(
+                    ".cFileChangelog, [data-role='changelog'], div#changeLogData, .ipsMenu, script, style, iframe, form, button, input, noscript, h2, hr, p.ipsType_light"
+                ):
+                    junk.decompose()
+
+                # Unwrap spoilers so images inside are visible
+                for sp in clean_elem.select(".ipsSpoiler"):
+                    sp_content = sp.select_one(".ipsSpoiler_contents")
+                    if sp_content:
+                        sp.replace_with(sp_content)
+
+                # Convert standalone image links <a href="...png"> to <img> if no img inside
+                for a in clean_elem.select("a[href]"):
+                    href = a.get("href", "")
+                    if any(
+                        ext in href.lower()
+                        for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif", "uploads/monthly"]
+                    ) and not a.find("img"):
+                        new_img = soup.new_tag("img", src=href)
+                        a.replace_with(new_img)
+
+                # Clean author inline styles to avoid dark-mode color clashes (e.g. background-color:#0d0d0d; color:#999999;)
+                for tag in clean_elem.find_all(True):
+                    st = tag.get("style", "")
+                    if st:
+                        new_st = re.sub(r"background(?:-color)?\s*:\s*[^;]+;?", "", st, flags=re.IGNORECASE)
+                        new_st = re.sub(r"color\s*:\s*[^;]+;?", "", new_st, flags=re.IGNORECASE)
+                        new_st = new_st.strip()
+                        if new_st:
+                            tag["style"] = new_st
+                        else:
+                            del tag["style"]
+
+                # Process images for proper URLs and responsive rendering
+                body_imgs: List[str] = []
+                for img in clean_elem.select("img"):
+                    src = img.get("data-src") or img.get("src")
+                    if src:
+                        if src.startswith("/"):
+                            src = f"{self.base_url}{src}"
+                        img["src"] = src
+                        body_imgs.append(src)
+                    # Clean clutter attributes
+                    for attr in ["data-ratio", "data-fileid", "srcset", "sizes", "class", "loading"]:
+                        if attr in img.attrs:
+                            del img.attrs[attr]
+                    img["style"] = (
+                        "max-width: 95%; height: auto; border-radius: 8px; margin: 10px auto; display: block;"
+                    )
+
+                # Process links for absolute URLs
+                for a in clean_elem.select("a"):
+                    href = a.get("href", "")
+                    if href.startswith("/"):
+                        a["href"] = f"{self.base_url}{href}"
+                    a["style"] = "color: #60a5fa; text-decoration: underline;"
+
+                clean_body_html = str(clean_elem)
+
+                # Filter gallery screenshots not already present in body
+                unique_gallery = []
+                for g in gallery_screenshots:
+                    g_base = g.split("/")[-1].replace(".thumb.", ".")
+                    if not any(g_base in b for b in body_imgs) and g not in body_imgs:
+                        unique_gallery.append(g)
+
+                gallery_html = ""
+                if unique_gallery:
+                    gallery_cards = "".join(
+                        f'<img src="{g_url}" style="max-width: 95%; height: auto; border-radius: 8px; margin: 10px auto; display: block;" />'
+                        for g_url in unique_gallery
+                    )
+                    gallery_html = f"""<div class="mod-gallery" style="margin-bottom: 20px; padding: 14px; background-color: #0d121f; border: 1px solid #1e293b; border-radius: 10px;"><div style="font-size: 13px; font-weight: 700; color: #60a5fa; margin-bottom: 12px; display: flex; align-items: center;">📸 Galerie &amp; Captures d'écran ({len(unique_gallery)}) :</div>{gallery_cards}</div>"""
+
+                details["description"] = f"{gallery_html}{clean_body_html}"
+
             # Check explicit download button in HTML if present
             dl_btn = soup.select_one("a[data-action='download'], a.ipsButton_important[href*='do=download']")
-            if dl_btn and dl_btn.get("href"):
+            if dl_btn and dl_btn.get("href") and not patreon_redirect_url:
                 dl_href = dl_btn["href"]
                 if not dl_href.startswith("http"):
                     dl_href = self.base_url + dl_href
                 if not any(d.get("url") == dl_href for d in details["download_urls"]):
-                    details["download_urls"].insert(0, {
-                        "name": "Téléchargement Direct LoversLab",
-                        "url": dl_href,
-                        "size": 0,
-                    })
+                    details["download_urls"].insert(
+                        0,
+                        {
+                            "name": "Téléchargement Direct LoversLab",
+                            "url": dl_href,
+                            "size": 0,
+                        },
+                    )
 
             # Version string
             version_elem = soup.select_one(".cFileView_version, [data-role='fileVersion']")
@@ -201,22 +432,72 @@ class LoversLabProvider(BaseSourceProvider):
 
         return details
 
-    def download_mod_file(self, download_url: str, dest_path: Path) -> Tuple[bool, str]:
+    def download_mod_file(
+        self,
+        download_url: str,
+        dest_path: Path,
+        progress_callback: Optional[Callable[[int, str, str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
         Downloads a direct file from LoversLab resolving multi-step IPS confirmation pages.
         """
         if "patreon.com" in download_url:
-            return self.patreon_provider.download_mod_file(download_url, dest_path)
+            return self.patreon_provider.download_mod_file(download_url, dest_path, progress_callback=progress_callback)
 
         session = SessionManager.get_http_session("loverslab")
         is_member = SessionManager.is_member_authenticated("loverslab")
-        
+
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             logger.info(f"Lancement du téléchargement LoversLab: {download_url} (Compte membre={is_member})")
-            
-            resp = session.get(download_url, timeout=45, allow_redirects=True)
-            logger.info(f"Réponse initiale LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}")
+            if progress_callback:
+                progress_callback(
+                    5, "Connexion aux serveurs LoversLab...", "Résolution de la page de téléchargement..."
+                )
+
+            resp = session.get(download_url, timeout=45, allow_redirects=False)
+            logger.info(
+                f"Réponse initiale LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}"
+            )
+
+            # Check for redirect to Patreon or external site
+            external_hosts = [
+                "gofile.io",
+                "mega.nz",
+                "mega.co.nz",
+                "mediafire.com",
+                "drive.google.com",
+                "dropbox.com",
+                "simfileshare.net",
+            ]
+
+            if resp.status_code in [301, 302, 303, 307, 308]:
+                target = resp.headers.get("Location", "")
+                logger.info(f"Redirection détectée lors du téléchargement: {target}")
+                if "patreon.com" in target.lower():
+                    return self.patreon_provider.download_mod_file(
+                        target, dest_path, progress_callback=progress_callback
+                    )
+
+                matched_host = next((h for h in external_hosts if h in target.lower()), None)
+                if matched_host:
+                    msg = f"Ce contenu est hébergé sur un service externe ({matched_host}). Veuillez l'ouvrir dans votre navigateur pour le télécharger."
+                    logger.warning(msg)
+                    return False, msg
+
+                # Otherwise follow redirect
+                resp = session.get(target, timeout=45, allow_redirects=True)
+
+            logger.info(
+                f"Réponse LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}"
+            )
+
+            final_url = str(getattr(resp, "url", ""))
+            matched_host = next((h for h in external_hosts if h in final_url.lower()), None)
+            if matched_host:
+                msg = f"Ce contenu est hébergé sur un service externe ({matched_host}). Veuillez l'ouvrir dans votre navigateur pour le télécharger."
+                logger.warning(msg)
+                return False, msg
 
             if resp.status_code == 403:
                 msg = "Accès refusé par LoversLab (Code 403). Le téléchargement exige un compte membre connecté. Veuillez vous connecter dans l'onglet 'Comptes & Anti-Bot'."
@@ -232,17 +513,80 @@ class LoversLabProvider(BaseSourceProvider):
             content_type = resp.headers.get("Content-Type", "").lower()
             content_disp = resp.headers.get("Content-Disposition", "").lower()
 
+            # Helper for streamed downloading with live speed and progress logging
+            def stream_response(bin_resp, phase_label="Téléchargement LoversLab") -> Tuple[bool, str]:
+                import time
+
+                total_size = int(bin_resp.headers.get("Content-Length") or 0)
+                downloaded = 0
+                start_time = time.time()
+                last_ui_time = start_time
+                last_log_time = start_time
+
+                with open(dest_path, "wb") as f:
+                    try:
+                        for chunk in bin_resp.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                now = time.time()
+                                elapsed = now - start_time
+                                speed_mb = (downloaded / (elapsed or 0.001)) / (1024 * 1024)
+                                speed_str = f"{speed_mb:.2f} Mo/s" if speed_mb >= 1.0 else f"{speed_mb * 1024:.0f} Ko/s"
+
+                                if total_size > 0:
+                                    pct = min(int((downloaded / total_size) * 75), 75)
+                                    down_mb = downloaded / (1024 * 1024)
+                                    tot_mb = total_size / (1024 * 1024)
+                                    detail = f"{down_mb:.1f} / {tot_mb:.1f} Mo • {speed_str}"
+                                else:
+                                    down_mb = downloaded / (1024 * 1024)
+                                    pct = min(int(down_mb * 2), 70)
+                                    detail = f"{down_mb:.1f} Mo • {speed_str}"
+
+                                if progress_callback and (now - last_ui_time >= 0.2):
+                                    progress_callback(pct, f"{phase_label} en cours...", detail)
+                                    last_ui_time = now
+
+                                if now - last_log_time >= 3.0:
+                                    logger.info(f"[{phase_label}] {dest_path.name} : {detail}")
+                                    last_log_time = now
+                    except (AssertionError, AttributeError):
+                        # curl_cffi raises AssertionError if stream=True was not specified on initial request
+                        raw = getattr(bin_resp, "content", b"") or b""
+                        chunk_size = 65536
+                        for i in range(0, len(raw), chunk_size):
+                            chunk = raw[i : i + chunk_size]
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            now = time.time()
+                            elapsed = now - start_time
+                            speed_mb = (downloaded / (elapsed or 0.001)) / (1024 * 1024)
+                            speed_str = f"{speed_mb:.2f} Mo/s" if speed_mb >= 1.0 else f"{speed_mb * 1024:.0f} Ko/s"
+                            if total_size > 0:
+                                pct = min(int((downloaded / total_size) * 75), 75)
+                                down_mb = downloaded / (1024 * 1024)
+                                tot_mb = total_size / (1024 * 1024)
+                                detail = f"{down_mb:.1f} / {tot_mb:.1f} Mo • {speed_str}"
+                            else:
+                                down_mb = downloaded / (1024 * 1024)
+                                pct = min(int(down_mb * 2), 70)
+                                detail = f"{down_mb:.1f} Mo • {speed_str}"
+                            if progress_callback and (now - last_ui_time >= 0.2):
+                                progress_callback(pct, f"{phase_label} en cours...", detail)
+                                last_ui_time = now
+
+                size_mb = dest_path.stat().st_size / (1024 * 1024)
+                logger.info(f"Fichier téléchargé avec succès : {dest_path.name} ({size_mb:.2f} Mo).")
+                return True, str(dest_path)
+
             # Case A: Directly received binary stream
             if "html" not in content_type or "attachment" in content_disp or "filename=" in content_disp:
-                with open(dest_path, "wb") as f:
-                    f.write(resp.content)
-                size_mb = dest_path.stat().st_size / (1024 * 1024)
-                logger.info(f"Fichier binaire téléchargé avec succès : {dest_path.name} ({size_mb:.2f} Mo).")
-                return True, str(dest_path)
+                return stream_response(resp, "Téléchargement Direct")
 
             # Case B: Invision Community confirmation or multi-file selection page
             soup = BeautifulSoup(resp.text, "html.parser")
-            
+
             # Check for login requirement inside HTML
             if "data-focus-guest" in resp.text and ("Sign In" in resp.text or "Existing user" in resp.text):
                 msg = "LoversLab exige d'être connecté avec un compte membre pour télécharger. Veuillez vous connecter dans l'onglet 'Comptes & Anti-Bot'."
@@ -264,15 +608,11 @@ class LoversLabProvider(BaseSourceProvider):
 
             if target_link:
                 logger.info(f"Lien de confirmation IPS résolu : {target_link}. Lancement du flux binaire...")
+                if progress_callback:
+                    progress_callback(10, "Lien direct résolu", "Démarrage du téléchargement...")
                 bin_resp = session.get(target_link, stream=True, timeout=90, allow_redirects=True)
                 if bin_resp.status_code == 200:
-                    with open(dest_path, "wb") as f:
-                        for chunk in bin_resp.iter_content(chunk_size=65536):
-                            if chunk:
-                                f.write(chunk)
-                    size_mb = dest_path.stat().st_size / (1024 * 1024)
-                    logger.info(f"Fichier final téléchargé avec succès : {dest_path.name} ({size_mb:.2f} Mo).")
-                    return True, str(dest_path)
+                    return stream_response(bin_resp, "Téléchargement LoversLab")
                 else:
                     return False, f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
 
@@ -283,15 +623,13 @@ class LoversLabProvider(BaseSourceProvider):
                 if not att_href.startswith("http"):
                     att_href = self.base_url + att_href
                 logger.info(f"Lien de pièce jointe IPS direct trouvé : {att_href}")
+                if progress_callback:
+                    progress_callback(10, "Pièce jointe trouvée", "Démarrage du téléchargement...")
                 bin_resp = session.get(att_href, stream=True, timeout=90, allow_redirects=True)
                 if bin_resp.status_code == 200:
-                    with open(dest_path, "wb") as f:
-                        for chunk in bin_resp.iter_content(chunk_size=65536):
-                            if chunk:
-                                f.write(chunk)
-                    size_mb = dest_path.stat().st_size / (1024 * 1024)
-                    logger.info(f"Fichier téléchargé : {dest_path.name} ({size_mb:.2f} Mo).")
-                    return True, str(dest_path)
+                    return stream_response(bin_resp, "Téléchargement LoversLab")
+                else:
+                    return False, f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
 
             return False, "Impossible de résoudre le bouton de téléchargement final sur la page LoversLab."
 

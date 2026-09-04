@@ -1,5 +1,4 @@
-import os
-from pathlib import Path
+from typing import List
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -12,18 +11,19 @@ from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
 )
-from PySide6.QtGui import QTextCursor, QFont, QColor
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor, QFont
 
-from src.utils.logger import log_emitter, qt_log_handler
-from src.core.config import AppConfig
+from src.api.client import get_api_client
+from src.utils.logger import log_emitter, logger
+
 
 class LogsView(QWidget):
-    """Modern real-time logs inspection view with filtering and 1-click clipboard copy."""
+    """Modern real-time logs inspection view with filtering and 1-click clipboard copy via API."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.all_logs = []
+        self.api_client = get_api_client()
+        self.all_logs: List[str] = []
         self.init_ui()
         self.load_initial_history()
 
@@ -127,13 +127,17 @@ class LogsView(QWidget):
         layout.addWidget(self.info_label)
 
     def load_initial_history(self):
-        """Loads buffered logs from QtLogHandler."""
-        self.all_logs = list(qt_log_handler.history)
-        self._apply_filter()
+        """Loads logs through API /api/logs."""
+        try:
+            res = self.api_client.get_logs(limit=500)
+            self.all_logs = res.get("items", [])
+            self._apply_filter()
+        except Exception as e:
+            logger.error(f"Erreur API lors du chargement des logs: {e}")
 
     def _on_log_received(self, msg: str, level: str):
         self.all_logs.append(msg)
-        if len(self.all_logs) > qt_log_handler.max_history:
+        if len(self.all_logs) > 1000:
             self.all_logs.pop(0)
 
         if self._matches_filter(msg):
@@ -152,22 +156,19 @@ class LogsView(QWidget):
         return True
 
     def _append_formatted_line(self, line: str):
-        # Format HTML with colors
         if "[ERROR]" in line:
-            color = "#f87171" # red
+            color = "#f87171"
         elif "[WARNING]" in line:
-            color = "#facc15" # yellow
+            color = "#facc15"
         elif "[INFO]" in line:
-            color = "#cbd5e1" # light gray
+            color = "#cbd5e1"
         elif "[DEBUG]" in line:
-            color = "#38bdf8" # cyan
+            color = "#38bdf8"
         else:
             color = "#94a3b8"
 
         html_line = f'<span style="color: {color};">{self._escape_html(line)}</span>'
         self.log_text.appendHtml(html_line)
-
-        # Move cursor to end
         self.log_text.moveCursor(QTextCursor.MoveOperation.End)
 
     def _escape_html(self, text: str) -> str:
@@ -178,7 +179,9 @@ class LogsView(QWidget):
         for line in self.all_logs:
             if self._matches_filter(line):
                 self._append_formatted_line(line)
-        self.info_label.setText(f"{self.log_text.document().blockCount() - 1} message(s) affiché(s) sur {len(self.all_logs)} au total.")
+        self.info_label.setText(
+            f"{self.log_text.document().blockCount() - 1} message(s) affiché(s) sur {len(self.all_logs)} au total."
+        )
 
     def copy_all_logs(self):
         text = self.log_text.toPlainText()
@@ -191,12 +194,16 @@ class LogsView(QWidget):
         self.info_label.setText("✓ Tous les logs affichés ont été copiés dans le presse-papiers !")
 
     def clear_logs(self):
-        self.log_text.clear()
-        self.info_label.setText("Vue des logs effacée.")
+        try:
+            self.api_client.clear_logs()
+            self.all_logs.clear()
+            self.log_text.clear()
+            self.info_label.setText("Vue des logs effacée via l'API.")
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Échec de l'effacement des logs via l'API: {e}")
 
     def open_logs_folder(self):
-        log_dir = Path.home() / ".sims4_mod_manager" / "logs"
-        if log_dir.exists():
-            os.startfile(str(log_dir))
-        else:
-            QMessageBox.warning(self, "Erreur", "Le dossier des logs n'existe pas encore.")
+        try:
+            self.api_client.open_logs_folder()
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le dossier des logs via l'API: {e}")

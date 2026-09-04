@@ -10,6 +10,7 @@ PackedFile */*/*/*/*.package
 PackedFile */*/*/*/*/*.package
 """
 
+
 def ensure_resource_cfg(mods_dir: Path) -> bool:
     """
     Ensures that Resource.cfg exists in the Mods directory and contains

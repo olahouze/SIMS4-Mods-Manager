@@ -1,4 +1,3 @@
-from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -8,14 +7,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFrame,
-    QApplication,
+    QMessageBox,
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QIcon
 
-from src.core.config import AppConfig
-from src.core.game_detector import GameDetector
-from src.core.database import DatabaseManager, InstalledMod, CatalogMod
+from src.api.client import get_api_client
 from src.ui.theme import DARK_THEME_QSS
 from src.ui.views.catalog_view import CatalogView
 from src.ui.views.installed_view import InstalledView
@@ -23,19 +18,21 @@ from src.ui.views.updates_view import UpdatesView
 from src.ui.views.accounts_view import AccountsView
 from src.ui.views.settings_view import SettingsView
 from src.ui.views.logs_view import LogsView
-from src.utils.logger import logger
+
 
 class MainWindow(QMainWindow):
-    """Main application window for SIMS 4 Mods Manager."""
+    """Main application window for SIMS 4 Mods Manager connected 100% via REST API."""
 
     def __init__(self):
         super().__init__()
+        self.api_client = get_api_client()
         self.setWindowTitle("SIMS 4 Mods Manager")
         self.resize(1280, 800)
         self.setMinimumSize(1000, 650)
         self.setStyleSheet(DARK_THEME_QSS)
 
         self.init_ui()
+        self.refresh_game_status()
         self.update_nav_badge()
 
     def init_ui(self):
@@ -92,13 +89,9 @@ class MainWindow(QMainWindow):
         footer_layout = QVBoxLayout()
         footer_layout.setSpacing(6)
 
-        mods_dir = GameDetector.detect_mods_dir(AppConfig.load().custom_mods_dir)
-        status_text = "✓ Jeu Détecté" if mods_dir else "⚠️ Jeu Non Trouvé"
-        status_color = "#34d399" if mods_dir else "#f87171"
-
-        game_status = QLabel(status_text)
-        game_status.setStyleSheet(f"font-size: 11px; color: {status_color}; font-weight: 600; padding: 4px 0;")
-        footer_layout.addWidget(game_status)
+        self.game_status = QLabel("Vérification du jeu...")
+        self.game_status.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: 600; padding: 4px 0;")
+        footer_layout.addWidget(self.game_status)
 
         play_btn = QPushButton("▶ Lancer Les Sims 4")
         play_btn.setStyleSheet("""
@@ -135,14 +128,17 @@ class MainWindow(QMainWindow):
         self.settings_view = SettingsView()
 
         self.stacked_widget.addWidget(self.accounts_view)  # Index 0 (Comptes)
-        self.stacked_widget.addWidget(self.catalog_view)   # Index 1 (Catalogue)
-        self.stacked_widget.addWidget(self.installed_view) # Index 2 (Installés)
-        self.stacked_widget.addWidget(self.updates_view)   # Index 3 (Mises à jour)
-        self.stacked_widget.addWidget(self.logs_view)      # Index 4 (Logs)
+        self.stacked_widget.addWidget(self.catalog_view)  # Index 1 (Catalogue)
+        self.stacked_widget.addWidget(self.installed_view)  # Index 2 (Installés)
+        self.stacked_widget.addWidget(self.updates_view)  # Index 3 (Mises à jour)
+        self.stacked_widget.addWidget(self.logs_view)  # Index 4 (Logs)
         self.stacked_widget.addWidget(self.settings_view)  # Index 5 (Paramètres)
 
         content_layout.addWidget(self.stacked_widget)
         main_layout.addWidget(content_area)
+
+        # Connect login signal to switch to catalog
+        self.accounts_view.login_successful.connect(self._on_login_success)
 
         # Set default page to Accounts (Index 0)
         self.switch_page(0)
@@ -160,39 +156,60 @@ class MainWindow(QMainWindow):
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
 
-        # Refresh page contents when switched
+        # Refresh page contents via API when switched
         if index == 0:
             self.accounts_view.refresh_statuses()
         elif index == 1:
             self.catalog_view.refresh_catalog()
         elif index == 2:
-            self.installed_view.refresh_table()
+            self.installed_view.refresh_mods()
         elif index == 3:
             self.updates_view.refresh_updates()
         elif index == 4:
             self.logs_view.load_initial_history()
+        elif index == 5:
+            self.settings_view.load_settings()
 
+        self.refresh_game_status()
         self.update_nav_badge()
 
-    def update_nav_badge(self):
-        """Updates the label on updates nav button if updates exist."""
-        db = DatabaseManager.get_instance()
-        with db.get_session() as session:
-            installed = session.query(InstalledMod).all()
-            update_count = 0
-            for im in installed:
-                cat = session.query(CatalogMod).filter_by(id=im.catalog_mod_id).first() if im.catalog_mod_id else None
-                if not cat and im.remote_id:
-                    cat = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
-                if cat and cat.updated_date and im.version_date and cat.updated_date > im.version_date:
-                    update_count += 1
+    def _on_login_success(self, provider_name: str):
+        """Switches to catalog and triggers progressive loading monitoring."""
+        self.switch_page(1)
+        if hasattr(self.catalog_view, "start_sync_monitoring"):
+            self.catalog_view.start_sync_monitoring()
 
-            if update_count > 0:
-                self.btn_updates.setText(f"🔄  Mises à Jour ({update_count})")
+    def refresh_game_status(self):
+        """Checks game status through API /api/system/health."""
+        try:
+            health = self.api_client.get_health()
+            mods_detected = health.get("mods_dir_detected", False)
+            if mods_detected:
+                self.game_status.setText("✓ Jeu & Mods Détectés")
+                self.game_status.setStyleSheet("font-size: 11px; color: #34d399; font-weight: 600; padding: 4px 0;")
+            else:
+                self.game_status.setText("⚠️ Dossier Mods Non Détecté")
+                self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
+        except Exception:
+            self.game_status.setText("⚠️ Erreur statut API")
+            self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
+
+    def update_nav_badge(self):
+        """Updates the badge on updates nav button using API /api/updates."""
+        try:
+            data = self.api_client.get_updates()
+            count = data.get("count", 0)
+            if count > 0:
+                self.btn_updates.setText(f"🔄  Mises à Jour ({count})")
             else:
                 self.btn_updates.setText("🔄  Mises à Jour")
+        except Exception:
+            self.btn_updates.setText("🔄  Mises à Jour")
 
     def _launch_game(self):
-        config = AppConfig.load()
-        exe = Path(config.custom_game_exe) if config.custom_game_exe else None
-        GameDetector.launch_game(exe)
+        """Launches The Sims 4 via API /api/game/launch."""
+        try:
+            res = self.api_client.launch_game()
+            QMessageBox.information(self, "Lancement du jeu", res.get("message", "Jeu lancé."))
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Échec du lancement du jeu: {e}")

@@ -4,15 +4,15 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QComboBox,
     QPushButton,
-    QLabel,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal
+
 
 class FilterBar(QWidget):
     """Modern filter bar with search, multi-criteria selectors and sync button."""
 
     filters_changed = Signal()
-    sync_requested = Signal(int) # emits number of pages to sync
+    sync_requested = Signal(int)  # emits number of pages to sync
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -26,44 +26,53 @@ class FilterBar(QWidget):
         # Search field
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Rechercher un mod, un auteur, un tag...")
-        self.search_input.textChanged.connect(self.filters_changed.emit)
+        self.search_input.textChanged.connect(self._on_control_changed)
         layout.addWidget(self.search_input, stretch=2)
 
         # Source Combo
         self.source_combo = QComboBox()
         self.source_combo.addItems(["Toutes les sources", "LoversLab", "Patreon"])
-        self.source_combo.currentIndexChanged.connect(self.filters_changed.emit)
+        self.source_combo.currentIndexChanged.connect(self._on_control_changed)
         layout.addWidget(self.source_combo)
 
-        # Access Combo
+        # Access / State Combo (État du mod)
         self.access_combo = QComboBox()
-        self.access_combo.addItems([
-            "Tous les accès",
-            "🔓 Public / Gratuit",
-            "✅ Débloqué (Abonné)",
-            "🔒 Verrouillé Patreon",
-        ])
-        self.access_combo.currentIndexChanged.connect(self.filters_changed.emit)
+        self.access_combo.addItems(
+            [
+                "Tous les états",
+                "🌐 Directement sur le site",
+                "🔑 Nécessite une connexion (compte)",
+                "⭐ Nécessite un abonnement",
+                "✅ Débloqué (Abonné)",
+            ]
+        )
+        self.access_combo.setToolTip("Filtrer par disponibilité (direct sur le site, compte requis, abonnement Patreon...)")
+        self.access_combo.currentIndexChanged.connect(self._on_control_changed)
         layout.addWidget(self.access_combo)
 
-        # Install Status Combo
+        # Install Status Combo (Statut d'installation)
         self.status_combo = QComboBox()
-        self.status_combo.addItems([
-            "Tous les états",
-            "Non installés",
-            "Déjà installés",
-            "Mises à jour disponibles",
-        ])
-        self.status_combo.currentIndexChanged.connect(self.filters_changed.emit)
+        self.status_combo.addItems(
+            [
+                "Toutes les installations",
+                "Non installés",
+                "Déjà installés",
+                "Mises à jour disponibles",
+            ]
+        )
+        self.status_combo.setToolTip("Filtrer par statut d'installation dans Les Sims 4")
+        self.status_combo.currentIndexChanged.connect(self._on_control_changed)
         layout.addWidget(self.status_combo)
 
         # Sort Combo
         self.sort_combo = QComboBox()
-        self.sort_combo.addItems([
-            "Date de màj (Récent)",
-            "Titre (A-Z)",
-        ])
-        self.sort_combo.currentIndexChanged.connect(self.filters_changed.emit)
+        self.sort_combo.addItems(
+            [
+                "Date de màj (Récent)",
+                "Titre (A-Z)",
+            ]
+        )
+        self.sort_combo.currentIndexChanged.connect(self._on_control_changed)
         layout.addWidget(self.sort_combo)
 
         # Pages to sync Combo
@@ -96,6 +105,10 @@ class FilterBar(QWidget):
         text = self.pages_combo.currentText()
         count = int(text.split()[0])
         self.sync_requested.emit(count)
+
+    def _on_control_changed(self, *args):
+        """Emits filters_changed regardless of any arguments passed by widget signals."""
+        self.filters_changed.emit()
 
     def get_filter_state(self) -> dict:
         """Returns the current filter parameters as a dict."""

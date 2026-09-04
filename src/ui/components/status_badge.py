@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QLabel
 from PySide6.QtCore import Qt
 
+
 class StatusBadge(QLabel):
     """A colorful rounded badge indicating status, platform, or access tier."""
 

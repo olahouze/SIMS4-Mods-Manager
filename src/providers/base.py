@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple, Optional, Callable
 from pathlib import Path
-from src.core.database import CatalogMod
+
 
 class BaseSourceProvider(ABC):
     """Abstract base class for mod source providers (LoversLab, Patreon, etc.)."""
@@ -25,7 +25,12 @@ class BaseSourceProvider(ABC):
         pass
 
     @abstractmethod
-    def download_mod_file(self, download_url: str, dest_path: Path) -> Tuple[bool, str]:
+    def download_mod_file(
+        self,
+        download_url: str,
+        dest_path: Path,
+        progress_callback: Optional[Callable[[int, str, str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
         Downloads a mod file from a direct or resolved download URL.
         """

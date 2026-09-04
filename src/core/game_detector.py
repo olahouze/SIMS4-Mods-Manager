@@ -3,24 +3,28 @@ import re
 import winreg
 import subprocess
 import unicodedata
+import threading
+import time
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List
+from src.core.config import AppConfig
 from src.utils.logger import logger
 from src.utils.resource_cfg import ensure_resource_cfg
 
 # Common localized folder names for Electronic Arts / The Sims 4 user directories
 LOCALIZED_SIMS4_FOLDERS = [
-    "Les Sims 4",      # French
-    "The Sims 4",      # English, Russian, Polish, Portuguese, Japanese, etc.
-    "Die Sims 4",      # German
-    "Los Sims 4",      # Spanish
-    "I Sims 4",        # Italian
-    "De Sims 4",        # Dutch
+    "Les Sims 4",  # French
+    "The Sims 4",  # English, Russian, Polish, Portuguese, Japanese, etc.
+    "Die Sims 4",  # German
+    "Los Sims 4",  # Spanish
+    "I Sims 4",  # Italian
+    "De Sims 4",  # Dutch
     "The Sims™ 4",
     "Les Sims™ 4",
     "Die Sims™ 4",
     "Los Sims™ 4",
 ]
+
 
 def normalize_folder_name(name: str) -> str:
     """Normalizes whitespace (including non-breaking spaces \xa0) and removes special symbols."""
@@ -29,16 +33,18 @@ def normalize_folder_name(name: str) -> str:
     # Normalize unicode
     cleaned = unicodedata.normalize("NFKD", cleaned)
     # Collapse multiple spaces
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip().lower()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
     return cleaned
+
 
 def is_sims4_folder(name: str) -> bool:
     """Checks if a directory name corresponds to Sims 4 regardless of locale or special spaces."""
     norm = normalize_folder_name(name)
     # Matches "les sims 4", "the sims 4", "sims 4", "die sims 4", etc.
-    if re.search(r'(?:les|the|die|los|i|de)?\s*sims\s*4', norm, re.IGNORECASE):
+    if re.search(r"(?:les|the|die|los|i|de)?\s*sims\s*4", norm, re.IGNORECASE):
         return True
     return False
+
 
 class GameDetector:
     """Detects Sims 4 installation paths, Mods directory, and game executables."""
@@ -51,8 +57,7 @@ class GameDetector:
         # 1. Windows Registry User Shell Folders
         try:
             with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+                winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
             ) as key:
                 val, _ = winreg.QueryValueEx(key, "Personal")
                 expanded = os.path.expandvars(val)
@@ -88,6 +93,17 @@ class GameDetector:
 
         return candidates
 
+    _cached_user_dir: Optional[Path] = None
+    _cached_mods_dir: Optional[Path] = None
+    _cached_game_exe: Optional[Path] = None
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Clears in-memory cached paths."""
+        cls._cached_user_dir = None
+        cls._cached_mods_dir = None
+        cls._cached_game_exe = None
+
     @classmethod
     def detect_sims4_user_dir(cls, custom_path: Optional[str] = None) -> Optional[Path]:
         """
@@ -99,6 +115,16 @@ class GameDetector:
             if p.exists():
                 return p
 
+        if cls._cached_user_dir and cls._cached_user_dir.exists():
+            return cls._cached_user_dir
+
+        user_dir = cls._do_detect_sims4_user_dir()
+        if user_dir:
+            cls._cached_user_dir = user_dir
+        return user_dir
+
+    @classmethod
+    def _do_detect_sims4_user_dir(cls) -> Optional[Path]:
         doc_dirs = cls.get_windows_documents_dirs()
 
         for doc_dir in doc_dirs:
@@ -130,6 +156,7 @@ class GameDetector:
     def detect_mods_dir(cls, custom_path: Optional[str] = None) -> Optional[Path]:
         """
         Detects and returns the 'Mods' folder path.
+        Checks in-memory cache first, then config.json persistent cache, then performs discovery.
         Ensures Resource.cfg is present.
         """
         if custom_path:
@@ -145,23 +172,75 @@ class GameDetector:
                 ensure_resource_cfg(p)
                 return p
 
+        # 1. In-memory cache
+        if cls._cached_mods_dir and cls._cached_mods_dir.exists():
+            return cls._cached_mods_dir
+
+        # If user directory was already detected/cached in memory, derive Mods directly
+        if cls._cached_user_dir and cls._cached_user_dir.exists():
+            mods_dir = cls._cached_user_dir / "Mods"
+            mods_dir.mkdir(parents=True, exist_ok=True)
+            ensure_resource_cfg(mods_dir)
+            cls._cached_mods_dir = mods_dir
+            return mods_dir
+
+        # 2. Persistent config cache
+        config = AppConfig.load()
+        if config.cached_mods_dir:
+            cached_p = Path(config.cached_mods_dir)
+            if cached_p.exists() and cached_p.is_dir():
+                cls._cached_mods_dir = cached_p
+                return cached_p
+
+        # 3. Discovery (first run or moved folder)
+        mods_dir = cls._do_detect_mods_dir()
+        if mods_dir:
+            cls._cached_mods_dir = mods_dir
+            config.cached_mods_dir = str(mods_dir)
+            config.save()
+        return mods_dir
+
+    @classmethod
+    def _do_detect_mods_dir(cls) -> Optional[Path]:
         user_dir = cls.detect_sims4_user_dir()
         if user_dir:
             mods_dir = user_dir / "Mods"
             mods_dir.mkdir(parents=True, exist_ok=True)
             ensure_resource_cfg(mods_dir)
             return mods_dir
-
         return None
 
     @classmethod
     def detect_game_executable(cls, custom_exe: Optional[str] = None) -> Optional[Path]:
         """
-        Attempts to locate TS4_x64.exe or TS4_DX9_x64.exe from registry, Origin, EA App, or Steam.
+        Attempts to locate TS4_x64.exe or TS4_DX9_x64.exe from in-memory cache,
+        config cache, or discovery (registry, Origin, EA App, Steam).
         """
         if custom_exe and Path(custom_exe).exists():
             return Path(custom_exe)
 
+        # 1. In-memory cache
+        if cls._cached_game_exe and cls._cached_game_exe.exists():
+            return cls._cached_game_exe
+
+        # 2. Persistent config cache
+        config = AppConfig.load()
+        if config.cached_game_exe:
+            cached_exe = Path(config.cached_game_exe)
+            if cached_exe.exists() and cached_exe.is_file():
+                cls._cached_game_exe = cached_exe
+                return cached_exe
+
+        # 3. Discovery
+        exe = cls._do_detect_game_executable()
+        if exe:
+            cls._cached_game_exe = exe
+            config.cached_game_exe = str(exe)
+            config.save()
+        return exe
+
+    @classmethod
+    def _do_detect_game_executable(cls) -> Optional[Path]:
         # 1. Common candidate paths on drives
         common_paths = [
             r"D:\Origin\The Sims 4\Game\Bin\TS4_x64.exe",
@@ -210,6 +289,44 @@ class GameDetector:
                 pass
 
         return None
+
+    @classmethod
+    def start_background_detection_refresh(cls) -> None:
+        """
+        Launches an asynchronous daemon thread to verify paths in the background.
+        If the Sims 4 mods or game folder was moved or changed, updates AppConfig seamlessly.
+        """
+
+        def _worker():
+            time.sleep(1.5)
+            try:
+                config = AppConfig.load()
+                changed = False
+
+                fresh_mods_dir = cls._do_detect_mods_dir()
+                fresh_exe = cls._do_detect_game_executable()
+
+                if fresh_mods_dir and str(fresh_mods_dir) != config.cached_mods_dir:
+                    logger.info(
+                        f"Déplacement ou nouvel emplacement du dossier Mods détecté en tâche de fond : {fresh_mods_dir}"
+                    )
+                    config.cached_mods_dir = str(fresh_mods_dir)
+                    cls._cached_mods_dir = fresh_mods_dir
+                    changed = True
+
+                if fresh_exe and str(fresh_exe) != config.cached_game_exe:
+                    logger.info(f"Déplacement de l'exécutable Sims 4 détecté en tâche de fond : {fresh_exe}")
+                    config.cached_game_exe = str(fresh_exe)
+                    cls._cached_game_exe = fresh_exe
+                    changed = True
+
+                if changed:
+                    config.save()
+            except Exception as e:
+                logger.debug(f"Erreur lors de l'actualisation des chemins en tâche de fond : {e}")
+
+        t = threading.Thread(target=_worker, daemon=True, name="GameDetectorRefreshThread")
+        t.start()
 
     @classmethod
     def launch_game(cls, exe_path: Optional[Path] = None) -> bool:

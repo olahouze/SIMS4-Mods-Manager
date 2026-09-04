@@ -1,26 +1,23 @@
-import os
 import webbrowser
 from pathlib import Path
-from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QFrame,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QWidget,
-    QSizePolicy,
 )
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool
 
 from src.ui.components.status_badge import StatusBadge
-from src.core.config import AppConfig
-from src.core.session_manager import SessionManager
+from src.api.client import get_api_client
 from src.utils.logger import logger
 
+
 class ImageLoadSignals(QObject):
-    loaded = Signal(str, str) # remote_id, local_path
+    loaded = Signal(str, str)  # remote_id, local_path
+
 
 class ImageDownloadTask(QRunnable):
     def __init__(self, source: str, remote_id: str, url: str, dest_path: Path, signals: ImageLoadSignals):
@@ -33,15 +30,22 @@ class ImageDownloadTask(QRunnable):
 
     def run(self):
         try:
-            session = SessionManager.get_http_session(self.source)
-            resp = session.get(self.url, timeout=15)
+            import httpx
+
+            client = get_api_client()
+            resp = httpx.get(
+                f"{client.base_url}/api/catalog/thumbnail",
+                params={"source": self.source, "remote_id": self.remote_id, "url": self.url},
+                timeout=20.0,
+            )
             if resp.status_code == 200 and len(resp.content) > 100:
                 self.dest_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(self.dest_path, "wb") as f:
                     f.write(resp.content)
                 self.signals.loaded.emit(self.remote_id, str(self.dest_path))
         except Exception as e:
-            logger.debug(f"Thumbnail download failed for {self.url}: {e}")
+            logger.debug(f"Thumbnail download failed via API for {self.url}: {e}")
+
 
 class ModCard(QFrame):
     """Premium Card widget representing a single mod in the unified catalog grid."""
@@ -56,7 +60,7 @@ class ModCard(QFrame):
         has_update: bool = False,
         is_patreon_auth: bool = False,
         is_loverslab_auth: bool = False,
-        parent=None
+        parent=None,
     ):
         super().__init__(parent)
         self.mod_data = mod_data
@@ -71,6 +75,7 @@ class ModCard(QFrame):
         self.setObjectName("ModCard")
         self.setFixedWidth(295)
         self.setFixedHeight(360)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.init_ui()
 
     def init_ui(self):
@@ -126,13 +131,23 @@ class ModCard(QFrame):
         badges_layout.addWidget(StatusBadge(source.capitalize(), badge_type=source))
 
         patreon_status = self.mod_data.get("patreon_status", "NONE")
-        if patreon_status == "PUBLIC":
-            badges_layout.addWidget(StatusBadge("🔓 Public", badge_type="public"))
-        elif patreon_status == "UNLOCKED":
-            badges_layout.addWidget(StatusBadge("✅ Débloqué", badge_type="unlocked"))
-        elif patreon_status == "LOCKED":
-            tier_str = self.mod_data.get("patreon_tier") or "Verrouillé"
-            badges_layout.addWidget(StatusBadge(f"🔒 {tier_str}", badge_type="locked"))
+        is_patreon_mod = (
+            source == "patreon"
+            or "Patreon" in self.mod_data.get("tags", [])
+            or patreon_status in ["PUBLIC", "UNLOCKED", "LOCKED"]
+        )
+
+        if is_patreon_mod:
+            if not self.is_patreon_auth:
+                badges_layout.addWidget(StatusBadge("Patreon", badge_type="patreon"))
+                badges_layout.addWidget(StatusBadge("🔒 Non connecté", badge_type="locked"))
+            elif patreon_status == "PUBLIC":
+                badges_layout.addWidget(StatusBadge("🔓 Public", badge_type="public"))
+            elif patreon_status == "UNLOCKED":
+                badges_layout.addWidget(StatusBadge("✅ Débloqué", badge_type="unlocked"))
+            elif patreon_status == "LOCKED":
+                tier_str = self.mod_data.get("patreon_tier") or "Verrouillé"
+                badges_layout.addWidget(StatusBadge(f"🔒 {tier_str}", badge_type="locked"))
 
         if self.has_update:
             badges_layout.addWidget(StatusBadge("🔄 MàJ", badge_type="update"))
@@ -169,11 +184,8 @@ class ModCard(QFrame):
         self.action_btn.setFixedHeight(34)
 
         # Determine Button State and Appearance
-        requires_patreon = (
-            source == "patreon"
-            or (self.mod_data.get("patreon_status") in ["UNLOCKED", "LOCKED"])
-        )
-        requires_loverslab = (source == "loverslab")
+        requires_patreon = is_patreon_mod
+        requires_loverslab = source == "loverslab" and not is_patreon_mod
 
         if self.has_update:
             # Update Available
@@ -194,21 +206,18 @@ class ModCard(QFrame):
                 }
             """)
         elif self.is_installed:
-            # Already Installed
+            # Already Installed (Disabled button per user request)
             self.action_btn.setText("✓ Déjà Installé")
-            self.action_btn.setEnabled(True)
-            self.action_btn.setToolTip("Ce mod est actuellement installé dans votre jeu Sims 4. Cliquez pour le réinstaller.")
+            self.action_btn.setEnabled(False)
+            self.action_btn.setToolTip("Ce mod est déjà installé dans votre jeu Sims 4.")
             self.action_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #059669;
-                    color: #ffffff;
-                    border: 1px solid #10b981;
+                    background-color: #064e3b;
+                    color: #a7f3d0;
+                    border: 1px solid #059669;
                     border-radius: 8px;
                     font-weight: 700;
                     font-size: 12px;
-                }
-                QPushButton:hover {
-                    background-color: #047857;
                 }
             """)
         elif requires_loverslab and not self.is_loverslab_auth:
@@ -250,7 +259,9 @@ class ModCard(QFrame):
             tier_text = self.mod_data.get("patreon_tier") or "Abonnement requis"
             self.action_btn.setText(f"🔒 Verrouillé ({tier_text})")
             self.action_btn.setEnabled(False)
-            self.action_btn.setToolTip("Ce mod nécessite un niveau d'abonnement payant Patreon non inclus dans votre compte.")
+            self.action_btn.setToolTip(
+                "Ce mod nécessite un niveau d'abonnement payant Patreon non inclus dans votre compte."
+            )
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2b141b;
@@ -319,9 +330,11 @@ class ModCard(QFrame):
             return
 
         source = self.mod_data.get("source", "loverslab")
-        remote_id = str(self.mod_data.get("remote_id", "0"))
+        remote_id = str(self.mod_data.get("remote_id", "unknown"))
         cache_name = f"thumb_{source}_{remote_id}.jpg"
-        cache_path = AppConfig.get_thumbnails_cache_dir() / cache_name
+        cache_dir = Path.home() / ".sims4_mod_manager" / "cache" / "thumbnails"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / cache_name
 
         if cache_path.exists() and cache_path.stat().st_size > 100:
             self._display_image(str(cache_path))
@@ -337,9 +350,16 @@ class ModCard(QFrame):
         pixmap = QPixmap(image_path)
         if not pixmap.isNull():
             scaled = pixmap.scaled(
-                271, 145,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation
+                271, 145, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
             )
             self.thumb_label.setPixmap(scaled)
             self.thumb_label.setText("")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            child = self.childAt(event.pos())
+            if hasattr(self, "action_btn") and (child == self.action_btn or self.action_btn.isAncestorOf(child)):
+                super().mousePressEvent(event)
+                return
+            self.details_requested.emit(self.mod_data)
+        super().mousePressEvent(event)

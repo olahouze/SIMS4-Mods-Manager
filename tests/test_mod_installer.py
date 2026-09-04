@@ -1,19 +1,19 @@
-import pytest
 import zipfile
-from pathlib import Path
 from src.core.mod_installer import ModInstaller, sanitize_filename
 from src.core.mod_toggle import ModToggleManager
 from src.core.database import DatabaseManager, InstalledMod
 from src.core.config import AppConfig
 
+
 def test_sanitize_filename():
     assert sanitize_filename('Mod: "Super/Best*Mod?"') == "Mod_SuperBestMod"
+
 
 def test_install_and_ts4script_depth_fix(tmp_path, monkeypatch):
     # Setup test environment
     mods_dir = tmp_path / "The Sims 4" / "Mods"
     mods_dir.mkdir(parents=True)
-    
+
     db_file = tmp_path / "test.db"
     db_mgr = DatabaseManager(str(db_file))
     monkeypatch.setattr(DatabaseManager, "get_instance", classmethod(lambda cls: db_mgr))
@@ -23,7 +23,7 @@ def test_install_and_ts4script_depth_fix(tmp_path, monkeypatch):
 
     # Create a mock zip archive with a deeply nested .ts4script and a .package
     zip_path = tmp_path / "test_mod.zip"
-    with zipfile.ZipFile(zip_path, 'w') as z:
+    with zipfile.ZipFile(zip_path, "w") as z:
         z.writestr("subfolder/deep/core_script.ts4script", "mock ts4script content")
         z.writestr("subfolder/package1.package", "mock package content")
 
@@ -34,7 +34,9 @@ def test_install_and_ts4script_depth_fix(tmp_path, monkeypatch):
     )
     assert ok is True
 
-    installed_folder = mods_dir / "loverslab_AwesomeMod"
+    installed_folders = list(mods_dir.glob("loverslab_AwesomeMod*"))
+    assert len(installed_folders) == 1
+    installed_folder = installed_folders[0]
     assert installed_folder.exists()
 
     # Verify that .ts4script was relocated to direct child of installed_folder (depth 1 from Mods/)
@@ -45,10 +47,11 @@ def test_install_and_ts4script_depth_fix(tmp_path, monkeypatch):
     package_files = list(installed_folder.rglob("*.package"))
     assert len(package_files) >= 1
 
+
 def test_toggle_mod_enable_disable(tmp_path, monkeypatch):
     mods_dir = tmp_path / "The Sims 4" / "Mods"
     mods_dir.mkdir(parents=True)
-    
+
     db_file = tmp_path / "test.db"
     db_mgr = DatabaseManager(str(db_file))
     monkeypatch.setattr(DatabaseManager, "get_instance", classmethod(lambda cls: db_mgr))

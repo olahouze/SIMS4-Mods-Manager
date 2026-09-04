@@ -1,15 +1,17 @@
-import os
 import sys
 import logging
 from pathlib import Path
 from typing import List
 from PySide6.QtCore import QObject, Signal
 
+
 class QtLogEmitter(QObject):
-    log_received = Signal(str, str) # formatted_message, levelname
+    log_received = Signal(str, str)  # formatted_message, levelname
+
 
 class QtLogHandler(logging.Handler):
     """Logging handler that emits Qt signals for UI streaming."""
+
     def __init__(self, emitter: QtLogEmitter):
         super().__init__()
         self.emitter = emitter
@@ -23,11 +25,14 @@ class QtLogHandler(logging.Handler):
             if len(self.history) > self.max_history:
                 self.history.pop(0)
             self.emitter.log_received.emit(msg, record.levelname)
-        except Exception:
-            self.handleError(record)
+        except (RuntimeError, Exception):
+            # Gracefully ignore when Qt application or emitter is shut down
+            pass
+
 
 log_emitter = QtLogEmitter()
 qt_log_handler = QtLogHandler(log_emitter)
+
 
 def setup_logger(name: str = "sims4_mod_manager") -> logging.Logger:
     """Sets up and returns a configured logger with console, file, and Qt handlers."""
@@ -66,5 +71,6 @@ def setup_logger(name: str = "sims4_mod_manager") -> logging.Logger:
         print(f"Warning: Could not set up file logger: {e}", file=sys.stderr)
 
     return logger
+
 
 logger = setup_logger()

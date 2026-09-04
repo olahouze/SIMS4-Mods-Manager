@@ -18,31 +18,30 @@ from src.utils.logger import logger
 
 Base = declarative_base()
 
+
 class CatalogMod(Base):
     __tablename__ = "catalog_mods"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    source = Column(String(50), nullable=False, index=True)          # e.g., 'loverslab', 'patreon'
-    remote_id = Column(String(100), nullable=False, index=True)       # ID on the remote site
+    source = Column(String(50), nullable=False, index=True)  # e.g., 'loverslab', 'patreon'
+    remote_id = Column(String(100), nullable=False, index=True)  # ID on the remote site
     title = Column(String(255), nullable=False, index=True)
     author = Column(String(100), index=True)
     category = Column(String(100), index=True)
-    tags = Column(Text, default="[]")                               # JSON list of tags
+    tags = Column(Text, default="[]")  # JSON list of tags
     description = Column(Text, default="")
     page_url = Column(String(500), nullable=False)
     thumbnail_url = Column(String(500), default="")
-    download_urls = Column(Text, default="[]")                      # JSON list of direct download URLs
-    external_links = Column(Text, default="[]")                     # JSON list of external links (Patreon, Mega, etc.)
+    download_urls = Column(Text, default="[]")  # JSON list of direct download URLs
+    external_links = Column(Text, default="[]")  # JSON list of external links (Patreon, Mega, etc.)
     published_date = Column(DateTime, nullable=True)
     updated_date = Column(DateTime, nullable=True, index=True)
     version_str = Column(String(50), default="")
-    patreon_status = Column(String(20), default="NONE", index=True) # NONE, PUBLIC, UNLOCKED, LOCKED, UNKNOWN
+    patreon_status = Column(String(20), default="NONE", index=True)  # NONE, PUBLIC, UNLOCKED, LOCKED, UNKNOWN
     patreon_tier = Column(String(100), default="")
     last_scraped_at = Column(DateTime, default=datetime.now)
 
-    __table_args__ = (
-        Index('idx_source_remote', 'source', 'remote_id', unique=True),
-    )
+    __table_args__ = (Index("idx_source_remote", "source", "remote_id", unique=True),)
 
     def get_tags_list(self) -> List[str]:
         try:
@@ -81,7 +80,7 @@ class InstalledMod(Base):
     remote_id = Column(String(100), default="")
     title = Column(String(255), nullable=False, index=True)
     folder_name = Column(String(255), nullable=False, index=True)
-    installed_files = Column(Text, default="[]")                    # JSON list of relative file paths
+    installed_files = Column(Text, default="[]")  # JSON list of relative file paths
     installed_date = Column(DateTime, default=datetime.now)
     version_date = Column(DateTime, nullable=True)
     version_str = Column(String(50), default="")
@@ -103,10 +102,10 @@ class InstalledMod(Base):
 class AccountSession(Base):
     __tablename__ = "account_sessions"
 
-    provider_name = Column(String(50), primary_key=True)            # 'loverslab', 'patreon'
+    provider_name = Column(String(50), primary_key=True)  # 'loverslab', 'patreon'
     is_authenticated = Column(Boolean, default=False)
     user_display_name = Column(String(100), default="")
-    cookies_data = Column(Text, default="{}")                       # JSON dict of cookies
+    cookies_data = Column(Text, default="{}")  # JSON dict of cookies
     user_agent = Column(String(255), default="")
     last_verified = Column(DateTime, default=datetime.now)
 
@@ -129,6 +128,7 @@ class DatabaseManager:
         self.engine = create_engine(f"sqlite:///{db_path}", echo=False)
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False)
+        self.clean_and_repair_catalog()
         logger.info(f"Database initialized at: {db_path}")
 
     @classmethod
@@ -139,3 +139,76 @@ class DatabaseManager:
 
     def get_session(self) -> Session:
         return self.SessionLocal()
+
+    def clean_and_repair_catalog(self) -> None:
+        """
+        Repairs corrupted catalog records (empty titles) from page_url slug,
+        and purges known deleted ghost mods (such as remote_id 51260 / author dohmra).
+        """
+        import re
+        import urllib.parse
+
+        try:
+            with self.get_session() as session:
+                # 1. Delete ghost mod 51260 / dohmra
+                ghosts = (
+                    session.query(CatalogMod)
+                    .filter((CatalogMod.remote_id == "51260") | (CatalogMod.author == "dohmra"))
+                    .all()
+                )
+                for g in ghosts:
+                    logger.info(f"Purge du mod fantôme LoversLab #{g.remote_id} ({g.author})")
+                    session.delete(g)
+
+                # 2. Repair empty or corrupt titles
+                corrupt_items = (
+                    session.query(CatalogMod)
+                    .filter(
+                        (CatalogMod.title == "")
+                        | (CatalogMod.title == "''")
+                        | (CatalogMod.title == '""')
+                        | (CatalogMod.title == "Mod")
+                    )
+                    .all()
+                )
+
+                repaired_count = 0
+                for item in corrupt_items:
+                    if item.page_url:
+                        slug_match = re.search(r"/files/file/\d+-([^/]+)", urllib.parse.unquote(item.page_url))
+                        if slug_match:
+                            cleaned_title = (
+                                slug_match.group(1)
+                                .replace("-", " ")
+                                .replace("—", "-")
+                                .replace("\u200b", "")
+                                .replace("\ufeff", "")
+                                .strip()
+                                .title()
+                            )
+                            item.title = cleaned_title
+                            repaired_count += 1
+                        else:
+                            session.delete(item)
+                    else:
+                        session.delete(item)
+
+                if ghosts or repaired_count:
+                    session.commit()
+                    logger.info(
+                        f"Maintenance catalogue : {len(ghosts)} mod(s) fantôme(s) purgé(s), {repaired_count} titre(s) réparé(s)."
+                    )
+        except Exception as e:
+            logger.debug(f"Erreur maintenance catalogue: {e}")
+
+    def purge_catalog(self) -> int:
+        """Purges all records from the catalog_mods table to restart from a clean catalog."""
+        try:
+            with self.get_session() as session:
+                count = session.query(CatalogMod).delete()
+                session.commit()
+                logger.info(f"Purge complète du catalogue effectuée : {count} mods supprimés.")
+                return count
+        except Exception as e:
+            logger.error(f"Erreur lors de la purge du catalogue : {e}")
+            return 0

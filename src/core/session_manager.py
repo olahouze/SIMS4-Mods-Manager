@@ -1,14 +1,15 @@
-import json
+import os
 import time
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Tuple
 from curl_cffi import requests as cffi_requests
 
 from src.core.config import AppConfig
 from src.core.database import DatabaseManager, AccountSession
 from src.utils.logger import logger
+
 
 class SessionManager:
     """
@@ -96,7 +97,7 @@ class SessionManager:
         db = DatabaseManager.get_instance()
         with db.get_session() as session:
             acc = session.query(AccountSession).filter_by(provider_name=provider_name).first()
-            
+
             # Check for member ID or display name in cookies
             member_id = cookies.get("ips4_member_id")
             if member_id and member_id != "0" and not user_display_name:
@@ -121,8 +122,10 @@ class SessionManager:
                 acc.set_cookies_dict(cookies)
                 acc.last_verified = datetime.now()
             session.commit()
-            
-            tokens_found = [k for k in ["cf_clearance", "ips4_hasAcceptedAge", "ips4_member_id", "session_id"] if k in cookies]
+
+            tokens_found = [
+                k for k in ["cf_clearance", "ips4_hasAcceptedAge", "ips4_member_id", "session_id"] if k in cookies
+            ]
             logger.info(
                 f"Session enregistrée pour '{provider_name}': {len(cookies)} cookie(s) sauvegardé(s). "
                 f"Tokens identifiés: {tokens_found}. Utilisateur: '{user_display_name or 'Anonyme/Anti-bot validé'}'."
@@ -167,7 +170,10 @@ class SessionManager:
                         return True, "Session active (Anti-Bot Cloudflare & +18 ans validés)."
                     return True, "Accès au site vérifié avec succès."
                 elif resp.status_code in [403, 503]:
-                    return False, f"Protection Cloudflare active (Code {resp.status_code}). Veuillez rouvrir le navigateur."
+                    return (
+                        False,
+                        f"Protection Cloudflare active (Code {resp.status_code}). Veuillez rouvrir le navigateur.",
+                    )
 
             elif provider_name.lower() == "patreon":
                 url = "https://www.patreon.com/api/current_user"
@@ -191,10 +197,12 @@ class SessionManager:
         Returns a configured curl_cffi Session loaded with provider cookies and browser impersonation.
         """
         http_session = cffi_requests.Session(impersonate="chrome120")
-        http_session.headers.update({
-            "User-Agent": cls.DEFAULT_USER_AGENT,
-            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-        })
+        http_session.headers.update(
+            {
+                "User-Agent": cls.DEFAULT_USER_AGENT,
+                "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            }
+        )
 
         # Load cookies from DB
         db = DatabaseManager.get_instance()
@@ -214,21 +222,55 @@ class SessionManager:
 
         return http_session
 
+    _browser_available_cached: Optional[bool] = None
+
     @classmethod
     def is_browser_available(cls) -> bool:
-        """Checks if a browser engine (Chromium, Edge or Chrome) is available for Playwright."""
+        """
+        Checks if a browser engine (Chromium, Edge or Chrome) is available for Playwright.
+        Uses fast filesystem checks and caches the result to prevent slow Chromium launches on startup.
+        """
+        if cls._browser_available_cached is not None:
+            return cls._browser_available_cached
+
+        # Fast check 1: System Microsoft Edge or Google Chrome executables
+        candidates = [
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+            / r"Microsoft\Edge\Application\msedge.exe",
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / r"Microsoft\Edge\Application\msedge.exe",
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / r"Google\Chrome\Application\chrome.exe",
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+            / r"Google\Chrome\Application\chrome.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / r"Google\Chrome\Application\chrome.exe",
+        ]
+        for c in candidates:
+            if c.exists():
+                cls._browser_available_cached = True
+                return True
+
+        # Fast check 2: Playwright installed browsers in %LOCALAPPDATA%\ms-playwright
+        pw_dir = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
+        if pw_dir.exists() and any(pw_dir.glob("chromium*")):
+            cls._browser_available_cached = True
+            return True
+
+        # Fallback: Actual launch test once
         try:
             from playwright.sync_api import sync_playwright
+
             with sync_playwright() as p:
                 for ch in [None, "msedge", "chrome"]:
                     try:
                         b = p.chromium.launch(headless=True, channel=ch)
                         b.close()
+                        cls._browser_available_cached = True
                         return True
                     except Exception:
                         continue
+            cls._browser_available_cached = False
             return False
         except Exception:
+            cls._browser_available_cached = False
             return False
 
     @classmethod
@@ -293,21 +335,25 @@ class SessionManager:
 
             # Set adult consent cookie for LoversLab
             if "loverslab.com" in target_url:
-                context.add_cookies([
-                    {
-                        "name": "ips4_hasAcceptedAge",
-                        "value": "1",
-                        "domain": ".loverslab.com",
-                        "path": "/",
-                    }
-                ])
+                context.add_cookies(
+                    [
+                        {
+                            "name": "ips4_hasAcceptedAge",
+                            "value": "1",
+                            "domain": ".loverslab.com",
+                            "path": "/",
+                        }
+                    ]
+                )
 
             try:
                 page.goto(target_url, timeout=60000, wait_until="domcontentloaded")
             except Exception as e:
                 logger.warning(f"Avertissement lors de la navigation initiale: {e}")
 
-            logger.info("Fenêtre ouverte. En attente de vos actions (Cloudflare, connexion, consentement) ou fermeture...")
+            logger.info(
+                "Fenêtre ouverte. En attente de vos actions (Cloudflare, connexion, consentement) ou fermeture..."
+            )
 
             # Wait loop while the browser window is open
             start_time = time.time()
@@ -328,9 +374,8 @@ class SessionManager:
                             if user_elem:
                                 display_name = user_elem.inner_text().strip()
                     elif provider_name == "patreon":
-                        if (
-                            page.query_selector("[data-tag='user-menu-btn']")
-                            or page.query_selector("nav[aria-label='User']")
+                        if page.query_selector("[data-tag='user-menu-btn']") or page.query_selector(
+                            "nav[aria-label='User']"
                         ):
                             is_authenticated = True
 

@@ -1,6 +1,3 @@
-import os
-import subprocess
-from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -8,221 +5,243 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QLineEdit,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
+    QScrollArea,
+    QGridLayout,
     QMessageBox,
-    QCheckBox,
 )
 from PySide6.QtCore import Qt
 
-from src.core.database import DatabaseManager, InstalledMod
-from src.core.config import AppConfig
-from src.core.game_detector import GameDetector
-from src.core.mod_installer import ModInstaller
-from src.core.mod_toggle import ModToggleManager
-from src.ui.components.status_badge import StatusBadge
+from src.api.client import get_api_client
+from src.ui.components.installed_card import InstalledCard
 from src.utils.logger import logger
 
+
 class InstalledView(QWidget):
-    """View managing installed Sims 4 mods (toggle, explorer, uninstallation, scanning)."""
+    """
+    Modern grid view managing installed Sims 4 mods.
+    Displays rich cards with cover previews, metadata, direct folder access, and deletion.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.api_client = get_api_client()
+        self.all_mods = []
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
-        # Header Bar
+        # 1. Header Bar
         header_layout = QHBoxLayout()
-        self.counter_label = QLabel("Chargement des mods...")
-        self.counter_label.setStyleSheet("font-size: 16px; font-weight: 700; color: #f8fafc;")
+        header_layout.setSpacing(14)
+
+        self.counter_label = QLabel("Mes Mods Installés")
+        self.counter_label.setStyleSheet("font-size: 18px; font-weight: 700; color: #f8fafc;")
         header_layout.addWidget(self.counter_label)
+
+        self.badge_count = QLabel("0 mod")
+        self.badge_count.setStyleSheet("""
+            background-color: #1e293b;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 600;
+        """)
+        header_layout.addWidget(self.badge_count)
 
         header_layout.addStretch()
 
         # Search field
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrer les mods installés...")
-        self.search_input.setFixedWidth(220)
-        self.search_input.textChanged.connect(self.refresh_table)
+        self.search_input.setPlaceholderText("🔍 Filtrer mes mods installés...")
+        self.search_input.setFixedWidth(240)
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #131726;
+                color: #f8fafc;
+                border: 1px solid #232d45;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border-color: #6366f1;
+            }
+        """)
+        self.search_input.textChanged.connect(self._filter_cards)
         header_layout.addWidget(self.search_input)
 
         # Scan Button
         self.scan_btn = QPushButton("🔄 Scanner le dossier")
+        self.scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.scan_btn.setStyleSheet("""
             QPushButton {
-                background-color: #202436;
+                background-color: #1e2438;
                 color: #f1f5f9;
                 border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 8px 14px;
+                border-radius: 8px;
+                padding: 7px 14px;
                 font-weight: 600;
+                font-size: 12px;
             }
-            QPushButton:hover { background-color: #282e48; }
+            QPushButton:hover { background-color: #28314d; color: #ffffff; }
         """)
         self.scan_btn.clicked.connect(self.scan_mods_folder)
         header_layout.addWidget(self.scan_btn)
 
         # Open Mods Folder Button
         self.open_folder_btn = QPushButton("📁 Dossier Mods")
+        self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_folder_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4f46e5;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
                 color: #ffffff;
-                border-radius: 6px;
-                padding: 8px 14px;
+                border-radius: 8px;
+                padding: 7px 16px;
                 font-weight: 600;
+                font-size: 12px;
             }
-            QPushButton:hover { background-color: #6366f1; }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5); }
         """)
         self.open_folder_btn.clicked.connect(self.open_mods_folder)
         header_layout.addWidget(self.open_folder_btn)
 
         layout.addLayout(header_layout)
 
-        # Table of Installed Mods
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Actif",
-            "Titre du Mod",
-            "Source",
-            "Dossier",
-            "Fichiers",
-            "Date d'installation",
-            "Actions",
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        layout.addWidget(self.table)
+        # 2. Scroll Area for Cards Grid
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("background-color: transparent; border: none;")
 
-        self.refresh_table()
+        self.grid_container = QWidget()
+        self.grid_container.setStyleSheet("background-color: transparent;")
+        self.grid_layout = QGridLayout(self.grid_container)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(16)
+        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        scroll.setWidget(self.grid_container)
+        layout.addWidget(scroll, stretch=1)
+
+        self.refresh_mods()
+
+    def refresh_mods(self):
+        """Fetches installed mods from API and populates grid cards."""
+        try:
+            res = self.api_client.get_installed_mods()
+            self.all_mods = res.get("items", [])
+            total = len(self.all_mods)
+            self.badge_count.setText(f"{total} mod{'s' if total > 1 else ''}")
+            self._populate_grid(self.all_mods)
+        except Exception as e:
+            logger.error(f"Erreur chargement mods installés: {e}")
 
     def refresh_table(self):
-        """Reloads installed mods from SQLite into table."""
-        search = self.search_input.text().strip().lower()
-        db = DatabaseManager.get_instance()
+        """Compatibility alias for refresh_mods."""
+        self.refresh_mods()
 
-        with db.get_session() as session:
-            query = session.query(InstalledMod)
-            if search:
-                query = query.filter(
-                    (InstalledMod.title.ilike(f"%{search}%")) |
-                    (InstalledMod.folder_name.ilike(f"%{search}%"))
-                )
-            mods = query.order_by(InstalledMod.installed_date.desc()).all()
+    def _filter_cards(self):
+        query = self.search_input.text().strip().lower()
+        if not query:
+            self._populate_grid(self.all_mods)
+            return
 
-            total_count = len(mods)
-            active_count = sum(1 for m in mods if m.is_enabled)
-            self.counter_label.setText(f"Mods Installés ({active_count}/{total_count} actifs)")
+        filtered = [
+            m
+            for m in self.all_mods
+            if query in m.get("title", "").lower()
+            or query in m.get("folder_name", "").lower()
+            or query in m.get("author", "").lower()
+            or query in m.get("source", "").lower()
+        ]
+        self._populate_grid(filtered)
 
-            self.table.setRowCount(len(mods))
+    def _populate_grid(self, mods_list: list):
+        # Clear existing items
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
-            for row, mod in enumerate(mods):
-                # 0. Active Checkbox
-                chk = QCheckBox()
-                chk.setChecked(mod.is_enabled)
-                chk.setStyleSheet("margin-left: 12px;")
-                mod_id = mod.id
-                chk.toggled.connect(lambda checked, mid=mod_id: self.toggle_mod(mid, checked))
-                self.table.setCellWidget(row, 0, chk)
+        if not mods_list:
+            no_mods_lbl = QLabel(
+                "Aucun mod installé trouvé.\n"
+                "Parcourez le catalogue ou placez vos mods dans le dossier Mods pour les voir ici !"
+            )
+            no_mods_lbl.setStyleSheet("font-size: 14px; color: #64748b; padding: 40px;")
+            no_mods_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.grid_layout.addWidget(no_mods_lbl, 0, 0)
+            return
 
-                # 1. Title
-                title_item = QTableWidgetItem(mod.title)
-                title_item.setFlags(title_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 1, title_item)
+        columns = 4
+        row = 0
+        col = 0
 
-                # 2. Source Badge
-                source_widget = QWidget()
-                s_layout = QHBoxLayout(source_widget)
-                s_layout.setContentsMargins(4, 2, 4, 2)
-                s_layout.addWidget(StatusBadge(mod.source.capitalize(), badge_type=mod.source))
-                s_layout.addStretch()
-                self.table.setCellWidget(row, 2, source_widget)
+        for m in mods_list:
+            card = InstalledCard(m, parent=self)
+            card.delete_requested.connect(self._on_delete_mod)
+            card.open_folder_requested.connect(self.open_mod_folder)
+            self.grid_layout.addWidget(card, row, col)
 
-                # 3. Folder Name
-                folder_item = QTableWidgetItem(mod.folder_name)
-                folder_item.setFlags(folder_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 3, folder_item)
+            col += 1
+            if col >= columns:
+                col = 0
+                row += 1
 
-                # 4. Files Count
-                files_list = mod.get_installed_files_list()
-                files_item = QTableWidgetItem(f"{len(files_list)} fichier(s)")
-                files_item.setFlags(files_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 4, files_item)
+    def _on_delete_mod(self, mod_data: dict):
+        """Confirms with user and uninstalls mod via API."""
+        title = mod_data.get("title", "ce mod")
+        mod_id = mod_data.get("id")
+        folder_name = mod_data.get("folder_name", "")
 
-                # 5. Install Date
-                date_str = mod.installed_date.strftime("%d/%m/%Y %H:%M") if mod.installed_date else "-"
-                date_item = QTableWidgetItem(date_str)
-                date_item.setFlags(date_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 5, date_item)
-
-                # 6. Actions Widget (Explorer & Delete)
-                action_widget = QWidget()
-                a_layout = QHBoxLayout(action_widget)
-                a_layout.setContentsMargins(4, 2, 4, 2)
-                a_layout.setSpacing(6)
-
-                exp_btn = QPushButton("📁")
-                exp_btn.setToolTip("Ouvrir ce dossier dans l'Explorateur")
-                exp_btn.setFixedWidth(32)
-                folder_name = mod.folder_name
-                exp_btn.clicked.connect(lambda _, fn=folder_name: self.open_mod_folder(fn))
-                a_layout.addWidget(exp_btn)
-
-                del_btn = QPushButton("🗑️")
-                del_btn.setToolTip("Désinstaller ce mod")
-                del_btn.setFixedWidth(32)
-                del_btn.setStyleSheet("background-color: #450a0a; color: #f87171;")
-                del_btn.clicked.connect(lambda _, mid=mod_id, t=mod.title: self.uninstall_mod(mid, t))
-                a_layout.addWidget(del_btn)
-
-                self.table.setCellWidget(row, 6, action_widget)
-
-    def toggle_mod(self, mod_id: int, state: bool):
-        ok, msg = ModToggleManager.toggle_mod(mod_id, target_state=state)
-        if not ok:
-            QMessageBox.warning(self, "Erreur", msg)
-        self.refresh_table()
-
-    def uninstall_mod(self, mod_id: int, title: str):
         reply = QMessageBox.question(
             self,
-            "Confirmer la désinstallation",
-            f"Êtes-vous sûr de vouloir désinstaller le mod '{title}' ?",
+            "Confirmer la suppression",
+            f"Voulez-vous vraiment désinstaller et supprimer définitivement le mod suivant ?\n\n"
+            f"• Titre : {title}\n"
+            f"• Dossier : {folder_name}\n\n"
+            f"Le dossier physique et tous ses fichiers seront supprimés de votre jeu Sims 4.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
+
         if reply == QMessageBox.StandardButton.Yes:
-            ok, msg = ModInstaller.uninstall_mod(mod_id)
-            if ok:
-                QMessageBox.information(self, "Succès", msg)
-            else:
-                QMessageBox.warning(self, "Erreur", msg)
-            self.refresh_table()
+            try:
+                res = self.api_client.uninstall_mod(mod_id)
+                if res.get("success", False):
+                    logger.info(f"Mod '{title}' désinstallé avec succès.")
+                    QMessageBox.information(self, "Mod Supprimé", f"Le mod '{title}' a été supprimé avec succès.")
+                else:
+                    logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")
+                    QMessageBox.warning(self, "Erreur", res.get("message", "Échec de la suppression."))
+                self.refresh_mods()
+            except Exception as e:
+                logger.error(f"Erreur lors de la désinstallation du mod {mod_id}: {e}")
+                QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {e}")
 
     def scan_mods_folder(self):
-        found = ModInstaller.scan_existing_mods()
-        QMessageBox.information(self, "Scan terminé", f"{len(found)} dossier(s) de mods analysé(s) ou synchronisé(s).")
-        self.refresh_table()
+        try:
+            res = self.api_client.scan_installed_mods()
+            msg = res.get("message", "Scan terminé.")
+            logger.info(f"Scan des mods effectué : {msg}")
+            QMessageBox.information(self, "Scan Terminé", msg)
+            self.refresh_mods()
+        except Exception as e:
+            logger.error(f"Erreur scan dossier Mods: {e}")
+            QMessageBox.critical(self, "Erreur Scan", f"Impossible de scanner le dossier Mods: {e}")
 
     def open_mods_folder(self):
-        mods_dir = GameDetector.detect_mods_dir(AppConfig.load().custom_mods_dir)
-        if mods_dir and mods_dir.exists():
-            os.startfile(str(mods_dir))
-        else:
-            QMessageBox.warning(self, "Erreur", "Dossier Mods introuvable.")
+        try:
+            self.api_client.open_folder()
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le dossier Mods: {e}")
 
     def open_mod_folder(self, folder_name: str):
-        mods_dir = GameDetector.detect_mods_dir(AppConfig.load().custom_mods_dir)
-        if mods_dir:
-            target = mods_dir / folder_name
-            if target.exists():
-                os.startfile(str(target))
-                return
-        QMessageBox.warning(self, "Erreur", f"Le dossier {folder_name} n'existe pas.")
+        try:
+            self.api_client.open_folder(folder_name=folder_name)
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le sous-dossier '{folder_name}': {e}")
