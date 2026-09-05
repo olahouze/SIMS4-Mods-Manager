@@ -13,6 +13,7 @@ from src.core.session_manager import SessionManager
 from src.core.shutdown_manager import ShutdownManager
 from src.utils.logger import logger
 from src.utils.network import stream_download, is_external_hosted
+from src.utils.mod_matcher import ModMatcher
 
 
 def is_wickedwhims_name(name: str) -> bool:
@@ -874,7 +875,8 @@ class LoversLabProvider(BaseSourceProvider):
                         "url": "https://www.loverslab.com/files/file/9443-nisas-wicked-perversions/",
                     }
                 else:
-                    alias_info = self.KNOWN_MOD_ALIASES.get(c_lower)
+                    c_cleaned = ModMatcher.clean_mod_title(candidate)
+                    alias_info = self.KNOWN_MOD_ALIASES.get(c_lower) or self.KNOWN_MOD_ALIASES.get(c_cleaned)
 
                 if alias_info:
                     r_id = alias_info["remote_id"]
@@ -889,14 +891,18 @@ class LoversLabProvider(BaseSourceProvider):
                         })
                     continue
 
-                # If this text is already describing an existing mod from <a> or URL, skip
-                c_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", c_lower))
+                # If this text is already describing an existing mod from <a>, URL, or previous token, skip
                 is_duplicate = False
                 for existing in req_mods:
-                    e_lower = existing["title"].lower()
+                    e_title = existing["title"]
+                    if ModMatcher.match_score(candidate, e_title) >= 0.85:
+                        is_duplicate = True
+                        break
+                    e_lower = e_title.lower()
                     if c_lower in e_lower or e_lower in c_lower:
                         is_duplicate = True
                         break
+                    c_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", c_lower))
                     e_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", e_lower))
                     if c_words and e_words and len(c_words.intersection(e_words)) >= 1:
                         is_duplicate = True

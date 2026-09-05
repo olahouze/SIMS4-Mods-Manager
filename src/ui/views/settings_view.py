@@ -116,6 +116,45 @@ class SettingsView(QWidget):
         p_layout.addLayout(cache_h)
         layout.addWidget(pref_frame)
 
+        # 4. Database & Maintenance Section
+        db_frame = self._create_section_frame("Base de Données & Maintenance")
+        db_layout = QVBoxLayout(db_frame)
+        db_layout.setSpacing(12)
+
+        self.db_stats_lbl = QLabel("Catalogue : Chargement des statistiques...")
+        self.db_stats_lbl.setStyleSheet("font-size: 12px; color: #94a3b8;")
+        db_layout.addWidget(self.db_stats_lbl)
+
+        db_actions_h = QHBoxLayout()
+        db_desc_lbl = QLabel(
+            "Réinitialiser le catalogue local en cas d'incohérences ou pour relancer un scan propre. "
+            "Vos fichiers de mods réels ne seront pas supprimés."
+        )
+        db_desc_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
+        db_desc_lbl.setWordWrap(True)
+        db_actions_h.addWidget(db_desc_lbl, stretch=3)
+
+        purge_db_btn = QPushButton("🗑️ Purger la base de données")
+        purge_db_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7f1d1d;
+                color: #fecaca;
+                border: 1px solid #b91c1c;
+                border-radius: 6px;
+                padding: 8px 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #991b1b;
+                color: #ffffff;
+            }
+        """)
+        purge_db_btn.clicked.connect(self.confirm_and_purge_database)
+        db_actions_h.addWidget(purge_db_btn, stretch=1)
+
+        db_layout.addLayout(db_actions_h)
+        layout.addWidget(db_frame)
+
         # Save Button
         save_btn = QPushButton("💾 Enregistrer les Paramètres")
         save_btn.setStyleSheet("""
@@ -167,8 +206,51 @@ class SettingsView(QWidget):
             self.mods_status_lbl.setText("✓ Dossier détecté et valide" if has_valid_mods else "⚠️ Dossier non détecté")
             self.mods_status_lbl.setStyleSheet("color: #34d399;" if has_valid_mods else "color: #f87171;")
 
+            self.load_database_stats()
+
         except Exception as e:
             logger.error(f"Erreur API lors du chargement des paramètres: {e}")
+
+    def load_database_stats(self):
+        """Fetches and displays current catalog and installed database counts."""
+        try:
+            stats = self.api_client.get_database_stats()
+            cat_count = stats.get("catalog_mods_count", 0)
+            inst_count = stats.get("installed_mods_count", 0)
+            self.db_stats_lbl.setText(
+                f"📊 Catalogue : {cat_count} mod(s) indexé(s) | Mods installés suivis : {inst_count}"
+            )
+        except Exception as e:
+            logger.debug(f"Impossible de charger les statistiques de base de données : {e}")
+            self.db_stats_lbl.setText("Catalogue : Impossible d'obtenir les statistiques.")
+
+    def confirm_and_purge_database(self):
+        """Displays confirmation dialog and purges the catalog database if confirmed."""
+        reply = QMessageBox.question(
+            self,
+            "Confirmation de purge de la base de données",
+            "Êtes-vous sûr de vouloir purger le catalogue de la base de données ?\n\n"
+            "• Tous les mods indexés dans le catalogue local seront supprimés.\n"
+            "• Vos fichiers physiques de mods dans le dossier Les Sims 4 ne seront PAS supprimés.\n"
+            "• Une nouvelle synchronisation sera nécessaire pour explorer le catalogue.\n\n"
+            "Souhaitez-vous continuer ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                res = self.api_client.purge_database()
+                deleted = res.get("deleted_count", 0)
+                QMessageBox.information(
+                    self,
+                    "Base de données purgée",
+                    f"La base de données a été purgée avec succès.\n{deleted} mod(s) supprimé(s) du catalogue.",
+                )
+                self.load_database_stats()
+            except Exception as e:
+                logger.error(f"Erreur lors de la purge de la base de données : {e}")
+                QMessageBox.warning(self, "Erreur", f"Échec de la purge de la base de données via l'API: {e}")
 
     def browse_mods_folder(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Sélectionner le dossier Mods de Sims 4")

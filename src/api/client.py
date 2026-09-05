@@ -207,6 +207,16 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_database_stats(self) -> Dict[str, Any]:
+        resp = self._client.get("/api/settings/database/stats")
+        resp.raise_for_status()
+        return resp.json()
+
+    def purge_database(self) -> Dict[str, Any]:
+        resp = self._client.post("/api/settings/database/purge")
+        resp.raise_for_status()
+        return resp.json()
+
     # --- Logs ---
     def get_logs(self, level: Optional[str] = None, search: Optional[str] = None, limit: int = 200) -> Dict[str, Any]:
         params: Dict[str, Any] = {"limit": limit}

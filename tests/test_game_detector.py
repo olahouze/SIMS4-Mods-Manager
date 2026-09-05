@@ -40,6 +40,7 @@ def test_detect_mods_dir_custom(tmp_path):
 
 
 def test_non_breaking_space_sims4_detection(tmp_path, monkeypatch):
+    GameDetector.clear_cache()
     # Simulate Documents/Electronic Arts/Les\xa0Sims\xa04
     docs_dir = tmp_path / "Documents"
     ea_dir = docs_dir / "Electronic Arts"

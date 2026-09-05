@@ -288,6 +288,18 @@ class LaunchGameResponse(BaseModel):
     message: str
 
 
+class DatabaseStatsResponse(BaseModel):
+    catalog_mods_count: int
+    installed_mods_count: int
+    db_path: str
+
+
+class DatabasePurgeResponse(BaseModel):
+    success: bool
+    deleted_count: int
+    message: str
+
+
 # --- Logs ---
 class LogsResponse(BaseModel):
     total: int

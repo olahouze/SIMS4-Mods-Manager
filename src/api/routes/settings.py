@@ -6,8 +6,11 @@ from src.api.models import (
     SettingsUpdateRequest,
     ClearCacheResponse,
     LaunchGameResponse,
+    DatabaseStatsResponse,
+    DatabasePurgeResponse,
 )
 from src.core.config import AppConfig
+from src.core.database import DatabaseManager, CatalogMod, InstalledMod
 from src.core.game_detector import GameDetector
 from src.utils.logger import logger
 
@@ -97,3 +100,33 @@ def launch_game():
         )
 
     return LaunchGameResponse(success=True, message="Les Sims 4 a été lancé avec succès.")
+
+
+@router.get("/settings/database/stats", response_model=DatabaseStatsResponse)
+def get_database_stats():
+    """Returns total counts of catalog mods and installed mods in local database."""
+    db = DatabaseManager.get_instance()
+    with db.get_session() as session:
+        cat_count = session.query(CatalogMod).count()
+        inst_count = session.query(InstalledMod).count()
+
+    return DatabaseStatsResponse(
+        catalog_mods_count=cat_count,
+        installed_mods_count=inst_count,
+        db_path=str(AppConfig.get_db_path()),
+    )
+
+
+@router.post("/settings/database/purge", response_model=DatabasePurgeResponse)
+def purge_database():
+    """
+    Purges all indexed catalog mods to reset catalog database.
+    Does not delete physical files in the user's Sims 4 Mods directory.
+    """
+    db = DatabaseManager.get_instance()
+    deleted = db.purge_catalog()
+    return DatabasePurgeResponse(
+        success=True,
+        deleted_count=deleted,
+        message=f"{deleted} mod(s) supprimé(s) du catalogue.",
+    )

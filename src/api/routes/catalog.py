@@ -32,6 +32,7 @@ from src.core.update_checker import check_has_update
 from src.providers import ProviderRegistry
 from src.providers.loverslab import is_wickedwhims_name, is_nisa_name
 from src.utils.logger import logger
+from src.utils.mod_matcher import ModMatcher
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
 
@@ -224,16 +225,25 @@ def resolve_mod_dependencies(
                 title = "Nisa's Wicked Perversions"
                 source = "loverslab"
             else:
-                cat_match = (
-                    session.query(CatalogMod)
-                    .filter((CatalogMod.title.ilike(f"%{title}%")) | (CatalogMod.remote_id == title))
-                    .first()
-                )
-                if cat_match:
+                # Use ModMatcher for robust regex cleaning and score-based matching
+                match_res = ModMatcher.find_best_catalog_match(title, session, min_threshold=0.70)
+                if match_res:
+                    cat_match, match_score = match_res
                     r_id = cat_match.remote_id
                     url = cat_match.page_url
                     title = cat_match.title
                     source = cat_match.source
+                else:
+                    cat_match = (
+                        session.query(CatalogMod)
+                        .filter((CatalogMod.title.ilike(f"%{title}%")) | (CatalogMod.remote_id == title))
+                        .first()
+                    )
+                    if cat_match:
+                        r_id = cat_match.remote_id
+                        url = cat_match.page_url
+                        title = cat_match.title
+                        source = cat_match.source
 
         # 2. Check installed status
         is_installed = False
@@ -241,6 +251,12 @@ def resolve_mod_dependencies(
             is_installed = True
         elif title.lower() in installed_by_title:
             is_installed = True
+        else:
+            # Score check against all installed mods
+            installed_list = list(installed_by_remote.values()) + list(installed_by_title.values())
+            im_match = ModMatcher.find_best_installed_match(title, installed_list, min_threshold=0.85)
+            if im_match:
+                is_installed = True
 
         # 3. Determine status among the 4 states
         if is_installed:
