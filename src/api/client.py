@@ -150,6 +150,11 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
+    def get_mod_dependents(self, mod_id: int) -> Dict[str, Any]:
+        resp = self._client.get(f"/api/installed/{mod_id}/dependents")
+        resp.raise_for_status()
+        return resp.json()
+
     def uninstall_mod(self, mod_id: int) -> Dict[str, Any]:
         resp = self._client.delete(f"/api/installed/{mod_id}")
         resp.raise_for_status()

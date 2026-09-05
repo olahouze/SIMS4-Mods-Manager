@@ -3,8 +3,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
-from src.api.routes import accounts, catalog, installed, updates, settings, logs, system
-from src.core.database import DatabaseManager
+from src.api.routes import (
+    accounts_router,
+    catalog_router,
+    installed_mods_router,
+    mod_updates_router,
+    settings_router,
+    logs_router,
+    system_router,
+)
+from src.database import DatabaseManager
 from src.providers import ProviderRegistry
 from src.utils.logger import logger
 
@@ -43,13 +51,13 @@ def create_app() -> FastAPI:
     )
 
     # Mount API routers
-    app.include_router(accounts.router, prefix="/api")
-    app.include_router(catalog.router, prefix="/api")
-    app.include_router(installed.router, prefix="/api")
-    app.include_router(updates.router, prefix="/api")
-    app.include_router(settings.router, prefix="/api")
-    app.include_router(logs.router, prefix="/api")
-    app.include_router(system.router, prefix="/api")
+    app.include_router(accounts_router.router, prefix="/api")
+    app.include_router(catalog_router.router, prefix="/api")
+    app.include_router(installed_mods_router.router, prefix="/api")
+    app.include_router(mod_updates_router.router, prefix="/api")
+    app.include_router(settings_router.router, prefix="/api")
+    app.include_router(logs_router.router, prefix="/api")
+    app.include_router(system_router.router, prefix="/api")
 
     @app.get("/", include_in_schema=False)
     def root():

@@ -1,13 +1,14 @@
 import os
 import time
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 from curl_cffi import requests as cffi_requests
 
 from src.core.config import AppConfig
-from src.core.database import DatabaseManager, AccountSession
+from src.database import DatabaseManager, AccountSession
 from src.utils.logger import logger
 
 
@@ -21,6 +22,31 @@ class SessionManager:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
+
+    _http_sessions: Dict[str, cffi_requests.Session] = {}
+    _http_sessions_lock: threading.Lock = threading.Lock()
+
+    @classmethod
+    def invalidate_http_session(cls, provider_name: str) -> None:
+        """Closes and removes the pooled HTTP session for a provider."""
+        with cls._http_sessions_lock:
+            old_sess = cls._http_sessions.pop(provider_name.lower(), None)
+            if old_sess:
+                try:
+                    old_sess.close()
+                except Exception:
+                    pass
+
+    @classmethod
+    def close_all_http_sessions(cls) -> None:
+        """Closes all pooled curl_cffi sessions."""
+        with cls._http_sessions_lock:
+            for s in cls._http_sessions.values():
+                try:
+                    s.close()
+                except Exception:
+                    pass
+            cls._http_sessions.clear()
 
     @classmethod
     def get_saved_session(cls, provider_name: str) -> Optional[AccountSession]:
@@ -126,6 +152,7 @@ class SessionManager:
             tokens_found = [
                 k for k in ["cf_clearance", "ips4_hasAcceptedAge", "ips4_member_id", "session_id"] if k in cookies
             ]
+            cls.invalidate_http_session(provider_name)
             logger.info(
                 f"Session enregistrée pour '{provider_name}': {len(cookies)} cookie(s) sauvegardé(s). "
                 f"Tokens identifiés: {tokens_found}. Utilisateur: '{user_display_name or 'Anonyme/Anti-bot validé'}'."
@@ -135,6 +162,7 @@ class SessionManager:
     def clear_session(cls, provider_name: str) -> bool:
         """Clears stored session from SQLite and removes persistent browser profile directory."""
         try:
+            cls.invalidate_http_session(provider_name)
             db = DatabaseManager.get_instance()
             with db.get_session() as session:
                 acc = session.query(AccountSession).filter_by(provider_name=provider_name).first()
@@ -192,10 +220,17 @@ class SessionManager:
             return False, f"Erreur de connexion: {e}"
 
     @classmethod
-    def get_http_session(cls, provider_name: str) -> cffi_requests.Session:
+    def get_http_session(cls, provider_name: str, force_new: bool = False) -> cffi_requests.Session:
         """
         Returns a configured curl_cffi Session loaded with provider cookies and browser impersonation.
+        Reuses pooled session per provider for connection reuse and performance.
         """
+        key = provider_name.lower()
+        if not force_new:
+            with cls._http_sessions_lock:
+                if key in cls._http_sessions:
+                    return cls._http_sessions[key]
+
         http_session = cffi_requests.Session(impersonate="chrome120")
         http_session.headers.update(
             {
@@ -216,9 +251,13 @@ class SessionManager:
                     http_session.headers["User-Agent"] = acc.user_agent
 
         # For LoversLab: automatically ensure adult age consent cookie
-        if provider_name.lower() == "loverslab":
+        if key == "loverslab":
             http_session.cookies.set("ips4_hasAcceptedAge", "1", domain=".loverslab.com")
             http_session.cookies.set("ips4_IPSSessionFront", "1", domain=".loverslab.com")
+
+        if not force_new:
+            with cls._http_sessions_lock:
+                cls._http_sessions[key] = http_session
 
         return http_session
 

@@ -243,7 +243,7 @@ class ModMatcher:
         and similarity score.
         Returns (catalog_mod, score) or None if no candidate exceeds min_threshold.
         """
-        from src.core.database import CatalogMod
+        from src.database.models import CatalogMod
 
         if not query:
             return None

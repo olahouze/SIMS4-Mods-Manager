@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool
 
+from src.core.config import AppConfig
+from src.ui.components.image_cache import ImageCache
 from src.ui.components.status_badge import StatusBadge
 from src.api.client import get_api_client
 from src.utils.logger import logger
@@ -419,17 +421,24 @@ class ModCard(QFrame):
         self._load_thumbnail_async()
 
     def _load_thumbnail_async(self):
-        """Checks disk cache or dispatches async download task."""
+        """Checks memory/disk cache or dispatches async download task."""
         thumb_url = self.mod_data.get("thumbnail_url", "")
         if not thumb_url:
+            return
+
+        cached_pix = ImageCache.get(thumb_url)
+        if cached_pix:
+            scaled = cached_pix.scaled(
+                271, 145, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+            )
+            self.thumb_label.setPixmap(scaled)
+            self.thumb_label.setText("")
             return
 
         source = self.mod_data.get("source", "loverslab")
         remote_id = str(self.mod_data.get("remote_id", "unknown"))
         cache_name = f"thumb_{source}_{remote_id}.jpg"
-        cache_dir = Path.home() / ".sims4_mod_manager" / "cache" / "thumbnails"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_dir / cache_name
+        cache_path = AppConfig.get_thumbnails_cache_dir() / cache_name
 
         if cache_path.exists() and cache_path.stat().st_size > 100:
             self._display_image(str(cache_path))
@@ -444,6 +453,9 @@ class ModCard(QFrame):
     def _display_image(self, image_path: str):
         pixmap = QPixmap(image_path)
         if not pixmap.isNull():
+            thumb_url = self.mod_data.get("thumbnail_url", "")
+            if thumb_url:
+                ImageCache.set(thumb_url, pixmap)
             scaled = pixmap.scaled(
                 271, 145, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
             )

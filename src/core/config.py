@@ -33,6 +33,11 @@ class AppConfig:
 
     @classmethod
     def get_db_path(cls) -> Path:
+        env_path = os.environ.get("SIMS4_DB_PATH")
+        if env_path:
+            p = Path(env_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            return p
         return cls.get_app_dir() / "sims4_mods.db"
 
     @classmethod
@@ -48,8 +53,38 @@ class AppConfig:
         return path
 
     @classmethod
+    def get_cache_dir(cls) -> Path:
+        path = cls.get_app_dir() / "cache"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @classmethod
     def get_thumbnails_cache_dir(cls) -> Path:
-        path = cls.get_app_dir() / "cache" / "thumbnails"
+        path = cls.get_cache_dir() / "thumbnails"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @classmethod
+    def get_images_cache_dir(cls) -> Path:
+        path = cls.get_cache_dir() / "images"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @classmethod
+    def get_screenshots_cache_dir(cls) -> Path:
+        path = cls.get_cache_dir() / "screenshots"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @classmethod
+    def get_desc_images_cache_dir(cls) -> Path:
+        path = cls.get_cache_dir() / "desc_images"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @classmethod
+    def get_logs_dir(cls) -> Path:
+        path = cls.get_app_dir() / "logs"
         path.mkdir(parents=True, exist_ok=True)
         return path
 

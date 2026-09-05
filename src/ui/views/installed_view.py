@@ -197,36 +197,66 @@ class InstalledView(QWidget):
                 row += 1
 
     def _on_delete_mod(self, mod_data: dict):
-        """Confirms with user and uninstalls mod via API."""
+        """Confirms with user and uninstalls mod via API, with dependency warning if other mods need it."""
         title = mod_data.get("title", "ce mod")
         mod_id = mod_data.get("id")
         folder_name = mod_data.get("folder_name", "")
 
-        reply = QMessageBox.question(
-            self,
-            "Confirmer la suppression",
-            f"Voulez-vous vraiment désinstaller et supprimer définitivement le mod suivant ?\n\n"
-            f"• Titre : {title}\n"
-            f"• Dossier : {folder_name}\n\n"
-            f"Le dossier physique et tous ses fichiers seront supprimés de votre jeu Sims 4.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
+        # 1. Check if other installed mods depend on this mod
+        dependents = []
+        try:
+            dep_res = self.api_client.get_mod_dependents(mod_id)
+            dependents = dep_res.get("dependents", [])
+        except Exception as e:
+            logger.debug(f"Could not check dependents for mod {mod_id}: {e}")
 
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                res = self.api_client.uninstall_mod(mod_id)
-                if res.get("success", False):
-                    logger.info(f"Mod '{title}' désinstallé avec succès.")
-                    QMessageBox.information(self, "Mod Supprimé", f"Le mod '{title}' a été supprimé avec succès.")
-                    self.mods_changed.emit()
-                else:
-                    logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")
-                    QMessageBox.warning(self, "Erreur", res.get("message", "Échec de la suppression."))
-                self.refresh_mods()
-            except Exception as e:
-                logger.error(f"Erreur lors de la désinstallation du mod {mod_id}: {e}")
-                QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {e}")
+        # 2. Display warning if dependent mods are found
+        if dependents:
+            dep_lines = "\n".join(f"  • {d.get('title', 'Mod')} ({d.get('folder_name', '')})" for d in dependents)
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("⚠️ Attention : Mod Requis par d'Autres Mods")
+            msg_box.setText(
+                f"Le mod « {title} » est un prérequis indispensable pour {len(dependents)} autre(s) mod(s) installé(s) :\n\n"
+                f"{dep_lines}\n\n"
+                f"⚠️ Si vous supprimez ce mod, ces autres mods ne fonctionneront plus correctement !\n\n"
+                f"Voulez-vous tout de même désinstaller et supprimer définitivement « {title} » ?"
+            )
+            btn_delete = msg_box.addButton("Supprimer quand même", QMessageBox.ButtonRole.DestructiveRole)
+            btn_cancel = msg_box.addButton("Annuler", QMessageBox.ButtonRole.RejectRole)
+            msg_box.setDefaultButton(btn_cancel)
+            msg_box.exec()
+
+            if msg_box.clickedButton() != btn_delete:
+                return
+        else:
+            # Standard confirmation
+            reply = QMessageBox.question(
+                self,
+                "Confirmer la suppression",
+                f"Voulez-vous vraiment désinstaller et supprimer définitivement le mod suivant ?\n\n"
+                f"• Titre : {title}\n"
+                f"• Dossier : {folder_name}\n\n"
+                f"Le dossier physique et tous ses fichiers seront supprimés de votre jeu Sims 4.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            res = self.api_client.uninstall_mod(mod_id)
+            if res.get("success", False):
+                logger.info(f"Mod '{title}' désinstallé avec succès.")
+                QMessageBox.information(self, "Mod Supprimé", f"Le mod '{title}' a été supprimé avec succès.")
+                self.mods_changed.emit()
+            else:
+                logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")
+                QMessageBox.warning(self, "Erreur", res.get("message", "Échec de la suppression."))
+            self.refresh_mods()
+        except Exception as e:
+            logger.error(f"Erreur lors de la désinstallation du mod {mod_id}: {e}")
+            QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {e}")
 
     def scan_mods_folder(self):
         try:

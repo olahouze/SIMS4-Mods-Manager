@@ -1,7 +1,6 @@
 import sys
 import logging
 from collections import deque
-from pathlib import Path
 from typing import List
 
 
@@ -102,9 +101,10 @@ def setup_logger(name: str = "sims4_mod_manager") -> logging.Logger:
     _logger.addHandler(console_handler)
 
     # File Handler
-    log_dir = Path.home() / _APP_DIR_NAME / "logs"
     try:
-        log_dir.mkdir(parents=True, exist_ok=True)
+        from src.core.config import AppConfig
+
+        log_dir = AppConfig.get_logs_dir()
         file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)

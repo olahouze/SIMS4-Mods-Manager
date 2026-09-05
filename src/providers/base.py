@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Tuple, Optional, Callable
+from typing import List, Dict, Any, Tuple, Optional, Callable, Union
 from pathlib import Path
+
+from src.core.dto import ModDetailsDTO
 
 
 class BaseSourceProvider(ABC):
@@ -18,7 +20,7 @@ class BaseSourceProvider(ABC):
         pass
 
     @abstractmethod
-    def get_mod_details(self, mod_url: str) -> Dict[str, Any]:
+    def get_mod_details(self, mod_url: str) -> Union[Dict[str, Any], ModDetailsDTO]:
         """
         Fetches full details for a specific mod page (download links, external links, version).
         """

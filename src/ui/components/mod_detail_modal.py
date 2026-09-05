@@ -38,18 +38,17 @@ class DescriptionFetchWorker(QThread):
         """Downloads external images in background in parallel and replaces src with local file URIs."""
         try:
             from bs4 import BeautifulSoup
-            import hashlib
-            from pathlib import Path
             from concurrent.futures import ThreadPoolExecutor
+            from src.core.config import AppConfig
             from src.core.session_manager import SessionManager
+            from src.utils.cache_utils import hash_url
 
             soup = BeautifulSoup(html_str, "html.parser")
             imgs = soup.select("img")
             if not imgs:
                 return html_str
 
-            cache_dir = Path.home() / ".sims4_mod_manager" / "cache" / "desc_images"
-            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_dir = AppConfig.get_desc_images_cache_dir()
             session = SessionManager.get_http_session("loverslab")
 
             def _detect_ext(content: bytes, fallback_ext: str) -> str:
@@ -73,7 +72,7 @@ class DescriptionFetchWorker(QThread):
             resolved_map = {}
 
             def _download_image(src: str):
-                url_hash = hashlib.md5(src.encode("utf-8")).hexdigest()
+                url_hash = hash_url(src)
                 # Check if any cached file with this hash already exists
                 existing_matches = list(cache_dir.glob(f"{url_hash}.*"))
                 for ex in existing_matches:

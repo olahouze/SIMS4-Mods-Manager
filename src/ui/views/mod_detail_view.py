@@ -1,9 +1,5 @@
 import webbrowser
-import hashlib
-import re
-from pathlib import Path
 from typing import Optional, Dict, Any, List
-from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -16,105 +12,20 @@ from PySide6.QtWidgets import (
     QTextBrowser,
     QProgressBar,
 )
-from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 
 from src.api.client import get_api_client
-from src.core.session_manager import SessionManager
+from src.core.config import AppConfig
 from src.ui.components.status_badge import StatusBadge
 from src.ui.components.image_viewer_modal import ImageViewerModal
+from src.ui.workers import (
+    FetchDetailsWorker,
+    GalleryBatchWorker,
+    GalleryThumbWorker,
+    DescriptionImageLoaderWorker,
+)
 from src.utils.logger import logger
-
-
-class FetchDetailsWorker(QThread):
-    finished = Signal(dict)
-    failed = Signal(str)
-
-    def __init__(self, mod_id: Optional[int], page_url: Optional[str], source: str, remote_id: str):
-        super().__init__()
-        self.mod_id = mod_id
-        self.page_url = page_url
-        self.source = source
-        self.remote_id = remote_id
-
-    def run(self):
-        try:
-            api_client = get_api_client()
-            if self.mod_id:
-                data = api_client.get_catalog_mod_details(self.mod_id)
-            else:
-                # Mod opened from 'InstalledView' or without catalog id
-                found_id = None
-                try:
-                    if self.remote_id:
-                        cat = api_client.get_catalog(search=self.remote_id, page_size=10)
-                        for item in cat.get("items", []):
-                            if str(item.get("remote_id")) == str(self.remote_id) and item.get("source") == self.source:
-                                found_id = item.get("id")
-                                break
-                except Exception as e:
-                    logger.debug(f"Could not find catalog id for installed mod #{self.remote_id}: {e}")
-
-                if found_id:
-                    data = api_client.get_catalog_mod_details(found_id)
-                else:
-                    chk = api_client.check_dependencies({
-                        "source": self.source,
-                        "remote_id": self.remote_id,
-                        "page_url": self.page_url,
-                    })
-                    data = {
-                        "source": self.source,
-                        "remote_id": self.remote_id,
-                        "requirements_text": chk.get("requirements_text"),
-                        "requirements_status": chk.get("requirements_status", "NONE"),
-                        "dependencies": chk.get("already_installed_dependencies", []) + chk.get("missing_dependencies", []),
-                        "description": "",
-                        "screenshots": [],
-                    }
-            self.finished.emit(data)
-        except Exception as e:
-            self.failed.emit(str(e))
-
-
-class GalleryThumbWorker(QThread):
-    thumb_ready = Signal(int, QPixmap)
-
-    def __init__(self, index: int, url: str, cache_dir: Path):
-        super().__init__()
-        self.index = index
-        self.url = url
-        self.cache_dir = cache_dir
-
-    def run(self):
-        try:
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-            u_hash = hashlib.md5(self.url.encode("utf-8")).hexdigest()
-            ext = ".jpg"
-            if ".png" in self.url.lower():
-                ext = ".png"
-            elif ".webp" in self.url.lower():
-                ext = ".webp"
-            cached = self.cache_dir / f"thumb_{u_hash}{ext}"
-
-            if not cached.exists() or cached.stat().st_size == 0:
-                session = SessionManager.get_http_session("loverslab")
-                resp = session.get(self.url, timeout=15)
-                if resp.status_code == 200 and len(resp.content) > 0:
-                    with open(cached, "wb") as f:
-                        f.write(resp.content)
-
-            if cached.exists() and cached.stat().st_size > 0:
-                pix = QPixmap(str(cached))
-                if not pix.isNull():
-                    scaled = pix.scaled(
-                        170, 110,
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    self.thumb_ready.emit(self.index, scaled)
-        except Exception as e:
-            logger.debug(f"Error loading gallery thumb {self.url}: {e}")
 
 
 class ScreenshotCard(QFrame):
@@ -153,80 +64,6 @@ class ScreenshotCard(QFrame):
         super().mousePressEvent(event)
 
 
-class DescriptionImageLoaderWorker(QThread):
-    images_updated = Signal(str)
-
-    def __init__(self, raw_html: str):
-        super().__init__()
-        self.raw_html = raw_html
-        self.cache_dir = Path.home() / ".sims4_mod_manager" / "cache" / "images"
-        self._is_cancelled = False
-
-    def cancel(self):
-        self._is_cancelled = True
-
-    def run(self):
-        if not self.raw_html:
-            return
-
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        img_urls = list(set(re.findall(r'<img[^>]+src=["\'](https?://[^"\']+)["\']', self.raw_html)))
-        if not img_urls:
-            return
-
-        url_to_local = {}
-        to_fetch = []
-        for u in img_urls:
-            u_hash = hashlib.md5(u.encode("utf-8")).hexdigest()
-            ext = ".jpg"
-            if ".png" in u.lower():
-                ext = ".png"
-            elif ".webp" in u.lower():
-                ext = ".webp"
-            cached = self.cache_dir / f"img_{u_hash}{ext}"
-            if cached.exists() and cached.stat().st_size > 0:
-                url_to_local[u] = cached.as_uri()
-            else:
-                to_fetch.append((u, cached))
-
-        # First update with already cached images immediately
-        if url_to_local:
-            html = self.raw_html
-            for remote_u, local_uri in url_to_local.items():
-                html = html.replace(remote_u, local_uri)
-            self.images_updated.emit(html)
-
-        if not to_fetch or self._is_cancelled:
-            return
-
-        session = SessionManager.get_http_session("loverslab")
-
-        def _fetch_one(item):
-            if self._is_cancelled:
-                return None
-            remote_url, dest_path = item
-            try:
-                resp = session.get(remote_url, timeout=15)
-                if resp.status_code == 200 and len(resp.content) > 0:
-                    with open(dest_path, "wb") as f:
-                        f.write(resp.content)
-                    return remote_url, dest_path.as_uri()
-            except Exception as e:
-                logger.debug(f"Failed to fetch inline image {remote_url}: {e}")
-            return None
-
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            for result in executor.map(_fetch_one, to_fetch):
-                if result:
-                    url_to_local[result[0]] = result[1]
-
-        if not self._is_cancelled and url_to_local:
-            html = self.raw_html
-            for remote_u, local_uri in url_to_local.items():
-                html = html.replace(remote_u, local_uri)
-            self.images_updated.emit(html)
-
-
 class ModDetailView(QWidget):
     """
     Dedicated full-page view taking 100% of the application screen
@@ -247,11 +84,14 @@ class ModDetailView(QWidget):
         self.origin_index: int = 1
         self.is_installed: bool = False
         self.has_update: bool = False
+        self._current_load_id: int = 0
+        self.main_scroll: Optional[QScrollArea] = None
         self.worker: Optional[FetchDetailsWorker] = None
         self.screenshots: List[str] = []
+        self.gallery_batch_worker: Optional[GalleryBatchWorker] = None
         self.gallery_workers: List[GalleryThumbWorker] = []
         self.desc_img_worker: Optional[DescriptionImageLoaderWorker] = None
-        self.cache_dir = Path.home() / ".sims4_mod_manager" / "cache" / "screenshots"
+        self.cache_dir = AppConfig.get_screenshots_cache_dir()
 
         self.init_ui()
 
@@ -301,6 +141,7 @@ class ModDetailView(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background-color: transparent; border: none;")
+        self.main_scroll = scroll
 
         self.content_widget = QWidget()
         self.c_layout = QVBoxLayout(self.content_widget)
@@ -564,6 +405,9 @@ class ModDetailView(QWidget):
 
     def load_mod(self, mod_data: dict, origin_name: str = "Catalogue", origin_index: int = 1):
         """Loads and displays mod details, initiating background fetch for rich content, gallery, and dependencies."""
+        self._current_load_id += 1
+        current_load_id = self._current_load_id
+
         self.mod_data = mod_data
         self.origin_name = origin_name
         self.origin_index = origin_index
@@ -643,38 +487,64 @@ class ModDetailView(QWidget):
                 QPushButton:hover { background-color: #6366f1; }
             """)
 
-        # Thumbnail
+        # 1. Reset scroll position immediately to top
+        if self.main_scroll:
+            self.main_scroll.verticalScrollBar().setValue(0)
+
+        # 2. Reset description view immediately with clean loading skeleton (erases previous mod's description)
+        self.desc_browser.setHtml("""
+            <div style='text-align: center; padding: 60px 20px; color: #64748b; font-family: sans-serif;'>
+                <div style='font-size: 32px; margin-bottom: 12px;'>⏳</div>
+                <div style='font-size: 15px; font-weight: 700; color: #94a3b8;'>Chargement des détails et de la description...</div>
+                <div style='font-size: 12px; margin-top: 6px; color: #475569;'>Inspection des prérequis et des galeries d'images</div>
+            </div>
+        """)
+
+        # 3. Reset and load thumbnail
         self._load_local_thumbnail()
 
-        # Render initial requirements state if already present in mod_data, or show loading state
+        # 4. Render initial requirements state if already present in mod_data, or show loading state
         if mod_data.get("requirements_status") == "RESOLVED" and mod_data.get("dependencies"):
             self._render_requirements(mod_data)
         else:
             self._set_requirements_loading()
 
-        # Clear existing gallery
+        # 5. Clear and hide existing gallery immediately
         self.screenshots = []
         self._clear_gallery()
         self.gallery_frame.setVisible(False)
 
-        # Cancel previous image loader worker
+        # 6. Stop and disconnect previous background workers cleanly
+        if self.worker and self.worker.isRunning():
+            try:
+                self.worker.finished.disconnect()
+                self.worker.failed.disconnect()
+            except Exception:
+                pass
+            self.worker.terminate()
+            self.worker = None
+
         if self.desc_img_worker and self.desc_img_worker.isRunning():
             self.desc_img_worker.cancel()
             self.desc_img_worker.terminate()
+            self.desc_img_worker = None
 
-        # Trigger background fetch for full description, gallery screenshots, and live dependencies check
+        if self.gallery_batch_worker and self.gallery_batch_worker.isRunning():
+            self.gallery_batch_worker.cancel()
+            self.gallery_batch_worker.terminate()
+            self.gallery_batch_worker = None
+
+        # 7. Trigger background fetch with load_id guard
         self.loading_bar.setVisible(True)
         mod_id = mod_data.get("id") or mod_data.get("catalog_mod_id")
         page_url = mod_data.get("page_url", "")
         remote_id = str(mod_data.get("remote_id", ""))
 
-        if self.worker and self.worker.isRunning():
-            self.worker.terminate()
-
-        self.worker = FetchDetailsWorker(mod_id, page_url, source, remote_id)
-        self.worker.finished.connect(self._on_details_fetched)
-        self.worker.failed.connect(self._on_details_failed)
+        self.worker = FetchDetailsWorker(mod_id, page_url, source, remote_id, load_id=current_load_id)
+        self.worker.finished.connect(lambda data, lid=current_load_id: self._on_details_fetched(data, lid))
+        self.worker.failed.connect(lambda err, lid=current_load_id: self._on_details_failed(err, lid))
         self.worker.start()
+
 
     def _toggle_requirements_collapse(self):
         """Toggles visibility of the requirements body (collapse / expand)."""
@@ -880,11 +750,15 @@ class ModDetailView(QWidget):
             else:
                 self.req_frame.setVisible(False)
 
-    def _on_details_fetched(self, full_details: dict):
+    def _on_details_fetched(self, full_details: dict, load_id: Optional[int] = None):
+        if load_id is not None and load_id != self._current_load_id:
+            logger.debug(f"Ignoring obsolete details fetched for load_id={load_id} (current={self._current_load_id})")
+            return
+
         self.loading_bar.setVisible(False)
         self._render_requirements(full_details)
 
-        # 1. Render Screenshots Gallery
+        # 1. Render Screenshots Gallery in parallel via GalleryBatchWorker
         self.screenshots = full_details.get("screenshots", [])
         self._render_gallery(self.screenshots)
 
@@ -894,7 +768,10 @@ class ModDetailView(QWidget):
             desc = "<p style='color:#94a3b8;'>Aucune description disponible pour ce mod.</p>"
         self._render_description(desc)
 
-    def _on_details_failed(self, err_msg: str):
+    def _on_details_failed(self, err_msg: str, load_id: Optional[int] = None):
+        if load_id is not None and load_id != self._current_load_id:
+            return
+
         self.loading_bar.setVisible(False)
         logger.debug(f"Details fetch error in ModDetailView: {err_msg}")
         self.desc_browser.setHtml(
@@ -904,7 +781,7 @@ class ModDetailView(QWidget):
             self.req_frame.setVisible(False)
 
     def _render_gallery(self, screenshots: List[str]):
-        """Populates horizontal scroll area with screenshot thumbnail cards."""
+        """Populates horizontal scroll area with screenshot thumbnail cards using parallel GalleryBatchWorker."""
         self._clear_gallery()
         if not screenshots:
             self.gallery_frame.setVisible(False)
@@ -913,17 +790,16 @@ class ModDetailView(QWidget):
         self.gallery_frame.setVisible(True)
         self.gallery_title.setText(f"📸 Galerie & Captures d'écran ({len(screenshots)}) :")
 
-        for idx, url in enumerate(screenshots):
+        for idx in range(len(screenshots)):
             card = ScreenshotCard(idx, self)
             card.clicked.connect(self._open_image_viewer)
             # Insert before the stretch item
             insert_pos = max(0, self.gallery_cards_layout.count() - 1)
             self.gallery_cards_layout.insertWidget(insert_pos, card)
 
-            worker = GalleryThumbWorker(idx, url, self.cache_dir)
-            worker.thumb_ready.connect(self._on_gallery_thumb_ready)
-            self.gallery_workers.append(worker)
-            worker.start()
+        self.gallery_batch_worker = GalleryBatchWorker(screenshots, self.cache_dir, load_id=self._current_load_id)
+        self.gallery_batch_worker.thumb_ready.connect(self._on_gallery_thumb_ready)
+        self.gallery_batch_worker.start()
 
     def _on_gallery_thumb_ready(self, index: int, pix: QPixmap):
         for i in range(self.gallery_cards_layout.count()):
@@ -934,6 +810,11 @@ class ModDetailView(QWidget):
                     break
 
     def _clear_gallery(self):
+        if self.gallery_batch_worker and self.gallery_batch_worker.isRunning():
+            self.gallery_batch_worker.cancel()
+            self.gallery_batch_worker.terminate()
+        self.gallery_batch_worker = None
+
         for w in self.gallery_workers:
             if w.isRunning():
                 w.terminate()
@@ -973,7 +854,7 @@ class ModDetailView(QWidget):
     def _load_local_thumbnail(self):
         source = self.mod_data.get("source", "loverslab")
         remote_id = str(self.mod_data.get("remote_id", "unknown"))
-        cache_path = Path.home() / ".sims4_mod_manager" / "cache" / "thumbnails" / f"thumb_{source}_{remote_id}.jpg"
+        cache_path = AppConfig.get_thumbnails_cache_dir() / f"thumb_{source}_{remote_id}.jpg"
         if cache_path.exists():
             pix = QPixmap(str(cache_path))
             if not pix.isNull():
@@ -981,6 +862,10 @@ class ModDetailView(QWidget):
                     pix.scaled(140, 95, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
                 )
                 self.thumb_label.setText("")
+                return
+        self.thumb_label.setPixmap(QPixmap())
+        self.thumb_label.setText("🎮")
+
 
     def _on_back_clicked(self):
         self.back_requested.emit()

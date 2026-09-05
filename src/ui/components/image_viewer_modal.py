@@ -1,6 +1,5 @@
 from typing import List
 from pathlib import Path
-import hashlib
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -12,7 +11,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap, QKeyEvent
 
+from src.core.config import AppConfig
 from src.core.session_manager import SessionManager
+from src.utils.cache_utils import hash_url, infer_extension
 
 
 class FullImageFetchWorker(QThread):
@@ -27,13 +28,7 @@ class FullImageFetchWorker(QThread):
     def run(self):
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            url_hash = hashlib.md5(self.image_url.encode("utf-8")).hexdigest()
-            ext = ".jpg"
-            if ".png" in self.image_url.lower():
-                ext = ".png"
-            elif ".webp" in self.image_url.lower():
-                ext = ".webp"
-            cached_file = self.cache_dir / f"full_{url_hash}{ext}"
+            cached_file = self.cache_dir / f"full_{hash_url(self.image_url)}{infer_extension(self.image_url)}"
 
             if cached_file.exists() and cached_file.stat().st_size > 0:
                 self.loaded.emit(self.image_url, str(cached_file))
@@ -61,7 +56,7 @@ class ImageViewerModal(QDialog):
         super().__init__(parent)
         self.images = images or []
         self.current_index = max(0, min(current_index, len(self.images) - 1)) if self.images else 0
-        self.cache_dir = Path.home() / ".sims4_mod_manager" / "cache" / "screenshots"
+        self.cache_dir = AppConfig.get_screenshots_cache_dir()
         self.fetch_worker = None
 
         self.setWindowTitle("Visionneuse de Captures d'écran")
@@ -197,13 +192,7 @@ class ImageViewerModal(QDialog):
         url = self.images[self.current_index]
 
         # Check local cache first
-        url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
-        ext = ".jpg"
-        if ".png" in url.lower():
-            ext = ".png"
-        elif ".webp" in url.lower():
-            ext = ".webp"
-        cached_file = self.cache_dir / f"full_{url_hash}{ext}"
+        cached_file = self.cache_dir / f"full_{hash_url(url)}{infer_extension(url)}"
 
         if cached_file.exists() and cached_file.stat().st_size > 0:
             pix = QPixmap(str(cached_file))

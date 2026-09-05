@@ -116,8 +116,8 @@ def main():
     window.show()
 
     # Démarrage de la vérification des dossiers du jeu et des mods installés en tâche de fond
-    from src.core.game_detector import GameDetector
-    from src.core.mod_installer import ModInstaller
+    from src.services.game_service import GameDetector
+    from src.services.mod_installer_service import ModInstaller
 
     GameDetector.start_background_detection_refresh()
     ModInstaller.start_background_installed_mods_verifier()
