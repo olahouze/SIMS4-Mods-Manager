@@ -67,19 +67,21 @@ def main():
     # 3. Mode Par Défaut (API en tâche de fond + GUI PySide6)
     logger.info("Démarrage de l'application en mode GUI (avec API REST en tâche de fond)...")
 
-    # Démarrage du serveur API dans un thread daemon
-    ApiServer.start_background(host=args.host, port=port, wait_ready=True)
+    # Démarrage non-bloquant du serveur API dans un thread daemon (tourne en parallèle du chargement Qt)
+    ApiServer.start_background(host=args.host, port=port, wait_ready=False)
 
     # Initialisation du client API global pour la GUI
     api_url = f"http://{args.host}:{port}"
     client = init_api_client(base_url=api_url)
     logger.info(f"Client API configuré sur {api_url}")
 
-    # Initialisation de Qt
+    # Initialisation de Qt (se déroule pendant le démarrage Uvicorn)
     from PySide6.QtWidgets import QApplication, QMessageBox
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import Qt, QTimer
     from src.ui.app import MainWindow
     from src.utils.logger import attach_qt_handler
+
+    from src.i18n import tr
 
     # Attach Qt log handler before QApplication so UI logs stream in real-time
     attach_qt_handler()
@@ -90,30 +92,38 @@ def main():
     app.setApplicationName("SIMS 4 Mods Manager")
     app.setOrganizationName("OLAHOUZE")
 
-    # Diagnostic de santé via l'API
-    try:
-        health = client.get_health()
-        if not health.get("browser_engine_ready", False):
-            logger.warning("Aucun moteur de navigateur détecté pour Playwright via l'API.")
-            QMessageBox.warning(
-                None,
-                "Navigateur Requis pour l'Anti-Bot",
-                "Aucun navigateur compatible (Chromium, Edge ou Chrome) n'a été détecté pour Playwright.\n\n"
-                "Pour activer les connexions automatiques et le contournement Cloudflare, veuillez exécuter :\n\n"
-                "uv run playwright install chromium",
-            )
-        else:
-            logger.info("Vérification Playwright réussie via l'API.")
+    # Attente express de la disponibilité de l'API (démarrée en parallèle pendant les imports Qt)
+    ApiServer.wait_until_ready(args.host, port, timeout=5.0)
 
-        # Scan initial automatique des mods via l'API
-        scan_res = client.scan_installed_mods()
-        logger.info(f"Scan initial terminé via l'API : {scan_res.get('message', '')}")
-    except Exception as e:
-        logger.error(f"Avertissement lors des vérifications initiales API: {e}")
-
-    # Lancement de la fenêtre principale
+    # Lancement immédiat de la fenêtre principale
     window = MainWindow()
     window.show()
+
+    # Diagnostic Playwright et scan initial exécutés en tâche différée sans bloquer l'affichage
+    def _async_startup_tasks():
+        try:
+            health = client.get_health()
+            if not health.get("browser_engine_ready", False):
+                logger.warning("Aucun moteur de navigateur détecté pour Playwright via l'API.")
+                QMessageBox.warning(
+                    window,
+                    tr("app.browser_required_title"),
+                    tr("app.browser_required_msg"),
+                )
+            else:
+                logger.info("Vérification Playwright réussie via l'API.")
+
+            # Scan initial des mods sans geler l'interface graphique
+            scan_res = client.scan_installed_mods()
+            logger.info(f"Scan initial terminé via l'API : {scan_res.get('message', '')}")
+            if hasattr(window, "installed_view"):
+                window.installed_view.refresh_mods()
+            if hasattr(window, "update_nav_badge"):
+                window.update_nav_badge()
+        except Exception as e:
+            logger.error(f"Avertissement lors des vérifications initiales API: {e}")
+
+    QTimer.singleShot(50, _async_startup_tasks)
 
     # Démarrage de la vérification des dossiers du jeu et des mods installés en tâche de fond
     from src.services.game_service import GameDetector

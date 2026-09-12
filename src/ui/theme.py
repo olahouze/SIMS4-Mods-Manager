@@ -87,6 +87,13 @@ QFrame.ModCard:hover {
     background-color: #1e2235;
 }
 
+/* Settings Sections & Surfaces */
+QFrame.SettingsSection, QFrame#SettingsSection {
+    background-color: #161824;
+    border: 1px solid #282e44;
+    border-radius: 12px;
+}
+
 QLabel.CardTitle {
     font-size: 14px;
     font-weight: 600;

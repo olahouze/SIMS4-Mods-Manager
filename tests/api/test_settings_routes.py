@@ -19,11 +19,16 @@ def test_settings_endpoints(client):
     data = resp.json()
     assert "auto_backup" in data
     assert "backups_dir" in data
+    assert "language" in data
 
     # Patch
-    resp = client.patch("/api/settings", json={"theme": "dark", "auto_backup": True})
+    resp = client.patch("/api/settings", json={"theme": "dark", "auto_backup": True, "language": "es"})
     assert resp.status_code == 200
     assert resp.json()["theme"] == "dark"
+    assert resp.json()["language"] == "es"
+
+    # Restore language to fr
+    client.patch("/api/settings", json={"language": "fr"})
 
     # Clear cache
     resp = client.post("/api/settings/cache/clear")

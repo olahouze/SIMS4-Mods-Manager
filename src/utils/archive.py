@@ -53,7 +53,10 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> List[Path]:
 
     if suffix == ".zip":
         with zipfile.ZipFile(archive_path, "r") as z:
-            z.extractall(dest_dir)
+            try:
+                z.extractall(dest_dir, filter="data")
+            except TypeError:
+                z.extractall(dest_dir)
     elif suffix == ".7z":
         try:
             import py7zr

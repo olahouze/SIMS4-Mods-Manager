@@ -61,6 +61,7 @@ class ApiClient:
         source: Optional[str] = None,
         access: Optional[str] = None,
         status: Optional[str] = None,
+        mod_type: Optional[str] = None,
         sort: Optional[str] = "recent",
         page: int = 1,
         limit: int = 100,
@@ -74,6 +75,8 @@ class ApiClient:
             params["access"] = access
         if status:
             params["status"] = status
+        if mod_type:
+            params["mod_type"] = mod_type
         if sort:
             params["sort"] = sort
 
@@ -90,6 +93,25 @@ class ApiClient:
         resp = self._client.get("/api/catalog/sync/status")
         resp.raise_for_status()
         return resp.json()
+
+    def pause_catalog_sync(self, provider: Optional[str] = None) -> Dict[str, Any]:
+        params = {"provider": provider} if provider else None
+        resp = self._client.post("/api/catalog/sync/pause", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def resume_catalog_sync(self, provider: Optional[str] = None) -> Dict[str, Any]:
+        params = {"provider": provider} if provider else None
+        resp = self._client.post("/api/catalog/sync/resume", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def stop_catalog_sync(self, provider: Optional[str] = None) -> Dict[str, Any]:
+        params = {"provider": provider} if provider else None
+        resp = self._client.post("/api/catalog/sync/stop", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
 
     def install_mod(
         self,

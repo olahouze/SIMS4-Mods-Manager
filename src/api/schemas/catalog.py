@@ -9,7 +9,10 @@ class DependencyItem(BaseModel):
     title: str
     url: str = ""
     is_installed: bool = False
-    status: str = "DETECTED_NOT_INSTALLED"  # "INSTALLED", "DETECTED_NOT_INSTALLED", "NOT_DETECTED_SCANNING", "NOT_DETECTED_FINISHED"
+    status: str = "DETECTED_NOT_INSTALLED"  # "INSTALLED", "DETECTED_NOT_INSTALLED", "NOT_DETECTED_SCANNING", "NOT_DETECTED_FINISHED", "GAME_DLC"
+    is_game_dlc: bool = False
+    dlc_name: Optional[str] = None
+    dlc_code: Optional[str] = None
 
 
 class DependenciesCheckResponse(BaseModel):
@@ -22,6 +25,8 @@ class DependenciesCheckResponse(BaseModel):
     blocking_reason: Optional[str] = None
     already_installed_dependencies: List[DependencyItem] = []
     missing_dependencies: List[DependencyItem] = []
+    game_dlc_dependencies: List[DependencyItem] = []
+
 
 
 class CatalogModItem(BaseModel):
@@ -67,6 +72,8 @@ class SubCategoryProgress(BaseModel):
 
 class CatalogSyncStatusResponse(BaseModel):
     is_running: bool
+    is_paused: bool = False
+    is_stopped: bool = False
     progress_percent: int
     message: str
     total_scraped: int

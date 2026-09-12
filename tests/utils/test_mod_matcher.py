@@ -110,3 +110,34 @@ def test_find_best_installed_match():
     assert m2 is not None
     mod2, score2 = m2
     assert mod2.folder_name == "wonderfulwhims"
+
+
+def test_generic_excluded_words_never_match(tmp_path):
+    """Ensures generic section headers like 'Requirements' or 'Download' never match arbitrary mods."""
+    db_file = tmp_path / "test_generic_noise.db"
+    db_mgr = DatabaseManager(str(db_file))
+
+    with db_mgr.get_session() as session:
+        poster_mod = CatalogMod(
+            source="loverslab",
+            remote_id="9999",
+            title="30 Gamer Futa Poster Girls ;) Download Requirements!!!",
+            author="SomeCreator",
+            page_url="https://loverslab.com/files/file/9999-posters/",
+        )
+        session.add(poster_mod)
+        session.commit()
+
+        # Score between generic 'Requirements' and the mod title must be 0.0
+        score = ModMatcher.match_score("Requirements", poster_mod.title)
+        assert score == 0.0
+
+        # find_best_catalog_match for 'Requirements' must return None
+        match = ModMatcher.find_best_catalog_match("Requirements", session, min_threshold=0.70)
+        assert match is None
+
+        # Other noise words
+        for noise in ["Prerequisites", "Download", "Dependencies", "None", "Installation"]:
+            assert ModMatcher.match_score(noise, poster_mod.title) == 0.0
+            assert ModMatcher.find_best_catalog_match(noise, session) is None
+

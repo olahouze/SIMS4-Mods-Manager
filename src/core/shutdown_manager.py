@@ -18,6 +18,13 @@ class ShutdownManager:
         return cls._shutting_down
 
     @classmethod
+    def reset(cls):
+        """Resets the shutdown state and callbacks list. Useful for test environments."""
+        with cls._lock:
+            cls._shutting_down = False
+            cls._callbacks.clear()
+
+    @classmethod
     def trigger_shutdown(cls):
         with cls._lock:
             if cls._shutting_down:

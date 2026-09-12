@@ -1,4 +1,4 @@
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QObject, Signal, QRunnable, QThreadPool
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -12,16 +12,45 @@ from PySide6.QtWidgets import (
 )
 
 from src.api.client import get_api_client
+from src.core.config import AppConfig
+from src.core.shutdown_manager import ShutdownManager
+from src.i18n import I18nManager, tr
 from src.ui.theme import DARK_THEME_QSS
+from src.ui.views.accounts_view import AccountsView
 from src.ui.views.catalog_view import CatalogView
 from src.ui.views.installed_view import InstalledView
-from src.ui.views.updates_view import UpdatesView
-from src.ui.views.accounts_view import AccountsView
-from src.ui.views.settings_view import SettingsView
 from src.ui.views.logs_view import LogsView
 from src.ui.views.mod_detail_view import ModDetailView
-from src.core.shutdown_manager import ShutdownManager
+from src.ui.views.settings_view import SettingsView
+from src.ui.views.updates_view import UpdatesView
 from src.utils.logger import logger
+
+
+class StatusCheckSignals(QObject):
+    health_checked = Signal(bool, bool)  # success, mods_detected
+    updates_checked = Signal(int)  # updates_count
+
+
+class BackgroundStatusWorker(QRunnable):
+    """Executes lightweight health and updates checks off the Qt GUI thread."""
+
+    def __init__(self, api_client, signals: StatusCheckSignals):
+        super().__init__()
+        self.api_client = api_client
+        self.signals = signals
+
+    def run(self):
+        try:
+            health = self.api_client.get_health()
+            self.signals.health_checked.emit(True, health.get("mods_dir_detected", False))
+        except Exception:
+            self.signals.health_checked.emit(False, False)
+
+        try:
+            data = self.api_client.get_updates()
+            self.signals.updates_checked.emit(data.get("count", 0))
+        except Exception:
+            self.signals.updates_checked.emit(0)
 
 
 class MainWindow(QMainWindow):
@@ -30,12 +59,22 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.api_client = get_api_client()
-        self.setWindowTitle("SIMS 4 Mods Manager")
+        self.i18n = I18nManager.instance()
+        self.status_signals = StatusCheckSignals()
+        self.status_signals.health_checked.connect(self._on_health_checked)
+        self.status_signals.updates_checked.connect(self._on_updates_checked)
+
+        # Initialize language from saved configuration
+        initial_lang = AppConfig.load().language
+        self.i18n.set_language(initial_lang)
+
+        self.setWindowTitle(tr("app.window_title"))
         self.resize(1280, 800)
         self.setMinimumSize(1000, 650)
         self.setStyleSheet(DARK_THEME_QSS)
 
         self.init_ui()
+        self.i18n.language_changed.connect(self.retranslate_ui)
         self.refresh_game_status()
         self.update_nav_badge()
 
@@ -76,12 +115,12 @@ class MainWindow(QMainWindow):
         # Navigation Buttons
         self.nav_buttons = []
 
-        self.btn_accounts = self._create_nav_button("🌐  Comptes & Anti-Bot", 0)
-        self.btn_catalog = self._create_nav_button("📁  Catalogue Unifié", 1)
-        self.btn_installed = self._create_nav_button("💾  Mes Mods", 2)
-        self.btn_updates = self._create_nav_button("🔄  Mises à Jour", 3)
-        self.btn_logs = self._create_nav_button("📋  Journaux & Logs", 4)
-        self.btn_settings = self._create_nav_button("⚙️  Paramètres", 5)
+        self.btn_accounts = self._create_nav_button(tr("nav.accounts"), 0)
+        self.btn_catalog = self._create_nav_button(tr("nav.catalog"), 1)
+        self.btn_installed = self._create_nav_button(tr("nav.installed"), 2)
+        self.btn_updates = self._create_nav_button(tr("nav.updates"), 3)
+        self.btn_logs = self._create_nav_button(tr("nav.logs"), 4)
+        self.btn_settings = self._create_nav_button(tr("nav.settings"), 5)
 
         sidebar_layout.addWidget(self.btn_accounts)
         sidebar_layout.addWidget(self.btn_catalog)
@@ -96,12 +135,12 @@ class MainWindow(QMainWindow):
         footer_layout = QVBoxLayout()
         footer_layout.setSpacing(6)
 
-        self.game_status = QLabel("Vérification du jeu...")
+        self.game_status = QLabel(tr("nav.game_checking"))
         self.game_status.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: 600; padding: 4px 0;")
         footer_layout.addWidget(self.game_status)
 
-        play_btn = QPushButton("▶ Lancer Les Sims 4")
-        play_btn.setStyleSheet("""
+        self.play_btn = QPushButton(tr("nav.launch_game"))
+        self.play_btn.setStyleSheet("""
             QPushButton {
                 background-color: #10b981;
                 color: #ffffff;
@@ -112,8 +151,8 @@ class MainWindow(QMainWindow):
             }
             QPushButton:hover { background-color: #059669; }
         """)
-        play_btn.clicked.connect(self._launch_game)
-        footer_layout.addWidget(play_btn)
+        self.play_btn.clicked.connect(self._launch_game)
+        footer_layout.addWidget(self.play_btn)
 
         sidebar_layout.addLayout(footer_layout)
         main_layout.addWidget(sidebar)
@@ -267,40 +306,75 @@ class MainWindow(QMainWindow):
         if hasattr(self.catalog_view, "start_sync_monitoring"):
             self.catalog_view.start_sync_monitoring()
 
+    def retranslate_ui(self):
+        """Retranslates all navigation elements, titles and propagates to child views."""
+        self.setWindowTitle(tr("app.window_title"))
+        self.btn_accounts.setText(tr("nav.accounts"))
+        self.btn_catalog.setText(tr("nav.catalog"))
+        self.btn_installed.setText(tr("nav.installed"))
+        self.btn_logs.setText(tr("nav.logs"))
+        self.btn_settings.setText(tr("nav.settings"))
+        self.play_btn.setText(tr("nav.launch_game"))
+        self.refresh_game_status()
+        self.update_nav_badge()
+
+        # Propagate to sub-views if they implement retranslate_ui
+        for view in [
+            self.accounts_view,
+            self.catalog_view,
+            self.installed_view,
+            self.updates_view,
+            self.logs_view,
+            self.settings_view,
+            self.mod_detail_view,
+        ]:
+            if hasattr(view, "retranslate_ui") and callable(view.retranslate_ui):
+                try:
+                    view.retranslate_ui()
+                except Exception as e:
+                    logger.debug(f"Erreur retranslate_ui sur {type(view).__name__}: {e}")
+
     def refresh_game_status(self):
-        """Checks game status through API /api/system/health."""
-        try:
-            health = self.api_client.get_health()
-            mods_detected = health.get("mods_dir_detected", False)
+        """Asynchronously checks game status and updates through background worker."""
+        worker = BackgroundStatusWorker(self.api_client, self.status_signals)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_health_checked(self, success: bool, mods_detected: bool):
+        """Callback received on Qt GUI thread when health check completes."""
+        if success:
             if mods_detected:
-                self.game_status.setText("✓ Jeu & Mods Détectés")
+                self.game_status.setText(tr("nav.game_detected"))
                 self.game_status.setStyleSheet("font-size: 11px; color: #34d399; font-weight: 600; padding: 4px 0;")
             else:
-                self.game_status.setText("⚠️ Dossier Mods Non Détecté")
+                self.game_status.setText(tr("nav.game_not_detected"))
                 self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
-        except Exception:
-            self.game_status.setText("⚠️ Erreur statut API")
+        else:
+            self.game_status.setText(tr("nav.game_api_error"))
             self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
 
     def update_nav_badge(self):
-        """Updates the badge on updates nav button using API /api/updates."""
-        try:
-            data = self.api_client.get_updates()
-            count = data.get("count", 0)
-            if count > 0:
-                self.btn_updates.setText(f"🔄  Mises à Jour ({count})")
-            else:
-                self.btn_updates.setText("🔄  Mises à Jour")
-        except Exception:
-            self.btn_updates.setText("🔄  Mises à Jour")
+        """Triggers asynchronous update count check."""
+        # The BackgroundStatusWorker checks both health and updates in a single light task
+        self.refresh_game_status()
+
+    def _on_updates_checked(self, count: int):
+        """Callback received on Qt GUI thread when updates check completes."""
+        if count > 0:
+            self.btn_updates.setText(tr("nav.updates_with_count", count=count))
+        else:
+            self.btn_updates.setText(tr("nav.updates"))
 
     def _launch_game(self):
         """Launches The Sims 4 via API /api/game/launch."""
         try:
             res = self.api_client.launch_game()
-            QMessageBox.information(self, "Lancement du jeu", res.get("message", "Jeu lancé."))
+            QMessageBox.information(
+                self, tr("nav.launch_game_title"), res.get("message", tr("nav.launch_game_success"))
+            )
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Échec du lancement du jeu: {e}")
+            QMessageBox.warning(
+                self, tr("dialogs.error_title"), tr("nav.launch_game_error", error=str(e))
+            )
 
     def auto_start_background_sync(self):
         """

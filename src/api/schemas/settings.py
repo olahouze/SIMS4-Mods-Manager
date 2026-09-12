@@ -9,6 +9,7 @@ class SettingsResponse(BaseModel):
     adult_content_enabled: bool
     check_updates_on_startup: bool
     theme: str
+    language: str = "fr"
     max_workers: int
     detected_mods_dir: Optional[str] = None
     detected_game_exe: Optional[str] = None
@@ -25,6 +26,7 @@ class SettingsUpdateRequest(BaseModel):
     adult_content_enabled: Optional[bool] = None
     check_updates_on_startup: Optional[bool] = None
     theme: Optional[str] = None
+    language: Optional[str] = None
     max_workers: Optional[int] = None
 
 

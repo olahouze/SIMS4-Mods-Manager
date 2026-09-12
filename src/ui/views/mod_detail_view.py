@@ -25,6 +25,7 @@ from src.ui.workers import (
     GalleryThumbWorker,
     DescriptionImageLoaderWorker,
 )
+from src.i18n import tr
 from src.utils.logger import logger
 
 
@@ -104,7 +105,7 @@ class ModDetailView(QWidget):
         nav_layout = QHBoxLayout()
         nav_layout.setSpacing(14)
 
-        self.back_btn = QPushButton("← Retour")
+        self.back_btn = QPushButton(tr("mod_detail.back"))
         self.back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.back_btn.setStyleSheet("""
             QPushButton {
@@ -636,17 +637,26 @@ class ModDetailView(QWidget):
                 d_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
                 is_inst = dep.get("is_installed", False)
                 d_st = dep.get("status", "DETECTED_NOT_INSTALLED")
-                if is_inst or d_st == "INSTALLED":
+                is_dlc = dep.get("is_game_dlc", False) or d_st == "GAME_DLC"
+
+                if is_dlc:
+                    status_txt = "✅ Détecté dans le jeu" if is_inst else "🎮 DLC Jeu (À vérifier)"
+                    status_color = "#34d399" if is_inst else "#a78bfa"
+                    prefix = "🎮"
+                elif is_inst or d_st == "INSTALLED":
                     status_txt = "✅ Déjà installé"
                     status_color = "#34d399"
+                    prefix = "•"
                 elif d_st == "DETECTED_NOT_INSTALLED":
                     status_txt = "📥 Sera installé"
                     status_color = "#60a5fa"
+                    prefix = "•"
                 else:
                     status_txt = "⚠️ Introuvable"
                     status_color = "#f87171"
+                    prefix = "•"
 
-                lbl_name = QLabel(f"• {d_title}")
+                lbl_name = QLabel(f"{prefix} {d_title}")
                 lbl_name.setStyleSheet("color: #f1f5f9; font-size: 12px; font-weight: 600;")
                 df_layout.addWidget(lbl_name, stretch=1)
 
@@ -676,6 +686,8 @@ class ModDetailView(QWidget):
 
         elif req_status == "RESOLVED" and dependencies:
             self.req_frame.setVisible(True)
+            self.req_collapse_btn.setVisible(True)
+            self.req_collapse_btn.setText("▲ Réduire" if self.req_body.isVisible() else "▼ Développer")
             self.req_frame.setStyleSheet("""
                 QFrame {
                     background-color: #10192e;
@@ -684,11 +696,11 @@ class ModDetailView(QWidget):
                     padding: 16px;
                 }
             """)
-            self.req_title.setText(f"🔗 Dépendances LoversLab identifiées ({len(dependencies)}) :")
+            self.req_title.setText(f"🔗 Dépendances et DLCs identifiés ({len(dependencies)}) :")
             self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #93c5fd;")
             self.req_desc.setText(
-                "Ce mod s'appuie sur les composants suivants. Lors de l'installation, les dépendances manquantes "
-                "seront automatiquement téléchargées et installées :"
+                "Ce mod s'appuie sur les composants suivants. Les mods manquants seront automatiquement téléchargés, "
+                "et les éventuels packs DLC officiels sont à vérifier dans votre jeu :"
             )
             for dep in dependencies:
                 d_frame = QFrame()
@@ -702,10 +714,18 @@ class ModDetailView(QWidget):
 
                 d_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
                 is_inst = dep.get("is_installed", False)
-                status_txt = "✅ Déjà installé" if is_inst else "📥 Sera installé automatiquement"
-                status_color = "#34d399" if is_inst else "#60a5fa"
+                is_dlc = dep.get("is_game_dlc", False) or dep.get("status") == "GAME_DLC"
 
-                lbl_name = QLabel(f"• {d_title}")
+                if is_dlc:
+                    status_txt = "✅ Détecté dans le jeu" if is_inst else "🎮 DLC Jeu (À vérifier)"
+                    status_color = "#34d399" if is_inst else "#a78bfa"
+                    prefix = "🎮"
+                else:
+                    status_txt = "✅ Déjà installé" if is_inst else "📥 Sera installé automatiquement"
+                    status_color = "#34d399" if is_inst else "#60a5fa"
+                    prefix = "•"
+
+                lbl_name = QLabel(f"{prefix} {d_title}")
                 lbl_name.setStyleSheet("color: #f1f5f9; font-size: 12px; font-weight: 600;")
                 df_layout.addWidget(lbl_name, stretch=1)
 
@@ -882,3 +902,7 @@ class ModDetailView(QWidget):
         url = self.mod_data.get("page_url", "")
         if url:
             webbrowser.open(url)
+
+    def retranslate_ui(self):
+        """Retranslates header buttons and status in ModDetailView."""
+        self.back_btn.setText(tr("mod_detail.back"))

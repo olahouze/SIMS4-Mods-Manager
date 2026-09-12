@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, Signal
 
 from src.api.client import get_api_client
 from src.ui.components.installed_card import InstalledCard
+from src.i18n import tr
 from src.utils.logger import logger
 
 
@@ -40,11 +41,11 @@ class InstalledView(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(14)
 
-        self.counter_label = QLabel("Mes Mods Installés")
+        self.counter_label = QLabel(tr("installed.title"))
         self.counter_label.setStyleSheet("font-size: 18px; font-weight: 700; color: #f8fafc;")
         header_layout.addWidget(self.counter_label)
 
-        self.badge_count = QLabel("0 mod")
+        self.badge_count = QLabel(tr("installed.badge_count", count=0))
         self.badge_count.setStyleSheet("""
             background-color: #1e293b;
             color: #94a3b8;
@@ -60,7 +61,7 @@ class InstalledView(QWidget):
 
         # Search field
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrer mes mods installés...")
+        self.search_input.setPlaceholderText(tr("installed.search_placeholder"))
         self.search_input.setFixedWidth(240)
         self.search_input.setStyleSheet("""
             QLineEdit {
@@ -79,7 +80,7 @@ class InstalledView(QWidget):
         header_layout.addWidget(self.search_input)
 
         # Scan Button
-        self.scan_btn = QPushButton("🔄 Scanner le dossier")
+        self.scan_btn = QPushButton(tr("installed.scan_btn"))
         self.scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.scan_btn.setStyleSheet("""
             QPushButton {
@@ -97,7 +98,7 @@ class InstalledView(QWidget):
         header_layout.addWidget(self.scan_btn)
 
         # Open Mods Folder Button
-        self.open_folder_btn = QPushButton("📁 Dossier Mods")
+        self.open_folder_btn = QPushButton(tr("installed.open_folder_btn"))
         self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_folder_btn.setStyleSheet("""
             QPushButton {
@@ -281,3 +282,13 @@ class InstalledView(QWidget):
             self.api_client.open_folder(folder_name=folder_name)
         except Exception as e:
             QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le sous-dossier '{folder_name}': {e}")
+
+    def retranslate_ui(self):
+        """Retranslates all text elements in InstalledView."""
+        self.counter_label.setText(tr("installed.title"))
+        self.search_input.setPlaceholderText(tr("installed.search_placeholder"))
+        self.scan_btn.setText(tr("installed.scan_btn"))
+        self.open_folder_btn.setText(tr("installed.open_folder_btn"))
+        count = len(self.all_mods)
+        self.badge_count.setText(tr("installed.badge_count", count=count))
+        self._filter_cards()

@@ -4,6 +4,16 @@ from fastapi.testclient import TestClient
 
 from src.api.app import app
 from src.database import DatabaseManager
+from src.core.shutdown_manager import ShutdownManager
+
+
+@pytest.fixture(autouse=True)
+def reset_shutdown_state():
+    """Ensure ShutdownManager state is clean before and after every test."""
+    ShutdownManager.reset()
+    yield
+    ShutdownManager.reset()
+
 
 
 @pytest.fixture(scope="session", autouse=True)

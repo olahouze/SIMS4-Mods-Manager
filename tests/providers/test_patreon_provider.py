@@ -109,3 +109,66 @@ def test_patreon_download_mod_file_success(tmp_path, monkeypatch):
     assert ok is True
     assert dest.exists()
     assert dest.stat().st_size == 50
+
+
+def test_patreon_download_post_url_resolution(tmp_path, monkeypatch):
+    provider = PatreonProvider()
+    # Mock check_post_access
+    monkeypatch.setattr(
+        provider,
+        "check_post_access",
+        lambda url: {
+            "status": "PUBLIC",
+            "can_view": True,
+            "download_urls": [{"url": "https://patreon.com/actual_file.zip", "name": "actual_file.zip"}],
+        },
+    )
+
+    mock_session = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"Content-Type": "application/zip", "Content-Length": "20"}
+    mock_resp.iter_content.return_value = [b"z" * 20]
+    mock_session.get.return_value = mock_resp
+    monkeypatch.setattr(SessionManager, "get_http_session", lambda name: mock_session)
+
+    dest = tmp_path / "post_mod.zip"
+    ok, msg = provider.download_mod_file("https://www.patreon.com/posts/12345", dest)
+    assert ok is True
+    assert dest.exists()
+    assert dest.stat().st_size == 20
+
+
+def test_patreon_download_locked_post(tmp_path, monkeypatch):
+    provider = PatreonProvider()
+    monkeypatch.setattr(
+        provider,
+        "check_post_access",
+        lambda url: {
+            "status": "LOCKED",
+            "can_view": False,
+            "tier_str": "$5.00/mois",
+            "download_urls": [],
+        },
+    )
+    monkeypatch.setattr(SessionManager, "is_member_authenticated", lambda name: False)
+
+    dest = tmp_path / "locked_mod.zip"
+    ok, msg = provider.download_mod_file("https://www.patreon.com/posts/99999", dest)
+    assert ok is False
+    assert "connexion Patreon active ou un abonnement" in msg
+
+
+def test_patreon_download_403_error(tmp_path, monkeypatch):
+    provider = PatreonProvider()
+    mock_session = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 403
+    mock_session.get.return_value = mock_resp
+    monkeypatch.setattr(SessionManager, "get_http_session", lambda name: mock_session)
+
+    dest = tmp_path / "mod403.zip"
+    ok, msg = provider.download_mod_file("https://patreon.com/direct_file.zip", dest)
+    assert ok is False
+    assert "Accès refusé par Patreon (Erreur HTTP 403)" in msg
+

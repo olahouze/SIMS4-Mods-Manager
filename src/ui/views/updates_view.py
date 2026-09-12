@@ -16,6 +16,7 @@ from PySide6.QtCore import QThread, Signal, Qt
 from src.api.client import get_api_client
 from src.ui.components.status_badge import StatusBadge
 from src.ui.components.progress_dialog import ProgressDialog
+from src.i18n import tr
 from src.utils.logger import logger
 
 
@@ -75,18 +76,18 @@ class UpdatesView(QWidget):
         header_title_layout = QVBoxLayout()
         header_title_layout.setSpacing(4)
 
-        main_title = QLabel("Mises à jour des Mods")
-        main_title.setStyleSheet("font-size: 20px; font-weight: 800; color: #f8fafc;")
-        header_title_layout.addWidget(main_title)
+        self.main_title = QLabel(tr("updates.title"))
+        self.main_title.setStyleSheet("font-size: 20px; font-weight: 800; color: #f8fafc;")
+        header_title_layout.addWidget(self.main_title)
 
-        self.counter_label = QLabel("Recherche des mises à jour...")
+        self.counter_label = QLabel(tr("updates.searching"))
         self.counter_label.setStyleSheet("font-size: 13px; font-weight: 500; color: #94a3b8;")
         header_title_layout.addWidget(self.counter_label)
 
         header_layout.addLayout(header_title_layout)
         header_layout.addStretch()
 
-        self.refresh_btn = QPushButton("🔄 Actualiser")
+        self.refresh_btn = QPushButton(tr("updates.refresh_btn"))
         self.refresh_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1e2238;
@@ -103,7 +104,7 @@ class UpdatesView(QWidget):
         self.refresh_btn.clicked.connect(self.refresh_updates)
         header_layout.addWidget(self.refresh_btn)
 
-        self.update_selected_btn = QPushButton("☑️ Mettre à jour la sélection (0)")
+        self.update_selected_btn = QPushButton(tr("updates.update_selected_btn", count=0))
         self.update_selected_btn.setEnabled(False)
         self.update_selected_btn.setStyleSheet("""
             QPushButton {
@@ -125,7 +126,7 @@ class UpdatesView(QWidget):
         self.update_selected_btn.clicked.connect(self.update_selected_mods)
         header_layout.addWidget(self.update_selected_btn)
 
-        self.update_all_btn = QPushButton("⚡ Tout Mettre à Jour")
+        self.update_all_btn = QPushButton(tr("updates.update_all_btn"))
         self.update_all_btn.setEnabled(False)
         self.update_all_btn.setStyleSheet("""
             QPushButton {
@@ -225,16 +226,7 @@ class UpdatesView(QWidget):
         # 3. Mods Table
         self.table = QTableWidget()
         self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(
-            [
-                "☑",
-                "Module Installé",
-                "Version Actuelle",
-                "Nouvelle Version",
-                "Statut",
-                "Action",
-            ]
-        )
+        self._set_table_headers()
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -598,3 +590,26 @@ class UpdatesView(QWidget):
         else:
             QMessageBox.warning(self, "Erreur de mise à jour", msg)
         self.refresh_updates()
+
+    def _set_table_headers(self):
+        self.table.setHorizontalHeaderLabels(
+            [
+                "☑",
+                tr("updates.col_name"),
+                tr("updates.col_current"),
+                tr("updates.col_new"),
+                tr("updates.col_source"),
+                tr("updates.col_actions"),
+            ]
+        )
+
+    def retranslate_ui(self):
+        """Retranslates all text elements in UpdatesView."""
+        self.main_title.setText(tr("updates.title"))
+        self.refresh_btn.setText(tr("updates.refresh_btn"))
+        self.update_all_btn.setText(tr("updates.update_all_btn"))
+        self._set_table_headers()
+        self._on_selection_changed()
+        if not self.all_mods:
+            self.counter_label.setText(tr("updates.up_to_date_title"))
+        self._render_table()

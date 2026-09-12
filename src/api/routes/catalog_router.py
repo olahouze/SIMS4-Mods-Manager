@@ -5,6 +5,7 @@ import threading
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import or_
 
 from src.api.schemas.catalog import (
     CatalogListResponse,
@@ -30,6 +31,7 @@ from src.services.dependency_resolver import resolve_mod_dependencies
 from src.services.mod_installer_service import perform_mod_install
 from src.services.mod_update_service import check_has_update
 from src.utils.logger import logger
+from src.utils.mod_type_classifier import ModTypeClassifier
 
 _run_catalog_sync = run_catalog_sync
 _perform_install = perform_mod_install
@@ -43,6 +45,7 @@ def get_catalog(
     source: Optional[str] = Query(None, description="loverslab, patreon, all"),
     access: Optional[str] = Query(None, description="public, unlocked, locked, all"),
     status: Optional[str] = Query(None, description="all, installed, not_installed, updates_available"),
+    mod_type: Optional[str] = Query(None, description="animation, clothing, hair, body_skin, etc."),
     sort: Optional[str] = Query("recent", description="recent, az"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
@@ -62,6 +65,11 @@ def get_catalog(
 
         if source and source.lower() != "all":
             query = query.filter(CatalogMod.source == source.lower())
+
+        if mod_type:
+            type_filter = ModTypeClassifier.get_sql_filter(mod_type, CatalogMod)
+            if type_filter is not None:
+                query = query.filter(type_filter)
 
         # Support access filters passed in either access or status param
         if status and status.lower() in [
@@ -146,12 +154,41 @@ def get_catalog(
         total = query.count()
         paginated_mods = query.offset((page - 1) * limit).limit(limit).all()
 
-        all_installed = session.query(InstalledMod).all()
-        installed_by_remote = {(im.source, im.remote_id): im for im in all_installed if im.remote_id}
-        installed_by_title = {im.title.lower(): im for im in all_installed if im.title}
+        page_remote_ids = [m.remote_id for m in paginated_mods if m.remote_id]
+        page_cat_ids = [m.id for m in paginated_mods if m.id]
+        page_titles = [m.title for m in paginated_mods if m.title]
+
+        conditions = []
+        if page_remote_ids:
+            conditions.append(InstalledMod.remote_id.in_(page_remote_ids))
+        if page_cat_ids:
+            conditions.append(InstalledMod.catalog_mod_id.in_(page_cat_ids))
+        if page_titles:
+            conditions.append(InstalledMod.title.in_(page_titles))
+
+        relevant_installed = session.query(InstalledMod).filter(or_(*conditions)).all() if conditions else []
+        installed_by_remote = {(im.source, im.remote_id): im for im in relevant_installed if im.remote_id}
+        installed_by_title = {im.title.lower(): im for im in relevant_installed if im.title}
         installed_by_id = {
-            im.catalog_mod_id: im for im in all_installed if im.catalog_mod_id and not im.remote_id
+            im.catalog_mod_id: im for im in relevant_installed if im.catalog_mod_id and not im.remote_id
         }
+
+        # Pre-collect all requirement remote_ids for batch lookup (eliminates N+1 queries)
+        needed_remote_ids = set()
+        for m in paginated_mods:
+            for req in m.get_requirements_mods_list():
+                rid = str(req.get("remote_id") or "")
+                if rid:
+                    needed_remote_ids.add(rid)
+
+        catalog_remote_ids = set()
+        if needed_remote_ids:
+            found_rows = (
+                session.query(CatalogMod.source, CatalogMod.remote_id)
+                .filter(CatalogMod.remote_id.in_(list(needed_remote_ids)))
+                .all()
+            )
+            catalog_remote_ids = {(row[0], str(row[1])) for row in found_rows}
 
         paginated_items = []
         for m in paginated_mods:
@@ -165,7 +202,9 @@ def get_catalog(
                 installed_by_remote,
                 installed_by_title,
                 is_syncing=SyncTracker.is_running,
+                catalog_remote_ids=catalog_remote_ids,
             )
+
 
             paginated_items.append(
                 CatalogModItem(
@@ -227,6 +266,28 @@ def start_sync(payload: CatalogSyncRequest, background_tasks: BackgroundTasks):
 def get_sync_status():
     """Returns current catalog scraping progress status."""
     return SyncTracker.to_response()
+
+
+@router.post("/sync/pause", response_model=CatalogSyncStatusResponse)
+def pause_sync(provider: Optional[str] = Query(None, description="Nom du provider (ex: loverslab)")):
+    """Pauses the current catalog synchronization."""
+    SyncTracker.pause(provider=provider)
+    return SyncTracker.to_response()
+
+
+@router.post("/sync/resume", response_model=CatalogSyncStatusResponse)
+def resume_sync(provider: Optional[str] = Query(None, description="Nom du provider (ex: loverslab)")):
+    """Resumes the paused catalog synchronization."""
+    SyncTracker.resume(provider=provider)
+    return SyncTracker.to_response()
+
+
+@router.post("/sync/stop", response_model=CatalogSyncStatusResponse)
+def stop_sync(provider: Optional[str] = Query(None, description="Nom du provider (ex: loverslab)")):
+    """Stops the current catalog synchronization."""
+    SyncTracker.stop(provider=provider)
+    return SyncTracker.to_response()
+
 
 
 @router.get("/thumbnail")

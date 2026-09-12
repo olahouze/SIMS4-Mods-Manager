@@ -1,5 +1,4 @@
 import webbrowser
-from pathlib import Path
 from PySide6.QtWidgets import (
     QFrame,
     QVBoxLayout,
@@ -7,53 +6,16 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
 )
-from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool
+from PySide6.QtCore import Qt, Signal
 
-from src.core.config import AppConfig
-from src.ui.components.image_cache import ImageCache
+from src.ui.components.base_mod_card import BaseModCard
 from src.ui.components.status_badge import StatusBadge
-from src.api.client import get_api_client
-from src.utils.logger import logger
 
 
-class ImageLoadSignals(QObject):
-    loaded = Signal(str, str)  # remote_id, local_path
-
-
-class ImageDownloadTask(QRunnable):
-    def __init__(self, source: str, remote_id: str, url: str, dest_path: Path, signals: ImageLoadSignals):
-        super().__init__()
-        self.source = source
-        self.remote_id = remote_id
-        self.url = url
-        self.dest_path = dest_path
-        self.signals = signals
-
-    def run(self):
-        try:
-            import httpx
-
-            client = get_api_client()
-            resp = httpx.get(
-                f"{client.base_url}/api/catalog/thumbnail",
-                params={"source": self.source, "remote_id": self.remote_id, "url": self.url},
-                timeout=20.0,
-            )
-            if resp.status_code == 200 and len(resp.content) > 100:
-                self.dest_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.dest_path, "wb") as f:
-                    f.write(resp.content)
-                self.signals.loaded.emit(self.remote_id, str(self.dest_path))
-        except Exception as e:
-            logger.debug(f"Thumbnail download failed via API for {self.url}: {e}")
-
-
-class ModCard(QFrame):
+class ModCard(BaseModCard):
     """Premium Card widget representing a single mod in the unified catalog grid."""
 
     install_requested = Signal(dict)
-    details_requested = Signal(dict)
 
     def __init__(
         self,
@@ -64,15 +26,13 @@ class ModCard(QFrame):
         is_loverslab_auth: bool = False,
         parent=None,
     ):
-        super().__init__(parent)
-        self.mod_data = mod_data
+        super().__init__(mod_data, parent)
         self.is_installed = is_installed
         self.has_update = has_update
         self.is_patreon_auth = is_patreon_auth
         self.is_loverslab_auth = is_loverslab_auth
-
-        self.signals = ImageLoadSignals()
-        self.signals.loaded.connect(self._on_image_loaded)
+        self.thumb_width = 271
+        self.thumb_height = 130
 
         self.setObjectName("ModCard")
         self.setFixedWidth(295)
@@ -111,17 +71,8 @@ class ModCard(QFrame):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(6)
 
-        # 1. Thumbnail Image Container
-        self.thumb_label = QLabel()
-        self.thumb_label.setFixedHeight(130)
-        self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumb_label.setStyleSheet("""
-            background-color: #0b0d17;
-            border-radius: 10px;
-            border: 1px solid #1a1e32;
-            color: #475569;
-            font-size: 32px;
-        """)
+        # 1. Thumbnail Image Container via BaseModCard
+        self.thumb_label = self._create_thumbnail_container(height=130)
         self.thumb_label.setText("📦")
         layout.addWidget(self.thumb_label)
 
@@ -203,8 +154,12 @@ class ModCard(QFrame):
                     dep.get("status") if isinstance(dep, dict) else getattr(dep, "status", "DETECTED_NOT_INSTALLED")
                 )
                 is_inst = dep.get("is_installed") if isinstance(dep, dict) else getattr(dep, "is_installed", False)
+                is_dlc = dep.get("is_game_dlc") if isinstance(dep, dict) else getattr(dep, "is_game_dlc", False)
 
-                if is_inst or d_status == "INSTALLED":
+                if is_dlc or d_status == "GAME_DLC":
+                    pill_text = f"🎮 {d_title} (DLC Sims 4)"
+                    pill_style = "background-color: #3b0764; color: #d8b4fe; border: 1px solid #7e22ce;"
+                elif is_inst or d_status == "INSTALLED":
                     pill_text = f"🟢 {d_title} (Installé)"
                     pill_style = "background-color: #064e3b; color: #a7f3d0; border: 1px solid #059669;"
                 elif d_status == "DETECTED_NOT_INSTALLED":
@@ -346,6 +301,8 @@ class ModCard(QFrame):
                 req_status == "PENDING_VERIFICATION"
                 or any(
                     (d.get("status") if isinstance(d, dict) else getattr(d, "status", "")) in ["NOT_DETECTED_FINISHED", "NOT_DETECTED_SCANNING"]
+                    and not (d.get("is_game_dlc") if isinstance(d, dict) else getattr(d, "is_game_dlc", False))
+                    and (d.get("status") if isinstance(d, dict) else getattr(d, "status", "")) != "GAME_DLC"
                     for d in dependencies
                 )
             )
@@ -417,50 +374,8 @@ class ModCard(QFrame):
 
         layout.addLayout(btn_layout)
 
-        # Start async thumbnail loading
+        # Start async thumbnail loading via BaseModCard
         self._load_thumbnail_async()
-
-    def _load_thumbnail_async(self):
-        """Checks memory/disk cache or dispatches async download task."""
-        thumb_url = self.mod_data.get("thumbnail_url", "")
-        if not thumb_url:
-            return
-
-        cached_pix = ImageCache.get(thumb_url)
-        if cached_pix:
-            scaled = cached_pix.scaled(
-                271, 145, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
-            )
-            self.thumb_label.setPixmap(scaled)
-            self.thumb_label.setText("")
-            return
-
-        source = self.mod_data.get("source", "loverslab")
-        remote_id = str(self.mod_data.get("remote_id", "unknown"))
-        cache_name = f"thumb_{source}_{remote_id}.jpg"
-        cache_path = AppConfig.get_thumbnails_cache_dir() / cache_name
-
-        if cache_path.exists() and cache_path.stat().st_size > 100:
-            self._display_image(str(cache_path))
-        else:
-            task = ImageDownloadTask(source, remote_id, thumb_url, cache_path, self.signals)
-            QThreadPool.globalInstance().start(task)
-
-    def _on_image_loaded(self, remote_id: str, local_path: str):
-        if str(self.mod_data.get("remote_id")) == remote_id:
-            self._display_image(local_path)
-
-    def _display_image(self, image_path: str):
-        pixmap = QPixmap(image_path)
-        if not pixmap.isNull():
-            thumb_url = self.mod_data.get("thumbnail_url", "")
-            if thumb_url:
-                ImageCache.set(thumb_url, pixmap)
-            scaled = pixmap.scaled(
-                271, 145, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
-            )
-            self.thumb_label.setPixmap(scaled)
-            self.thumb_label.setText("")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

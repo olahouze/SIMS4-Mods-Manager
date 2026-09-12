@@ -412,12 +412,15 @@ def test_wickedwhims_variations_and_br_preservation():
     _, st, mods = provider.extract_requirements(soup)
 
     assert st == "RESOLVED"
-    # Should contain WickedWhims (id 3169), but NOT the DLC
+    # Should contain WickedWhims (id 3169) and the DLC tagged as Game DLC
     mod_ids = [m.get("remote_id") for m in mods]
-    mod_titles = [m.get("title") for m in mods]
-
     assert "3169" in mod_ids
-    assert not any("DLC" in t or "City Living" in t for t in mod_titles)
+
+    dlc_item = next((m for m in mods if m.get("is_game_dlc")), None)
+    assert dlc_item is not None
+    assert dlc_item.get("remote_id") == "EP03"
+    assert "City Living" in dlc_item.get("title")
+
 
 
 def test_mod_detail_view_requirements_loading_and_retractable():
@@ -457,7 +460,7 @@ def test_mod_detail_view_requirements_loading_and_retractable():
     })
     assert not view.req_frame.isHidden()
     assert not view.req_collapse_btn.isHidden()
-    assert "Dépendances LoversLab identifiées" in view.req_title.text()
+    assert "Dépendances et DLCs identifiés" in view.req_title.text()
     assert view.deps_layout.count() == 1
 
 
@@ -682,4 +685,77 @@ def test_find_dependent_installed_mods():
         # Check dependents of anim_inst (nobody depends on it)
         anim_deps = find_dependent_installed_mods(anim_inst.id, session)
         assert len(anim_deps) == 0
+
+
+def test_extract_requirements_with_sims4_dlc():
+    """Verifies that a requirement pointing to an official Sims 4 DLC is tagged as Game DLC."""
+    provider = LoversLabProvider()
+    html = """
+    <ul class="cFileInfo">
+        <li class="ipsDataItem">
+            <span><strong>Requirements</strong></span>
+            <div class="cFileInfoData">The Sims 4: City Living</div>
+        </li>
+    </ul>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    txt, st, mods = provider.extract_requirements(soup)
+    assert len(mods) == 1
+    assert mods[0]["is_game_dlc"] is True
+    assert mods[0]["remote_id"] == "EP03"
+    assert "City Living" in mods[0]["title"]
+    assert st == "RESOLVED"
+
+
+def test_resolve_mod_dependencies_with_game_dlc():
+    """Verifies that resolve_mod_dependencies returns status GAME_DLC and does not block install."""
+    from src.services.dependency_resolver import resolve_mod_dependencies
+    from src.services.catalog_sync_service import check_catalog_dependencies
+    db = DatabaseManager.get_instance()
+
+    with db.get_session() as session:
+        raw_deps = [
+            {"title": "The Sims 4 Seasons", "source": "loverslab", "remote_id": ""},
+            {"title": "WickedWhims", "source": "loverslab", "remote_id": "3169"},
+        ]
+        # WickedWhims is installed
+        installed_by_remote = {("loverslab", "3169"): InstalledMod(source="loverslab", remote_id="3169", title="WickedWhims")}
+        installed_by_title = {"wickedwhims": installed_by_remote[("loverslab", "3169")]}
+
+        items = resolve_mod_dependencies(
+            raw_deps,
+            session,
+            installed_by_remote,
+            installed_by_title,
+        )
+
+        assert len(items) == 2
+        dlc_item = next(i for i in items if i.is_game_dlc)
+        assert dlc_item.status == "GAME_DLC"
+        assert dlc_item.dlc_code == "EP05"
+
+        ww_item = next(i for i in items if not i.is_game_dlc)
+        assert ww_item.status == "INSTALLED"
+
+        # Check check_catalog_dependencies behavior
+        cat_mod = CatalogMod(
+            source="loverslab",
+            remote_id="mod_with_dlc",
+            title="Mod With DLC",
+            page_url="https://example.com/dlc_mod",
+            requirements_status="RESOLVED",
+        )
+        cat_mod.set_requirements_mods_list(raw_deps)
+        session.add(cat_mod)
+        session.commit()
+
+        chk = check_catalog_dependencies("Mod With DLC", cat_mod.page_url, "loverslab", cat_mod=cat_mod)
+        assert len(chk.game_dlc_dependencies) == 1
+        assert chk.game_dlc_dependencies[0].status == "GAME_DLC"
+        assert len(chk.already_installed_dependencies) == 1
+        assert len(chk.missing_dependencies) == 0
+        assert len(chk.unfound_dependencies) == 0
+        assert chk.is_partial is False
+        assert chk.can_install is True
+
 

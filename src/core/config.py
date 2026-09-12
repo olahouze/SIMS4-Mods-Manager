@@ -18,6 +18,7 @@ class AppConfig:
     adult_content_enabled: bool = True
     check_updates_on_startup: bool = True
     theme: str = "dark"
+    language: str = "fr"
     max_workers: int = 4
 
     # Singleton cache with mtime-based invalidation

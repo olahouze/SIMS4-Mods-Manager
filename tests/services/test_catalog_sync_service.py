@@ -39,9 +39,28 @@ def test_sync_tracker_full_lifecycle():
     assert resp.progress_percent == 20
     assert len(resp.categories_progress) == 2
 
+    # Test Pause
+    SyncTracker.pause()
+    assert SyncTracker.is_paused is True
+    assert SyncTracker._pause_event.is_set() is False
+    assert SyncTracker.providers_status["loverslab"] == "PAUSED"
+    resp_paused = SyncTracker.to_response()
+    assert resp_paused.is_paused is True
+
+    # Test Resume
+    SyncTracker.resume()
+    assert SyncTracker.is_paused is False
+    assert SyncTracker._pause_event.is_set() is True
+    assert SyncTracker.providers_status["loverslab"] == "RUNNING"
+    resp_resumed = SyncTracker.to_response()
+    assert resp_resumed.is_paused is False
+
     # Stop request
     SyncTracker.stop()
     assert SyncTracker.stop_requested is True
+    assert SyncTracker.is_stopped is True
+    assert SyncTracker.is_running is False
+    assert SyncTracker.providers_status["loverslab"] == "STOPPED"
 
     # Finish
     SyncTracker.finish(total_new=50)

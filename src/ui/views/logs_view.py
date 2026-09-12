@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QTextCursor, QFont
 
 from src.api.client import get_api_client
+from src.i18n import tr
 from src.utils.logger import get_qt_log_handler, logger
 
 
@@ -39,27 +40,27 @@ class LogsView(QWidget):
 
         # Header bar
         header_layout = QHBoxLayout()
-        title = QLabel("📋 Journaux d'Exécution & Logs")
-        title.setStyleSheet("font-size: 16px; font-weight: 700; color: #f8fafc;")
-        header_layout.addWidget(title)
+        self.title_lbl = QLabel(tr("logs.title"))
+        self.title_lbl.setStyleSheet("font-size: 16px; font-weight: 700; color: #f8fafc;")
+        header_layout.addWidget(self.title_lbl)
 
         header_layout.addStretch()
 
         # Search filter
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrer les logs...")
+        self.search_input.setPlaceholderText(tr("logs.search_placeholder"))
         self.search_input.setFixedWidth(200)
         self.search_input.textChanged.connect(self._apply_filter)
         header_layout.addWidget(self.search_input)
 
         # Level combo
         self.level_combo = QComboBox()
-        self.level_combo.addItems(["Tous les niveaux", "INFO", "WARNING", "ERROR", "DEBUG"])
+        self._populate_level_combo()
         self.level_combo.currentIndexChanged.connect(self._apply_filter)
         header_layout.addWidget(self.level_combo)
 
         # Copy All Button
-        self.copy_btn = QPushButton("📋 Copier Tout")
+        self.copy_btn = QPushButton(tr("logs.copy_btn"))
         self.copy_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4f46e5;
@@ -74,7 +75,7 @@ class LogsView(QWidget):
         header_layout.addWidget(self.copy_btn)
 
         # Clear View Button
-        self.clear_btn = QPushButton("🗑️ Effacer")
+        self.clear_btn = QPushButton(tr("logs.clear_btn"))
         self.clear_btn.setStyleSheet("""
             QPushButton {
                 background-color: #202436;
@@ -90,7 +91,7 @@ class LogsView(QWidget):
         header_layout.addWidget(self.clear_btn)
 
         # Open Logs Folder Button
-        self.open_logs_btn = QPushButton("📁 Dossier Logs")
+        self.open_logs_btn = QPushButton(tr("logs.open_folder_btn"))
         self.open_logs_btn.setStyleSheet("""
             QPushButton {
                 background-color: #202436;
@@ -209,3 +210,25 @@ class LogsView(QWidget):
             self.api_client.open_logs_folder()
         except Exception as e:
             QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le dossier des logs via l'API: {e}")
+
+    def _populate_level_combo(self):
+        current_idx = self.level_combo.currentIndex() if self.level_combo.count() > 0 else 0
+        self.level_combo.blockSignals(True)
+        self.level_combo.clear()
+        self.level_combo.addItem(tr("logs.filter_all"), "")
+        self.level_combo.addItem("INFO", "INFO")
+        self.level_combo.addItem("WARNING", "WARNING")
+        self.level_combo.addItem("ERROR", "ERROR")
+        self.level_combo.addItem("DEBUG", "DEBUG")
+        if 0 <= current_idx < self.level_combo.count():
+            self.level_combo.setCurrentIndex(current_idx)
+        self.level_combo.blockSignals(False)
+
+    def retranslate_ui(self):
+        """Retranslates all text elements in LogsView."""
+        self.title_lbl.setText(tr("logs.title"))
+        self.search_input.setPlaceholderText(tr("logs.search_placeholder"))
+        self.copy_btn.setText(tr("logs.copy_btn"))
+        self.clear_btn.setText(tr("logs.clear_btn"))
+        self.open_logs_btn.setText(tr("logs.open_folder_btn"))
+        self._populate_level_combo()

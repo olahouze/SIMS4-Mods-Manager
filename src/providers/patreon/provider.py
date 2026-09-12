@@ -173,6 +173,41 @@ class PatreonProvider(BaseSourceProvider):
         progress_callback: Optional[Callable[[int, str, str], None]] = None,
     ) -> Tuple[bool, str]:
         session = SessionManager.get_http_session("patreon")
+        is_auth = SessionManager.is_member_authenticated("patreon")
+
+        # If download_url is a Patreon post URL rather than direct file stream
+        if "/posts/" in download_url:
+            post_info = self.check_post_access(download_url)
+            can_view = post_info.get("can_view", False)
+            status = post_info.get("status", "UNKNOWN")
+            tier_str = post_info.get("tier_str", "")
+
+            if status == "LOCKED" or (not can_view and not is_auth):
+                tier_info = f" ({tier_str})" if tier_str else ""
+                return (
+                    False,
+                    f"Ce mod nécessite une connexion Patreon active ou un abonnement payant{tier_info}. "
+                    "Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot'.",
+                )
+
+            dl_urls = post_info.get("download_urls", [])
+            if dl_urls:
+                actual_url = dl_urls[0]["url"] if isinstance(dl_urls[0], dict) else dl_urls[0]
+                return self.download_mod_file(actual_url, dest_path, progress_callback=progress_callback)
+
+            ext_links = post_info.get("external_links", [])
+            if ext_links:
+                return (
+                    False,
+                    f"Ce contenu Patreon est hébergé sur un service externe : {', '.join(ext_links[:2])}",
+                )
+
+            return (
+                False,
+                "Aucun fichier de mod (.zip / .package) n'a été trouvé sur ce post Patreon. "
+                "Veuillez vérifier le post ou connecter votre compte Patreon.",
+            )
+
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             logger.info(f"Lancement du téléchargement Patreon : {download_url}")
@@ -182,10 +217,16 @@ class PatreonProvider(BaseSourceProvider):
                 if "image/" in content_type:
                     return (
                         False,
-                        "Le lien Patreon pointe vers une image de prévisualisation et non un fichier de mod Sims 4. Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour accéder au téléchargement des fichiers .package / .zip.",
+                        "Le lien Patreon pointe vers une image de prévisualisation et non un fichier de mod Sims 4. "
+                        "Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour accéder au téléchargement des fichiers .package / .zip.",
                     )
 
                 return stream_download(resp, dest_path, progress_callback, "Téléchargement Patreon")
+            elif resp.status_code == 403:
+                return (
+                    False,
+                    "Accès refusé par Patreon (Erreur HTTP 403). Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour autoriser ce téléchargement.",
+                )
             else:
                 return False, f"Erreur HTTP {resp.status_code} lors du téléchargement."
         except Exception as e:

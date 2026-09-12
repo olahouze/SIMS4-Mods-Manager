@@ -26,6 +26,7 @@ class DependenciesDialog(QDialog):
         missing: List[dict],
         unfound: List[dict] = None,
         is_partial: bool = False,
+        game_dlcs: List[dict] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -33,6 +34,7 @@ class DependenciesDialog(QDialog):
         self.already_installed = already_installed or []
         self.missing = missing or []
         self.unfound = unfound or []
+        self.game_dlcs = game_dlcs or []
         self.is_partial = is_partial or bool(self.unfound)
 
         self.setWindowTitle("Installation Partielle" if self.is_partial else "Dépendances requises")
@@ -86,6 +88,46 @@ class DependenciesDialog(QDialog):
         c_layout = QVBoxLayout(container)
         c_layout.setContentsMargins(0, 0, 0, 0)
         c_layout.setSpacing(14)
+
+        # 0. Official Sims 4 Game DLCs section
+        if self.game_dlcs:
+            dlc_header = QLabel(f"🎮 Packs / DLCs officiels Les Sims 4 requis ({len(self.game_dlcs)}) :")
+            dlc_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #a78bfa;")
+            c_layout.addWidget(dlc_header)
+
+            dlc_notice = QLabel(
+                "ℹ️ Ces éléments sont des extensions officielles du jeu Les Sims 4 (EA / Steam) et non des mods à télécharger.\n"
+                "Veuillez vérifier que vous possédez bien ces packs installés sur votre jeu :"
+            )
+            dlc_notice.setStyleSheet("font-size: 11px; color: #c4b5fd; margin-bottom: 2px;")
+            dlc_notice.setWordWrap(True)
+            c_layout.addWidget(dlc_notice)
+
+            for dlc in self.game_dlcs:
+                frame = QFrame()
+                frame.setStyleSheet("""
+                    background-color: #1e1b4b;
+                    border: 1px solid #6366f1;
+                    border-radius: 8px;
+                    padding: 8px 12px;
+                """)
+                f_layout = QHBoxLayout(frame)
+                f_layout.setContentsMargins(4, 4, 4, 4)
+                dlc_title = dlc.get("title") or dlc.get("dlc_name") or "DLC Sims 4"
+                is_inst = dlc.get("is_installed", False)
+                stat_text = "✅ Détecté dans votre jeu" if is_inst else "⚠️ À vérifier dans votre jeu"
+                lbl = QLabel(f"🎮 {dlc_title}")
+                lbl.setStyleSheet("color: #e0e7ff; font-size: 12px; font-weight: 600;")
+                badge = QLabel(stat_text)
+                badge.setStyleSheet(
+                    "color: #a7f3d0; font-size: 10px; font-weight: 700; padding: 2px 6px; background-color: #064e3b; border-radius: 4px;"
+                    if is_inst
+                    else "color: #fde68a; font-size: 10px; font-weight: 700; padding: 2px 6px; background-color: #78350f; border-radius: 4px;"
+                )
+                f_layout.addWidget(lbl)
+                f_layout.addStretch()
+                f_layout.addWidget(badge)
+                c_layout.addWidget(frame)
 
         # 1. Unfound dependencies section (Partial install warning)
         if self.unfound:

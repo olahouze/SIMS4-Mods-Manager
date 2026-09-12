@@ -448,18 +448,32 @@ class LoversLabProvider(BaseSourceProvider):
                 if patreon_redirect_url not in details["external_links"]:
                     details["external_links"].append(patreon_redirect_url)
                 pat_info = self.patreon_provider.check_post_access(patreon_redirect_url)
-                details["patreon_status"] = pat_info.get("status", "LOCKED")
-                details["patreon_tier"] = pat_info.get("tier_str", "")
-                if pat_info.get("download_urls"):
-                    details["download_urls"].extend(pat_info["download_urls"])
+                can_view = pat_info.get("can_view", False)
+                p_status = pat_info.get("status", "UNKNOWN")
+                tier_str = pat_info.get("tier_str", "")
+                is_patreon_member = SessionManager.is_member_authenticated("patreon")
+
+                # Si une connexion Patreon / un abonnement est requis : qualifier le mod en Patreon
+                if p_status == "LOCKED" or (not can_view and not is_patreon_member):
+                    details["source"] = "patreon"
+                    details["patreon_status"] = "LOCKED"
+                    details["patreon_tier"] = tier_str or "Abonnement requis"
+                    details["download_urls"] = []
+                    if "Patreon" not in details["tags"]:
+                        details["tags"].append("Patreon")
                 else:
-                    details["download_urls"].append(
-                        {
-                            "name": "Post Patreon (Téléchargement)",
-                            "url": patreon_redirect_url,
-                            "size": 0,
-                        }
-                    )
+                    details["patreon_status"] = "PUBLIC"
+                    dl_urls = pat_info.get("download_urls", [])
+                    if dl_urls:
+                        details["download_urls"].extend(dl_urls)
+                    else:
+                        details["download_urls"].append(
+                            {
+                                "name": "Post Patreon (Téléchargement)",
+                                "url": patreon_redirect_url,
+                                "size": 0,
+                            }
+                        )
 
             gallery_screenshots: List[str] = extract_gallery_screenshots(soup, self.base_url)
 
@@ -475,7 +489,8 @@ class LoversLabProvider(BaseSourceProvider):
                     if "patreon.com" in href.lower():
                         if href not in details["external_links"]:
                             details["external_links"].append(href)
-                        if not is_direct_download and not patreon_redirect_url:
+                        # Les liens Patreon dans le texte ne requalifient le mod QUE si LoversLab ne propose AUCUN téléchargement direct
+                        if not is_direct_download and not patreon_redirect_url and not details["download_urls"]:
                             post_id = self.patreon_provider.extract_post_id(href)
                             if post_id:
                                 pat_info = self.patreon_provider.check_post_access(href)
@@ -661,15 +676,29 @@ class LoversLabProvider(BaseSourceProvider):
                 candidate = sp.strip().strip('"\'`')
                 if not candidate or len(candidate) < 2:
                     continue
-                if re.fullmatch(
-                    r"(?i)\s*(sims\s*4|the\s*sims\s*4|base\s*game|jeu\s*de\s*base|sims\s*4\s*base\s*game|none|aucun|aucun[e]?|n/?a|-)\s*",
-                    candidate,
-                ):
+
+                if candidate.lower() in ModMatcher.GENERIC_EXCLUDED_WORDS:
                     continue
-                if re.search(
-                    r"(?i)\b(?:dlc|expansion\s*pack|game\s*pack|stuff\s*pack|pack\s*d['’]extension|pack\s*de\s*jeu|kit\s*d['’]objets)\b",
-                    candidate,
-                ):
+
+                from src.utils.game_dlc_matcher import GameDlcMatcher
+
+                if GameDlcMatcher.is_base_game_only(candidate):
+                    continue
+
+                is_dlc, pack_name, pack_code = GameDlcMatcher.match_dlc(candidate)
+                if is_dlc:
+                    dlc_key = (pack_code or pack_name or candidate).lower()
+                    if dlc_key not in seen_titles:
+                        seen_titles.add(dlc_key)
+                        req_mods.append({
+                            "source": "game_dlc",
+                            "remote_id": pack_code or "",
+                            "title": f"The Sims 4 : {pack_name}",
+                            "url": "",
+                            "is_game_dlc": True,
+                            "dlc_name": pack_name,
+                            "dlc_code": pack_code,
+                        })
                     continue
 
                 c_lower = candidate.lower()
@@ -731,7 +760,7 @@ class LoversLabProvider(BaseSourceProvider):
                     })
 
         if req_mods:
-            if all(bool(m.get("remote_id")) for m in req_mods):
+            if all(bool(m.get("remote_id")) or m.get("is_game_dlc") for m in req_mods):
                 status = "RESOLVED"
             else:
                 status = "PENDING_VERIFICATION"
@@ -739,6 +768,7 @@ class LoversLabProvider(BaseSourceProvider):
             status = "PENDING_VERIFICATION"
 
         return raw_text, status, req_mods
+
 
     _extract_requirements = extract_requirements
 

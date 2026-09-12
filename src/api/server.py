@@ -61,7 +61,7 @@ class ApiServer:
                     if resp.status_code == 200:
                         return True
                 except Exception:
-                    time.sleep(0.1)
+                    time.sleep(0.02)
         logger.warning(f"Le serveur API n'a pas répondu dans le délai imparti de {timeout}s.")
         return False
 

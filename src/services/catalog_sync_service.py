@@ -18,10 +18,15 @@ from src.utils.logger import logger
 
 
 class SyncTracker:
-    """Thread-safe tracker for catalog synchronization progress."""
+    """Thread-safe tracker for catalog synchronization progress with pause and stop support."""
 
     _lock = threading.Lock()
+    _pause_event = threading.Event()
+    _pause_event.set()  # Initially unpaused
+
     is_running: bool = False
+    is_paused: bool = False
+    is_stopped: bool = False
     stop_requested: bool = False
     progress_percent: int = 0
     message: str = "Prêt"
@@ -40,7 +45,10 @@ class SyncTracker:
     def start(cls, max_pages: int, categories_list: Optional[List[Dict[str, Any]]] = None) -> None:
         with cls._lock:
             cls.is_running = True
+            cls.is_paused = False
+            cls.is_stopped = False
             cls.stop_requested = False
+            cls._pause_event.set()
             cls.progress_percent = 0
             cls.message = "Démarrage de la synchronisation..."
             cls.total_scraped = 0
@@ -63,6 +71,38 @@ class SyncTracker:
                     }
                     for c in categories_list
                 }
+
+    @classmethod
+    def pause(cls, provider: Optional[str] = None) -> None:
+        """Pauses background scraping workers non-CPU-intensively."""
+        with cls._lock:
+            if not cls.is_running or cls.is_paused:
+                return
+            cls.is_paused = True
+            cls._pause_event.clear()
+            target_provider = provider or "loverslab"
+            cls.providers_status[target_provider] = "PAUSED"
+            cls.message = "Synchronisation en pause."
+            logger.info(f"Synchronisation mise en pause pour {target_provider}.")
+
+    @classmethod
+    def resume(cls, provider: Optional[str] = None) -> None:
+        """Resumes background scraping workers."""
+        with cls._lock:
+            if not cls.is_running or not cls.is_paused:
+                return
+            cls.is_paused = False
+            cls._pause_event.set()
+            target_provider = provider or "loverslab"
+            cls.providers_status[target_provider] = "RUNNING"
+            cls.message = "Synchronisation reprise."
+            logger.info(f"Synchronisation reprise pour {target_provider}.")
+
+    @classmethod
+    def wait_if_paused(cls) -> None:
+        """Blocks worker thread safely if paused until resumed, stopped, or shutting down."""
+        while cls.is_paused and not cls.stop_requested and not ShutdownManager.is_shutting_down():
+            cls._pause_event.wait(timeout=0.2)
 
     @classmethod
     def update_progress(cls, percent: int, message: str, current_category: Optional[str] = None) -> None:
@@ -121,15 +161,48 @@ class SyncTracker:
             cls.current_category = "Terminé"
             cls.last_completed_at = datetime.now().isoformat()
             cls.is_running = False
+            cls.is_paused = False
+            cls.is_stopped = False
             cls.providers_status["loverslab"] = "OK"
+            for cat_info in cls.categories.values():
+                if cat_info.get("status") in ["IN_PROGRESS", "PENDING"]:
+                    cat_info["status"] = "COMPLETED"
 
     @classmethod
-    def stop(cls) -> None:
+    def stop(cls, provider: Optional[str] = None) -> None:
+        """Stops background scraping workers cleanly."""
         with cls._lock:
             cls.is_running = False
+            cls.is_paused = False
+            cls.is_stopped = True
             cls.stop_requested = True
+            cls._pause_event.set()  # Unblock workers waiting in pause so they exit immediately
+            target_provider = provider or "loverslab"
             if not cls.has_error:
-                cls.providers_status["loverslab"] = "OK"
+                cls.providers_status[target_provider] = "STOPPED"
+            cls.message = "Synchronisation arrêtée."
+            logger.info(f"Synchronisation arrêtée pour {target_provider}.")
+
+    @classmethod
+    def reset(cls) -> None:
+        """Resets tracker state to default idle state (for tests and reinitialization)."""
+        with cls._lock:
+            cls.is_running = False
+            cls.is_paused = False
+            cls.is_stopped = False
+            cls.stop_requested = False
+            cls._pause_event.set()
+            cls.progress_percent = 0
+            cls.message = "Prêt"
+            cls.total_scraped = 0
+            cls.pages_completed = 0
+            cls.total_pages = 0
+            cls.current_category = None
+            cls.has_error = False
+            cls.error_message = None
+            cls.page1_ready = False
+            cls.categories.clear()
+            cls.providers_status = {"loverslab": "OK", "patreon": "OK"}
 
     @classmethod
     def to_response(cls) -> CatalogSyncStatusResponse:
@@ -148,6 +221,8 @@ class SyncTracker:
             ]
             return CatalogSyncStatusResponse(
                 is_running=cls.is_running,
+                is_paused=cls.is_paused,
+                is_stopped=cls.is_stopped,
                 progress_percent=cls.progress_percent,
                 message=cls.message,
                 total_scraped=max(cls.total_scraped, db_count),
@@ -161,6 +236,7 @@ class SyncTracker:
                 categories_progress=cat_items,
                 providers_status=dict(cls.providers_status),
             )
+
 
 
 ShutdownManager.register_callback(SyncTracker.stop)
@@ -200,6 +276,7 @@ def run_catalog_sync(max_pages: int) -> None:
 
             p = 1
             while p <= target_cat_pages:
+                SyncTracker.wait_if_paused()
                 if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
                     break
 
@@ -209,6 +286,7 @@ def run_catalog_sync(max_pages: int) -> None:
                 scrape_success = False
 
                 for attempt in range(max_retries):
+                    SyncTracker.wait_if_paused()
                     if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
                         break
                     try:
@@ -234,6 +312,7 @@ def run_catalog_sync(max_pages: int) -> None:
                         else:
                             logger.error(f"Erreur définitive worker LoversLab [{cat_name}] page {p}: {e}", exc_info=True)
 
+                SyncTracker.wait_if_paused()
                 if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
                     break
 
@@ -246,12 +325,18 @@ def run_catalog_sync(max_pages: int) -> None:
                 try:
                     with db_lock:
                         with db.get_session() as session:
-                            for m_data in mods:
-                                existing = (
+                            remote_ids = [m["remote_id"] for m in mods if m.get("remote_id")]
+                            existing_map = {}
+                            if remote_ids:
+                                found = (
                                     session.query(CatalogMod)
-                                    .filter_by(source=m_data["source"], remote_id=m_data["remote_id"])
-                                    .first()
+                                    .filter(CatalogMod.remote_id.in_(remote_ids))
+                                    .all()
                                 )
+                                existing_map = {(m.source, m.remote_id): m for m in found}
+
+                            for m_data in mods:
+                                existing = existing_map.get((m_data["source"], m_data["remote_id"]))
                                 if not existing:
                                     mod_record = CatalogMod(
                                         source=m_data["source"],
@@ -293,11 +378,15 @@ def run_catalog_sync(max_pages: int) -> None:
                     logger.error(f"Erreur enregistrement BDD [{cat_name}] page {p}: {e}", exc_info=True)
 
                 p += 1
+                SyncTracker.wait_if_paused()
                 if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
                     break
                 time.sleep(0.3)
 
-            SyncTracker.update_category(cat_id, target_cat_pages, target_cat_pages, cat_mods_count, "COMPLETED")
+            if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
+                SyncTracker.update_category(cat_id, min(p, target_cat_pages), target_cat_pages, cat_mods_count, "STOPPED")
+            else:
+                SyncTracker.update_category(cat_id, target_cat_pages, target_cat_pages, cat_mods_count, "COMPLETED")
             return cat_mods_count
 
         num_workers = min(len(categories), 8)
@@ -318,7 +407,8 @@ def run_catalog_sync(max_pages: int) -> None:
             logger.error(f"Erreur globale de synchronisation: {e}", exc_info=True)
             SyncTracker.set_error(f"Erreur de synchronisation: {e}")
     finally:
-        SyncTracker.stop()
+        if SyncTracker.is_running:
+            SyncTracker.stop()
 
 
 def check_catalog_dependencies(
@@ -368,8 +458,11 @@ def check_catalog_dependencies(
             is_syncing=SyncTracker.is_running,
         )
 
-        already_installed = [d for d in dep_items if d.is_installed or d.status == "INSTALLED"]
-        missing = [d for d in dep_items if not d.is_installed and d.status != "INSTALLED"]
+        game_dlcs = [d for d in dep_items if d.is_game_dlc or d.status == "GAME_DLC"]
+        mod_deps = [d for d in dep_items if not (d.is_game_dlc or d.status == "GAME_DLC")]
+
+        already_installed = [d for d in mod_deps if d.is_installed or d.status == "INSTALLED"]
+        missing = [d for d in mod_deps if not d.is_installed and d.status != "INSTALLED"]
 
         not_detected_finished = [d for d in missing if d.status == "NOT_DETECTED_FINISHED"]
         not_detected_scanning = [d for d in missing if d.status == "NOT_DETECTED_SCANNING"]
@@ -379,7 +472,7 @@ def check_catalog_dependencies(
 
         unfound = list(not_detected_finished) + list(unresolved_text_deps)
         found_missing = [d for d in missing if d not in unfound and d.status != "NOT_DETECTED_SCANNING"]
-        is_partial = bool(unfound or req_status == "PENDING_VERIFICATION")
+        is_partial = bool(unfound or (req_status == "PENDING_VERIFICATION" and not mod_deps and not game_dlcs))
 
         if is_partial:
             unfound_names = [d.title for d in unfound]
@@ -400,6 +493,7 @@ def check_catalog_dependencies(
                 blocking_reason=warning_msg,
                 already_installed_dependencies=already_installed,
                 missing_dependencies=found_missing,
+                game_dlc_dependencies=game_dlcs,
             )
         elif not_detected_scanning:
             names = ", ".join(f"'{d.title}'" for d in not_detected_scanning)
@@ -413,9 +507,10 @@ def check_catalog_dependencies(
                 blocking_reason=f"La synchronisation du catalogue est en cours pour : {names}.",
                 already_installed_dependencies=already_installed,
                 missing_dependencies=found_missing,
+                game_dlc_dependencies=game_dlcs,
             )
         else:
-            final_status = "RESOLVED" if req_mods else (req_status or "NONE")
+            final_status = "RESOLVED" if (req_mods or game_dlcs) else (req_status or "NONE")
             return DependenciesCheckResponse(
                 mod_title=mod_title,
                 requirements_status=final_status,
@@ -426,4 +521,5 @@ def check_catalog_dependencies(
                 blocking_reason=None,
                 already_installed_dependencies=already_installed,
                 missing_dependencies=missing,
+                game_dlc_dependencies=game_dlcs,
             )

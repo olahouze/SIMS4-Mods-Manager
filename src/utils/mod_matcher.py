@@ -47,6 +47,37 @@ class ModMatcher:
         r"(?i)\b(?:the\s+sims\s+4|sims\s+4|the\s+sims|sims|ts4|cc|custom\s+content|package|addon|add-on)\b",
     )
 
+    # Generic header / noise words that must never be considered valid mod titles
+    GENERIC_EXCLUDED_WORDS = {
+        "requirements",
+        "requirement",
+        "prerequisites",
+        "prerequisite",
+        "download",
+        "downloads",
+        "dependencies",
+        "dependency",
+        "optional",
+        "optionnel",
+        "requis",
+        "prérequis",
+        "prerequis",
+        "links",
+        "link",
+        "lien",
+        "liens",
+        "none",
+        "aucun",
+        "aucune",
+        "n/a",
+        "na",
+        "install",
+        "installation",
+        "info",
+        "notes",
+        "note",
+    }
+
     @classmethod
     def strip_accents(cls, text: str) -> str:
         """Removes diacritical marks/accents from text."""
@@ -163,6 +194,9 @@ class ModMatcher:
         if not q_clean or not c_clean:
             return 0.0
 
+        if q_clean.lower() in cls.GENERIC_EXCLUDED_WORDS or len(q_clean) < 2:
+            return 0.0
+
         # 1. Exact match on cleaned core names
         if q_clean == c_clean:
             return 1.0
@@ -255,6 +289,8 @@ class ModMatcher:
                 return direct_id, 1.0
 
         q_clean = cls.clean_mod_title(query)
+        if not q_clean or len(q_clean) < 2 or q_clean.lower() in cls.GENERIC_EXCLUDED_WORDS:
+            return None
         tokens = cls.get_significant_tokens(q_clean)
 
         candidate_query = session.query(CatalogMod)
@@ -295,6 +331,10 @@ class ModMatcher:
         Returns (installed_mod, score) or None.
         """
         if not query or not installed_mods:
+            return None
+
+        q_clean = cls.clean_mod_title(query)
+        if not q_clean or len(q_clean) < 2 or q_clean.lower() in cls.GENERIC_EXCLUDED_WORDS:
             return None
 
         best_mod = None

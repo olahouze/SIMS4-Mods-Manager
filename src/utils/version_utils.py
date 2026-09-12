@@ -21,27 +21,12 @@ def parse_flexible_date(date_val: Optional[str]) -> Optional[datetime]:
     except ValueError:
         pass
 
-    # Common strptime patterns
-    formats = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d",
-        "%d/%m/%Y %H:%M:%S",
-        "%d/%m/%Y %H:%M",
-        "%d/%m/%Y",
-        "%B %d, %Y",
-        "%b %d, %Y",
-        "%d %B %Y",
-        "%d %b %Y",
-    ]
-
-    for fmt in formats:
-        try:
-            return datetime.strptime(clean_val, fmt)
-        except ValueError:
-            continue
-
-    return None
+    # Fast robust heuristic parser via python-dateutil
+    try:
+        from dateutil import parser as date_parser
+        return date_parser.parse(clean_val)
+    except (ValueError, OverflowError, TypeError):
+        return None
 
 
 def normalize_version(version_str: Optional[str]) -> str:

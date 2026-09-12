@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from src.api.schemas.catalog import DependencyItem
 from src.database.models import CatalogMod
 from src.utils.mod_matcher import ModMatcher
+from src.utils.game_dlc_matcher import GameDlcMatcher
 
 
 # Table de correspondance pour les cas spécifiques de dépendances.
@@ -78,14 +79,16 @@ def resolve_mod_dependencies(
     installed_by_remote: Dict[Tuple[str, str], Any],
     installed_by_title: Dict[str, Any],
     is_syncing: Optional[bool] = None,
+    catalog_remote_ids: Optional[set] = None,
 ) -> List[DependencyItem]:
     """
-    Resolves dependency items against database catalog and installed mods,
-    returning DependencyItem objects with one of the 4 exact statuses:
+    Resolves dependency items against database catalog, installed mods, and official game DLCs.
+    Returns DependencyItem objects with one of the statuses:
     - INSTALLED
     - DETECTED_NOT_INSTALLED
     - NOT_DETECTED_SCANNING (if sync is currently running)
     - NOT_DETECTED_FINISHED (if sync is finished)
+    - GAME_DLC (official The Sims 4 expansion / pack)
     """
     if is_syncing is None:
         from src.services.catalog_sync_service import SyncTracker
@@ -98,6 +101,39 @@ def resolve_mod_dependencies(
         r_id = str(dep.get("remote_id") or "")
         title = dep.get("title", "")
         url = dep.get("url", "")
+
+        # 0. Check if this is an official Game DLC / Pack (multilingual support)
+        is_dlc = dep.get("is_game_dlc", False)
+        dlc_name = dep.get("dlc_name")
+        dlc_code = dep.get("dlc_code")
+
+        if not is_dlc and title:
+            # Skip base game only references
+            if GameDlcMatcher.is_base_game_only(title):
+                continue
+            matched, matched_name, matched_code = GameDlcMatcher.match_dlc(title)
+            if matched:
+                is_dlc = True
+                dlc_name = matched_name
+                dlc_code = matched_code
+
+        if is_dlc:
+            in_game = GameDlcMatcher.is_dlc_installed_in_game(dlc_code)
+            is_installed = bool(in_game) if in_game is not None else False
+            items.append(
+                DependencyItem(
+                    source="game_dlc",
+                    remote_id=dlc_code or "",
+                    title=f"The Sims 4 : {dlc_name}" if not title.lower().startswith("the sims 4") else title,
+                    url="",
+                    is_installed=is_installed,
+                    status="GAME_DLC",
+                    is_game_dlc=True,
+                    dlc_name=dlc_name or title,
+                    dlc_code=dlc_code,
+                )
+            )
+            continue
 
         # 1. If remote_id is missing, search catalog by title or alias
         if not r_id and title:
@@ -141,13 +177,17 @@ def resolve_mod_dependencies(
             if im_match:
                 is_installed = True
 
-        # 3. Determine status among the 4 states
+        # 3. Determine status among the states
         if is_installed:
             status = "INSTALLED"
         elif r_id:
-            exists_in_catalog = (
-                session.query(CatalogMod.id).filter_by(source=source, remote_id=r_id).first() is not None
-            )
+            if catalog_remote_ids is not None:
+                exists_in_catalog = (source, r_id) in catalog_remote_ids
+            else:
+                exists_in_catalog = (
+                    session.query(CatalogMod.id).filter_by(source=source, remote_id=r_id).first() is not None
+                )
+
             if exists_in_catalog or r_id in SPECIAL_DEPENDENCY_REMOTE_IDS:
                 status = "DETECTED_NOT_INSTALLED"
             elif is_syncing:
@@ -168,9 +208,13 @@ def resolve_mod_dependencies(
                 url=url,
                 is_installed=is_installed,
                 status=status,
+                is_game_dlc=False,
+                dlc_name=None,
+                dlc_code=None,
             )
         )
     return items
+
 
 
 def find_dependent_installed_mods(installed_mod_id: int, session) -> List[Dict[str, Any]]:

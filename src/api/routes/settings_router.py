@@ -32,6 +32,7 @@ def get_settings():
         adult_content_enabled=config.adult_content_enabled,
         check_updates_on_startup=config.check_updates_on_startup,
         theme=config.theme,
+        language=config.language,
         max_workers=config.max_workers,
         detected_mods_dir=str(detected_mods) if detected_mods else None,
         detected_game_exe=str(detected_exe) if detected_exe else None,
@@ -59,6 +60,13 @@ def update_settings(payload: SettingsUpdateRequest):
         config.check_updates_on_startup = payload.check_updates_on_startup
     if payload.theme is not None:
         config.theme = payload.theme
+    if payload.language is not None:
+        config.language = payload.language
+        try:
+            from src.i18n import I18nManager
+            I18nManager.instance().set_language(payload.language)
+        except Exception as e:
+            logger.debug(f"I18nManager set_language error in router: {e}")
     if payload.max_workers is not None:
         config.max_workers = payload.max_workers
 
