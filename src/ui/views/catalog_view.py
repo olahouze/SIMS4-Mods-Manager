@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QScrollArea,
-    QGridLayout,
     QLabel,
     QPushButton,
     QFrame,
@@ -17,6 +16,7 @@ from PySide6.QtCore import Qt, Signal, QTimer
 from src.api.client import get_api_client
 from src.ui.components.filter_bar import FilterBar
 from src.ui.components.mod_card import ModCard
+from src.ui.components.responsive_card_grid import ResponsiveCardGrid
 from src.ui.components.dependencies_dialog import DependenciesDialog
 from src.ui.components.progress_dialog import ProgressDialog
 from src.ui.components.provider_drawer import ProviderDrawer
@@ -46,9 +46,12 @@ class CatalogView(QWidget):
         self._page1_displayed = False
         self._last_pages_completed = 0
 
-        # Background sync monitoring timer (runs continuously to keep status icon accurate)
+        self.IDLE_MONITOR_INTERVAL_MS = 4000
+        self.ACTIVE_MONITOR_INTERVAL_MS = 600
+
+        # Background sync monitoring timer with adaptive back-off
         self.monitor_timer = QTimer(self)
-        self.monitor_timer.setInterval(1200)
+        self.monitor_timer.setInterval(self.IDLE_MONITOR_INTERVAL_MS)
         self.monitor_timer.timeout.connect(self._check_sync_status)
         self.monitor_timer.start()
 
@@ -119,14 +122,8 @@ class CatalogView(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet("background-color: transparent; border: none;")
 
-        self.grid_container = QWidget()
-        self.grid_container.setStyleSheet("background-color: transparent;")
-        self.grid_layout = QGridLayout(self.grid_container)
-        self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setSpacing(16)
-        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-
-        self.scroll_area.setWidget(self.grid_container)
+        self.card_grid = ResponsiveCardGrid(min_card_width=250, spacing=16)
+        self.scroll_area.setWidget(self.card_grid)
         layout.addWidget(self.scroll_area, stretch=1)
 
         # Pagination Bar
@@ -296,23 +293,11 @@ class CatalogView(QWidget):
                 tr("catalog.page_info", current=self.current_page, total=self.total_pages, total_items=self.total_items)
             )
 
-            # Clear existing items
-            while self.grid_layout.count():
-                item = self.grid_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-
             if not items:
-                no_data = QLabel(tr("catalog.empty_desc"))
-                no_data.setStyleSheet("font-size: 14px; color: #64748b; padding: 40px;")
-                no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.grid_layout.addWidget(no_data, 0, 0)
+                self.card_grid.set_empty_message(tr("catalog.empty_desc"))
                 return
 
-            columns = 4
-            row = 0
-            col = 0
-
+            new_cards = []
             for m in items:
                 mod_dict = {
                     "id": m["id"],
@@ -340,12 +325,9 @@ class CatalogView(QWidget):
                 card.details_requested.connect(
                     lambda d, inst=m.get("is_installed", False): self._show_mod_details(d, inst)
                 )
-                self.grid_layout.addWidget(card, row, col)
+                new_cards.append(card)
 
-                col += 1
-                if col >= columns:
-                    col = 0
-                    row += 1
+            self.card_grid.set_cards(new_cards)
 
         except Exception as e:
             logger.error(f"Erreur API lors du rafraîchissement du catalogue: {e}")
@@ -382,11 +364,12 @@ class CatalogView(QWidget):
         self._sync_worker = SyncTriggerWorker(self.api_client, max_pages=max_pages)
         self._sync_worker.finished_signal.connect(self._on_sync_triggered)
         self._sync_worker.start()
+        self.monitor_timer.setInterval(self.ACTIVE_MONITOR_INTERVAL_MS)
         self.start_sync_monitoring()
 
     def _on_sync_triggered(self, success: bool, message: str):
         if not success:
-            QMessageBox.warning(self, "Erreur", f"Impossible de lancer la synchronisation : {message}")
+            QMessageBox.warning(self, tr("dialogs.error_title"), f"{message}")
             self._check_sync_status()
 
     def start_sync_monitoring(self):
@@ -411,6 +394,8 @@ class CatalogView(QWidget):
             self.provider_drawer.update_sync_status(status)
 
             if is_running:
+                if self.monitor_timer.interval() != self.ACTIVE_MONITOR_INTERVAL_MS:
+                    self.monitor_timer.setInterval(self.ACTIVE_MONITOR_INTERVAL_MS)
                 self.sync_banner.setVisible(True)
                 if is_paused:
                     self.sync_banner_lbl.setText(f"⏸️ {msg}")
@@ -426,9 +411,13 @@ class CatalogView(QWidget):
                     self._last_pages_completed = pages_done
                     self.refresh_catalog()
             elif has_error:
+                if self.monitor_timer.interval() != self.IDLE_MONITOR_INTERVAL_MS:
+                    self.monitor_timer.setInterval(self.IDLE_MONITOR_INTERVAL_MS)
                 self.sync_banner.setVisible(True)
                 self.sync_banner_lbl.setText(f"⚠️ Erreur scraping : {err_msg or msg}")
             else:
+                if self.monitor_timer.interval() != self.IDLE_MONITOR_INTERVAL_MS:
+                    self.monitor_timer.setInterval(self.IDLE_MONITOR_INTERVAL_MS)
                 self.sync_banner.setVisible(False)
                 if self._last_pages_completed > 0:
                     self._last_pages_completed = 0
@@ -462,13 +451,13 @@ class CatalogView(QWidget):
         if not chk.get("can_install", True) and not is_partial:
             reason = chk.get(
                 "blocking_reason",
-                "Ce mod requiert des dépendances non identifiées sur LoversLab. Installation impossible.",
+                tr("catalog.install_blocked_reason"),
             )
-            QMessageBox.warning(self, "Installation Bloquée", reason)
+            QMessageBox.warning(self, tr("catalog.install_blocked_title"), reason)
             return
 
         if missing or unfound or is_partial or game_dlcs:
-            mod_title = mod_data.get("title", "ce mod")
+            mod_title = mod_data.get("title", tr("common.untitled"))
             dlg = DependenciesDialog(
                 mod_title,
                 already,
@@ -481,9 +470,8 @@ class CatalogView(QWidget):
             if dlg.exec() != QDialog.DialogCode.Accepted:
                 return
 
-
         # 2. Proceed with installation
-        self.progress_dlg = ProgressDialog(f"Installation de {mod_data.get('title')}", self)
+        self.progress_dlg = ProgressDialog(tr("catalog.install_progress_title", title=mod_data.get('title', '')), self)
         self.progress_dlg.show()
 
         self.install_worker = InstallWorker(mod_data)
@@ -499,9 +487,9 @@ class CatalogView(QWidget):
         if hasattr(self, "progress_dlg"):
             self.progress_dlg.close()
         if success:
-            QMessageBox.information(self, "Installation Réussie", msg)
+            QMessageBox.information(self, tr("catalog.install_success_title"), msg)
         else:
-            QMessageBox.warning(self, "Erreur d'Installation", msg)
+            QMessageBox.warning(self, tr("catalog.install_error_title"), msg)
         self.refresh_catalog()
         self.install_finished.emit(success, msg)
 
@@ -514,10 +502,13 @@ class CatalogView(QWidget):
     def retranslate_ui(self):
         """Retranslates all text elements in CatalogView."""
         self.title_lbl.setText(tr("catalog.title"))
-        self.btn_prev.setText(f"◀ {tr('dialogs.previous', default='Précédent')}")
-        self.btn_next.setText(f"{tr('dialogs.next', default='Suivant')} ▶")
+        self.sync_banner_lbl.setText(tr("catalog.sync_running"))
+        self.btn_prev.setText(tr("image_viewer.btn_prev"))
+        self.btn_next.setText(tr("image_viewer.btn_next"))
         if hasattr(self.filter_bar, "retranslate_ui"):
             self.filter_bar.retranslate_ui()
+        if hasattr(self.provider_drawer, "retranslate_ui"):
+            self.provider_drawer.retranslate_ui()
         self.lbl_page_info.setText(
             tr("catalog.page_info", current=self.current_page, total=self.total_pages, total_items=self.total_items)
         )

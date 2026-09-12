@@ -36,9 +36,15 @@ SIMS4-Mods-Manager/
 │   ├── modules_and_classes.md         # Diagrammes de liaisons, classes et séquences
 │   └── services_and_providers.md      # Détails des services métier et intégrations providers
 ├── src/
+│   ├── i18n.py                        # Singleton I18nManager & fonction tr() pour internationalisation
+│   ├── locales/                       # Catalogues JSON de traduction (100% de parité de clés)
+│   │   ├── fr.json                    # Français (défaut)
+│   │   ├── en.json                    # Anglais
+│   │   └── es.json                    # Espagnol
 │   ├── api/                           # Présentation API REST (FastAPI)
 │   │   ├── app.py                     # Initialisation FastAPI, middlewares CORS, cycle de vie
 │   │   ├── client.py                  # Client HTTP (ApiClient) consommé par l'UI PySide6
+│   │   ├── deps.py                    # Injection de dépendances FastAPI (get_db)
 │   │   ├── server.py                  # Gestionnaire du serveur Uvicorn (thread daemon ou autonome)
 │   │   ├── schemas/                   # Schémas Pydantic (DTOs typés par domaine)
 │   │   │   ├── accounts.py            # Sessions de connexion et statuts providers
@@ -87,9 +93,14 @@ SIMS4-Mods-Manager/
 │   ├── ui/                            # Interface Graphique PySide6
 │   │   ├── app.py                     # Fenêtre principale (MainWindow), navigation et layout
 │   │   ├── components/                # Éléments réutilisables (ModCard, FilterBar, ImageViewerModal, ImageCache...)
-│   │   │   ├── image_cache.py         # Cache mémoire LRU de pixmaps thread-safe (0 ms latency)
-│   │   │   └── ...
-│   │   ├── views/                     # Vues pleines pages (Catalogue, Détails, Mes Mods, Mises à jour, Logs)
+│   │   │   ├── responsive_card_grid.py # Grille de cartes réactive s'adaptant à la largeur d'écran
+│   │   │   ├── dependencies_summary_widget.py # Widget partagé de prérequis pour ModCard et InstalledCard
+│   │   │   ├── dialog_helper.py       # Standardisation des dialogues modaux (thème sombre & i18n)
+│   │   │   ├── filter_bar.py          # Barre de recherche et filtrage multi-critères
+│   │   │   ├── mod_card.py            # Tuile de catalogue
+│   │   │   ├── installed_card.py      # Tuile de mod installé
+│   │   │   └── image_viewer_modal.py  # Visionneuse de galerie de screenshots plein écran
+│   │   ├── views/                     # Vues pleines pages (Catalogue, Détails, Mes Mods, Mises à jour, Logs, Paramètres, Comptes)
 │   │   └── workers/                   # Threads d'arrière-plan PySide6 (QThread)
 │   │       ├── catalog_workers.py     # SyncTriggerWorker, InstallWorker
 │   │       └── detail_workers.py      # FetchDetailsWorker, GalleryBatchWorker, DescriptionImageLoaderWorker
@@ -97,19 +108,21 @@ SIMS4-Mods-Manager/
 │       ├── archive.py                 # Décompression (.zip, .rar, .7z)
 │       ├── cache_utils.py             # Hachage MD5 d'URL, inférence d'extensions et résolution de chemins de cache
 │       ├── file_utils.py              # Nettoyage et assainissement strict des noms de dossiers et fichiers
+│       ├── image_cache.py             # Cache mémoire LRU de pixmaps à budget d'octets fixe (128 Mo)
 │       ├── logger.py                  # Système de log avec émetteur temps réel Qt et logs rotatifs
 │       ├── mod_matcher.py             # Algorithmes de matching de titres et tokens
 │       ├── network.py                 # Allocation dynamique de port libre et stream_download
 │       ├── resource_cfg.py            # Modèle de configuration Resource.cfg
 │       └── version_utils.py           # Analyse flexible de dates multiformats et normalisation de versions
-└── tests/                             # Suite de tests automatisée (115 tests unitaires & intégration)
-    ├── conftest.py                    # Fixtures pytest (FastAPI TestClient, SQLite temporaire)
+└── tests/                             # Suite de tests automatisée (151 tests unitaires & intégration - 100% vert)
+    ├── conftest.py                    # Fixtures pytest (FastAPI TestClient, SQLite temporaire, QApplication)
+    ├── core/                          # Tests des constantes, exceptions et DTOs
     ├── api/                           # Tests des routes REST et de l'ApiClient
     ├── database/                      # Tests CRUD, intégrité, pragmas WAL et pooling de sessions
     ├── services/                      # Tests unitaires des services métier
     ├── providers/                     # Tests des connecteurs externes et des parsers HTML purs
-    ├── ui/                            # Tests des workers asynchrones PySide6 et du cache d'images LRU
-    └── utils/                         # Tests des utilitaires (matching, réseau, versions, dates)
+    ├── ui/                            # Tests des composants PySide6, grilles, dialogues et workers
+    └── utils/                         # Tests des utilitaires (i18n, matching, cache LRU, versions, dates)
 ```
 
 ---

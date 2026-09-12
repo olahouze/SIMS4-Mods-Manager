@@ -6,13 +6,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QScrollArea,
-    QGridLayout,
     QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 
 from src.api.client import get_api_client
 from src.ui.components.installed_card import InstalledCard
+from src.ui.components.responsive_card_grid import ResponsiveCardGrid
+from src.ui.utils.dialog_helper import DialogHelper
 from src.i18n import tr
 from src.utils.logger import logger
 
@@ -121,14 +122,8 @@ class InstalledView(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background-color: transparent; border: none;")
 
-        self.grid_container = QWidget()
-        self.grid_container.setStyleSheet("background-color: transparent;")
-        self.grid_layout = QGridLayout(self.grid_container)
-        self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setSpacing(16)
-        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-
-        scroll.setWidget(self.grid_container)
+        self.card_grid = ResponsiveCardGrid(min_card_width=250, spacing=16)
+        scroll.setWidget(self.card_grid)
         layout.addWidget(scroll, stretch=1)
 
         self.refresh_mods()
@@ -139,7 +134,7 @@ class InstalledView(QWidget):
             res = self.api_client.get_installed_mods()
             self.all_mods = res.get("items", [])
             total = len(self.all_mods)
-            self.badge_count.setText(f"{total} mod{'s' if total > 1 else ''}")
+            self.badge_count.setText(tr("installed.badge_count", count=total))
             self._populate_grid(self.all_mods)
         except Exception as e:
             logger.error(f"Erreur chargement mods installés: {e}")
@@ -165,41 +160,23 @@ class InstalledView(QWidget):
         self._populate_grid(filtered)
 
     def _populate_grid(self, mods_list: list):
-        # Clear existing items
-        while self.grid_layout.count():
-            item = self.grid_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
         if not mods_list:
-            no_mods_lbl = QLabel(
-                "Aucun mod installé trouvé.\n"
-                "Parcourez le catalogue ou placez vos mods dans le dossier Mods pour les voir ici !"
-            )
-            no_mods_lbl.setStyleSheet("font-size: 14px; color: #64748b; padding: 40px;")
-            no_mods_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.grid_layout.addWidget(no_mods_lbl, 0, 0)
+            self.card_grid.set_empty_message(tr("installed.empty_desc"))
             return
 
-        columns = 4
-        row = 0
-        col = 0
-
+        new_cards = []
         for m in mods_list:
             card = InstalledCard(m, parent=self)
             card.delete_requested.connect(self._on_delete_mod)
             card.open_folder_requested.connect(self.open_mod_folder)
             card.details_requested.connect(self.details_requested.emit)
-            self.grid_layout.addWidget(card, row, col)
+            new_cards.append(card)
 
-            col += 1
-            if col >= columns:
-                col = 0
-                row += 1
+        self.card_grid.set_cards(new_cards)
 
     def _on_delete_mod(self, mod_data: dict):
         """Confirms with user and uninstalls mod via API, with dependency warning if other mods need it."""
-        title = mod_data.get("title", "ce mod")
+        title = mod_data.get("title", tr("common.untitled"))
         mod_id = mod_data.get("id")
         folder_name = mod_data.get("folder_name", "")
 
@@ -214,74 +191,64 @@ class InstalledView(QWidget):
         # 2. Display warning if dependent mods are found
         if dependents:
             dep_lines = "\n".join(f"  • {d.get('title', 'Mod')} ({d.get('folder_name', '')})" for d in dependents)
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Warning)
-            msg_box.setWindowTitle("⚠️ Attention : Mod Requis par d'Autres Mods")
-            msg_box.setText(
-                f"Le mod « {title} » est un prérequis indispensable pour {len(dependents)} autre(s) mod(s) installé(s) :\n\n"
-                f"{dep_lines}\n\n"
-                f"⚠️ Si vous supprimez ce mod, ces autres mods ne fonctionneront plus correctement !\n\n"
-                f"Voulez-vous tout de même désinstaller et supprimer définitivement « {title} » ?"
+            confirmed = DialogHelper.confirm(
+                self,
+                title=tr("installed.dep_warning_title"),
+                message=tr("installed.dep_warning_msg", title=title, count=len(dependents), deps=dep_lines),
+                confirm_text=tr("installed.btn_delete_anyway"),
+                cancel_text=tr("installed.btn_cancel"),
+                is_destructive=True,
             )
-            btn_delete = msg_box.addButton("Supprimer quand même", QMessageBox.ButtonRole.DestructiveRole)
-            btn_cancel = msg_box.addButton("Annuler", QMessageBox.ButtonRole.RejectRole)
-            msg_box.setDefaultButton(btn_cancel)
-            msg_box.exec()
-
-            if msg_box.clickedButton() != btn_delete:
+            if not confirmed:
                 return
         else:
             # Standard confirmation
-            reply = QMessageBox.question(
+            confirmed = DialogHelper.confirm(
                 self,
-                "Confirmer la suppression",
-                f"Voulez-vous vraiment désinstaller et supprimer définitivement le mod suivant ?\n\n"
-                f"• Titre : {title}\n"
-                f"• Dossier : {folder_name}\n\n"
-                f"Le dossier physique et tous ses fichiers seront supprimés de votre jeu Sims 4.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+                title=tr("installed.delete_confirm_title"),
+                message=tr("installed.delete_confirm_msg", title=title, folder=folder_name),
+                is_destructive=True,
             )
-            if reply != QMessageBox.StandardButton.Yes:
+            if not confirmed:
                 return
 
         try:
             res = self.api_client.uninstall_mod(mod_id)
             if res.get("success", False):
                 logger.info(f"Mod '{title}' désinstallé avec succès.")
-                QMessageBox.information(self, "Mod Supprimé", f"Le mod '{title}' a été supprimé avec succès.")
+                DialogHelper.information(self, tr("installed.delete_success_title"), tr("installed.delete_success_msg", title=title))
                 self.mods_changed.emit()
             else:
                 logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")
-                QMessageBox.warning(self, "Erreur", res.get("message", "Échec de la suppression."))
+                DialogHelper.error(self, tr("dialogs.error_title"), res.get("message", tr("dialogs.error_title")))
             self.refresh_mods()
         except Exception as e:
             logger.error(f"Erreur lors de la désinstallation du mod {mod_id}: {e}")
-            QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {e}")
+            DialogHelper.error(self, tr("dialogs.error_title"), f"{e}")
 
     def scan_mods_folder(self):
         try:
             res = self.api_client.scan_installed_mods()
             msg = res.get("message", "Scan terminé.")
             logger.info(f"Scan des mods effectué : {msg}")
-            QMessageBox.information(self, "Scan Terminé", msg)
+            QMessageBox.information(self, tr("installed.scan_finished_title"), msg)
             self.refresh_mods()
             self.mods_changed.emit()
         except Exception as e:
             logger.error(f"Erreur scan dossier Mods: {e}")
-            QMessageBox.critical(self, "Erreur Scan", f"Impossible de scanner le dossier Mods: {e}")
+            QMessageBox.critical(self, tr("installed.scan_error_title"), f"{e}")
 
     def open_mods_folder(self):
         try:
             self.api_client.open_folder()
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le dossier Mods: {e}")
+            QMessageBox.warning(self, tr("dialogs.error_title"), f"{e}")
 
     def open_mod_folder(self, folder_name: str):
         try:
             self.api_client.open_folder(folder_name=folder_name)
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le sous-dossier '{folder_name}': {e}")
+            QMessageBox.warning(self, tr("dialogs.error_title"), f"{e}")
 
     def retranslate_ui(self):
         """Retranslates all text elements in InstalledView."""

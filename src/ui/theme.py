@@ -169,6 +169,20 @@ QPushButton.DangerBtn:hover {
     background-color: #dc2626;
 }
 
+QPushButton.WarningBtn {
+    background-color: #f59e0b;
+    color: #0f172a;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 700;
+}
+
+QPushButton.WarningBtn:hover {
+    background-color: #d97706;
+    color: #ffffff;
+}
+
 /* Inputs & Search */
 QLineEdit {
     background-color: #181b2a;

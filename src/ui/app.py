@@ -312,6 +312,7 @@ class MainWindow(QMainWindow):
         self.btn_accounts.setText(tr("nav.accounts"))
         self.btn_catalog.setText(tr("nav.catalog"))
         self.btn_installed.setText(tr("nav.installed"))
+        self.btn_updates.setText(tr("nav.updates"))
         self.btn_logs.setText(tr("nav.logs"))
         self.btn_settings.setText(tr("nav.settings"))
         self.play_btn.setText(tr("nav.launch_game"))
@@ -333,6 +334,12 @@ class MainWindow(QMainWindow):
                     view.retranslate_ui()
                 except Exception as e:
                     logger.debug(f"Erreur retranslate_ui sur {type(view).__name__}: {e}")
+
+        if hasattr(self.catalog_view, "provider_drawer") and hasattr(self.catalog_view.provider_drawer, "retranslate_ui"):
+            try:
+                self.catalog_view.provider_drawer.retranslate_ui()
+            except Exception as e:
+                logger.debug(f"Erreur retranslate_ui sur provider_drawer: {e}")
 
     def refresh_game_status(self):
         """Asynchronously checks game status and updates through background worker."""

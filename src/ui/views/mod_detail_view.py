@@ -335,13 +335,13 @@ class ModDetailView(QWidget):
         g_box.setSpacing(10)
 
         g_hdr = QHBoxLayout()
-        self.gallery_title = QLabel("📸 Galerie & Captures d'écran :")
+        self.gallery_title = QLabel(tr("mod_detail.gallery_title"))
         self.gallery_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #93c5fd;")
         g_hdr.addWidget(self.gallery_title)
 
-        hint_lbl = QLabel("(Cliquez sur une image pour l'agrandir en haute définition)")
-        hint_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
-        g_hdr.addWidget(hint_lbl)
+        self.hint_lbl = QLabel(tr("mod_detail.gallery_hint"))
+        self.hint_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
+        g_hdr.addWidget(self.hint_lbl)
         g_hdr.addStretch()
         g_box.addLayout(g_hdr)
 
@@ -412,21 +412,21 @@ class ModDetailView(QWidget):
         self.mod_data = mod_data
         self.origin_name = origin_name
         self.origin_index = origin_index
-        self.back_btn.setText(f"← Retour à {origin_name}")
+        self.back_btn.setText(tr("mod_detail.back_to", origin=origin_name))
 
-        title = mod_data.get("title", "Détails du Mod")
+        title = mod_data.get("title", tr("mod_detail.title_default"))
         self.title_lbl.setText(title)
 
-        author = mod_data.get("author") or "Inconnu"
-        self.meta_author.setText(f"👤 Auteur : {author}")
+        author = mod_data.get("author") or tr("common.unknown")
+        self.meta_author.setText(tr("mod_detail.meta_author", author=author))
 
         date_val = mod_data.get("updated_date") or mod_data.get("installed_date") or ""
-        date_str = str(date_val)[:10] if date_val else "Non renseignée"
-        self.meta_date.setText(f"📅 Mise à jour : {date_str}")
+        date_str = str(date_val)[:10] if date_val else tr("mod_detail.date_unknown")
+        self.meta_date.setText(tr("mod_detail.meta_date", date=date_str))
 
         tags = mod_data.get("tags") or []
-        tags_str = ", ".join(tags) if tags else "Aucun tag"
-        self.meta_tags.setText(f"🏷️ Tags : {tags_str}")
+        tags_str = ", ".join(tags) if tags else tr("mod_detail.no_tags")
+        self.meta_tags.setText(tr("mod_detail.meta_tags", tags=tags_str))
 
         source = mod_data.get("source", "loverslab")
         self.source_badge.setText(source.capitalize())
@@ -436,13 +436,13 @@ class ModDetailView(QWidget):
         self.has_update = bool(mod_data.get("has_update", False))
 
         if self.is_installed:
-            self.installed_badge.setText("✓ Installé")
+            self.installed_badge.setText(tr("catalog.installed_badge"))
             self.installed_badge.setStyleSheet(
                 "background-color: #064e3b; color: #34d399; border-radius: 10px; padding: 4px 12px; font-weight: 700;"
             )
             self.open_folder_btn.setVisible(True)
             if self.has_update:
-                self.install_btn.setText("🔄 Mettre à jour")
+                self.install_btn.setText(tr("mod_detail.btn_update"))
                 self.install_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #f59e0b;
@@ -456,7 +456,7 @@ class ModDetailView(QWidget):
                     QPushButton:hover { background-color: #d97706; }
                 """)
             else:
-                self.install_btn.setText("✓ Déjà Installé")
+                self.install_btn.setText(tr("catalog.btn_already_installed"))
                 self.install_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #1e293b;
@@ -904,5 +904,46 @@ class ModDetailView(QWidget):
             webbrowser.open(url)
 
     def retranslate_ui(self):
-        """Retranslates header buttons and status in ModDetailView."""
-        self.back_btn.setText(tr("mod_detail.back"))
+        """Retranslates header buttons, section titles, and status in ModDetailView."""
+        if hasattr(self, "origin_name") and self.origin_name:
+            self.back_btn.setText(tr("mod_detail.back_to", origin=self.origin_name))
+        else:
+            self.back_btn.setText(tr("mod_detail.back"))
+
+        self.open_folder_btn.setText(tr("mod_detail.btn_open_folder"))
+        self.web_btn.setText(tr("mod_detail.btn_official_page"))
+        self.gallery_title.setText(tr("mod_detail.gallery_title"))
+        if hasattr(self, "hint_lbl"):
+            self.hint_lbl.setText(tr("mod_detail.gallery_hint"))
+        self.req_title.setText(tr("mod_detail.req_section_title"))
+        self.req_collapse_btn.setText(
+            tr("mod_detail.btn_collapse") if not self.req_body.isHidden() else tr("mod_detail.btn_expand")
+        )
+
+        if not self.mod_data:
+            self.title_lbl.setText(tr("mod_detail.title_default"))
+            self.meta_author.setText(tr("mod_detail.meta_author", author=tr("common.unknown")))
+            self.meta_date.setText(tr("mod_detail.meta_date", date=tr("mod_detail.date_unknown")))
+            self.meta_tags.setText(tr("mod_detail.meta_tags", tags=tr("mod_detail.no_tags")))
+            self.install_btn.setText(tr("mod_detail.btn_install"))
+            return
+
+        author = self.mod_data.get("author") or tr("common.unknown")
+        self.meta_author.setText(tr("mod_detail.meta_author", author=author))
+
+        date_val = self.mod_data.get("updated_date") or self.mod_data.get("installed_date") or ""
+        date_str = str(date_val)[:10] if date_val else tr("mod_detail.date_unknown")
+        self.meta_date.setText(tr("mod_detail.meta_date", date=date_str))
+
+        tags = self.mod_data.get("tags") or []
+        tags_str = ", ".join(tags) if tags else tr("mod_detail.no_tags")
+        self.meta_tags.setText(tr("mod_detail.meta_tags", tags=tags_str))
+
+        if self.is_installed:
+            self.installed_badge.setText(tr("catalog.installed_badge"))
+            if self.has_update:
+                self.install_btn.setText(tr("mod_detail.btn_update"))
+            else:
+                self.install_btn.setText(tr("catalog.btn_already_installed"))
+        else:
+            self.install_btn.setText(tr("mod_detail.btn_install"))

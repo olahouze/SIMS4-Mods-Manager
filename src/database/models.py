@@ -44,14 +44,18 @@ class CatalogMod(Base):
     requirements_mods_json = Column(JSON, default=list)  # JSON list of resolved LoversLab dependencies
     last_scraped_at = Column(DateTime, default=datetime.now)
 
-    __table_args__ = (Index("idx_source_remote", "source", "remote_id", unique=True),)
+    __table_args__ = (
+        Index("idx_source_remote", "source", "remote_id", unique=True),
+        Index("idx_source_updated", "source", "updated_date"),
+        Index("idx_source_title", "source", "title"),
+    )
 
     def get_tags_list(self) -> List[str]:
         if isinstance(self.tags, list):
             return self.tags
         try:
             return json.loads(self.tags or "[]")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return []
 
     def set_tags_list(self, tags_list: List[str]) -> None:
@@ -62,7 +66,7 @@ class CatalogMod(Base):
             return self.download_urls
         try:
             return json.loads(self.download_urls or "[]")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return []
 
     def set_download_urls_list(self, urls: List[Dict[str, Any]]) -> None:
@@ -73,7 +77,7 @@ class CatalogMod(Base):
             return self.external_links
         try:
             return json.loads(self.external_links or "[]")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return []
 
     def set_external_links_list(self, links: List[str]) -> None:
@@ -84,7 +88,7 @@ class CatalogMod(Base):
             return self.requirements_mods_json
         try:
             return json.loads(self.requirements_mods_json or "[]")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return []
 
     def set_requirements_mods_list(self, reqs: List[Dict[str, Any]]) -> None:
@@ -116,7 +120,7 @@ class InstalledMod(Base):
             return self.installed_files
         try:
             return json.loads(self.installed_files or "[]")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return []
 
     def set_installed_files_list(self, files: List[str]) -> None:
@@ -140,7 +144,7 @@ class AccountSession(Base):
             return self.cookies_data
         try:
             return json.loads(self.cookies_data or "{}")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {}
 
     def set_cookies_dict(self, cookies: Dict[str, str]) -> None:

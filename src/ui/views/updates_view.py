@@ -62,6 +62,8 @@ class UpdatesView(QWidget):
         self.api_client = get_api_client()
         self.all_mods: List[Dict[str, Any]] = []
         self.checkbox_items: List[tuple[int, str, QCheckBox, bool]] = []
+        self._updatable_count: int = 0
+        self._total_installed: int = 0
         self.init_ui()
 
     def init_ui(self):
@@ -154,8 +156,8 @@ class UpdatesView(QWidget):
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setSpacing(10)
 
-        self.select_updates_btn = QPushButton("🎯 Cocher les màj")
-        self.select_updates_btn.setToolTip("Cocher uniquement les modules ayant une nouvelle version disponible")
+        self.select_updates_btn = QPushButton(tr("updates.select_updates_btn"))
+        self.select_updates_btn.setToolTip(tr("updates.select_updates_tip"))
         self.select_updates_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1e2238;
@@ -171,7 +173,7 @@ class UpdatesView(QWidget):
         self.select_updates_btn.clicked.connect(self.select_updates_only)
         toolbar_layout.addWidget(self.select_updates_btn)
 
-        self.select_all_btn = QPushButton("☑️ Tout cocher")
+        self.select_all_btn = QPushButton(tr("updates.select_all_btn"))
         self.select_all_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1e2238;
@@ -186,7 +188,7 @@ class UpdatesView(QWidget):
         self.select_all_btn.clicked.connect(self.select_all)
         toolbar_layout.addWidget(self.select_all_btn)
 
-        self.deselect_all_btn = QPushButton("⬜ Tout décocher")
+        self.deselect_all_btn = QPushButton(tr("updates.deselect_all_btn"))
         self.deselect_all_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1e2238;
@@ -205,7 +207,7 @@ class UpdatesView(QWidget):
 
         # Search field
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrer parmi les mods installés...")
+        self.search_input.setPlaceholderText(tr("updates.search_placeholder"))
         self.search_input.setFixedWidth(280)
         self.search_input.setStyleSheet("""
             QLineEdit {
@@ -284,27 +286,32 @@ class UpdatesView(QWidget):
 
         self.refresh_updates()
 
+    def _update_counter_label(self):
+        if self._updatable_count > 0:
+            self.counter_label.setText(
+                tr("updates.count_available", count=self._updatable_count, total=self._total_installed)
+            )
+        elif self._total_installed > 0:
+            self.counter_label.setText(tr("updates.all_up_to_date", total=self._total_installed))
+        else:
+            self.counter_label.setText(tr("updates.up_to_date_title"))
+
     def refresh_updates(self):
         """Loads all installed mods and evaluates updates via API /api/updates."""
         try:
             res = self.api_client.get_updates()
             self.all_mods = res.get("items", [])
-            updatable_count = res.get("count", 0)
-            total_installed = res.get("total_installed", len(self.all_mods))
+            self._updatable_count = res.get("count", 0)
+            self._total_installed = res.get("total_installed", len(self.all_mods))
 
-            if updatable_count > 0:
-                self.counter_label.setText(
-                    f"{updatable_count} mise(s) à jour disponible(s) sur {total_installed} mod(s) installé(s)"
-                )
-            else:
-                self.counter_label.setText(f"Tous vos modules sont à jour ({total_installed} installés)")
+            self._update_counter_label()
 
-            self.update_all_btn.setEnabled(updatable_count > 0)
+            self.update_all_btn.setEnabled(self._updatable_count > 0)
             self._render_table()
 
         except Exception as e:
             logger.error(f"Erreur API lors de la vérification des mises à jour: {e}")
-            self.counter_label.setText("Erreur lors de la vérification des mises à jour")
+            self.counter_label.setText(tr("updates.check_error"))
 
     def _render_table(self):
         """Populates the table with all installed mods in a clear, spacious layout."""
@@ -438,11 +445,11 @@ class UpdatesView(QWidget):
             s_layout.setContentsMargins(8, 0, 8, 0)
             s_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             if has_update:
-                badge = StatusBadge("🔄 MàJ disponible", badge_type="warning")
+                badge = StatusBadge(tr("updates.badge_update_avail"), badge_type="warning")
             elif item.get("catalog_mod_id") or item.get("remote_id"):
-                badge = StatusBadge("✓ À jour", badge_type="active")
+                badge = StatusBadge(tr("updates.badge_up_to_date"), badge_type="active")
             else:
-                badge = StatusBadge("ℹ️ Local", badge_type="info")
+                badge = StatusBadge(tr("updates.badge_local"), badge_type="info")
             s_layout.addWidget(badge)
             self.table.setCellWidget(row, 4, stat_widget)
 
@@ -453,7 +460,7 @@ class UpdatesView(QWidget):
             act_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             if has_update:
-                up_btn = QPushButton("🔄 Mettre à jour")
+                up_btn = QPushButton(tr("updates.btn_update_single"))
                 up_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 up_btn.setStyleSheet("""
                     QPushButton {
@@ -470,7 +477,7 @@ class UpdatesView(QWidget):
                 up_btn.clicked.connect(lambda _, mid=inst_id, t=title: self.update_single_mod(mid, t))
                 act_layout.addWidget(up_btn)
             else:
-                up_to_date_btn = QPushButton("✓ À jour")
+                up_to_date_btn = QPushButton(tr("updates.btn_up_to_date"))
                 up_to_date_btn.setEnabled(False)
                 up_to_date_btn.setStyleSheet("""
                     QPushButton {
@@ -500,13 +507,13 @@ class UpdatesView(QWidget):
 
         count = len(selected_updatable)
         if count > 0:
-            self.update_selected_btn.setText(f"☑️ Mettre à jour la sélection ({count})")
+            self.update_selected_btn.setText(tr("updates.update_selected_batch", count=count))
             self.update_selected_btn.setEnabled(True)
         elif len(total_selected) > 0:
-            self.update_selected_btn.setText(f"☑️ Réinstaller la sélection ({len(total_selected)})")
+            self.update_selected_btn.setText(tr("updates.reinstall_selected_batch", count=len(total_selected)))
             self.update_selected_btn.setEnabled(True)
         else:
-            self.update_selected_btn.setText("☑️ Mettre à jour la sélection (0)")
+            self.update_selected_btn.setText(tr("updates.update_selected_batch", count=0))
             self.update_selected_btn.setEnabled(False)
 
     def select_all(self):
@@ -522,8 +529,8 @@ class UpdatesView(QWidget):
             cb.setChecked(has_update)
 
     def update_single_mod(self, installed_id: int, title: str):
-        self.progress_dlg = ProgressDialog(f"Mise à jour de {title}", self)
-        self.progress_dlg.set_status("Téléchargement et mise à jour avec sauvegarde automatique...")
+        self.progress_dlg = ProgressDialog(tr("updates.update_progress", name=title), self)
+        self.progress_dlg.set_status(tr("updates.update_single_progress"))
         self.progress_dlg.set_indeterminate(True)
         self.progress_dlg.show()
 
@@ -537,20 +544,20 @@ class UpdatesView(QWidget):
 
         target_ids = selected_updatable if selected_updatable else selected_all
         if not target_ids:
-            QMessageBox.information(self, "Sélection", "Veuillez cocher au moins un mod à mettre à jour.")
+            QMessageBox.information(self, tr("dialogs.info_title"), tr("updates.select_at_least_one"))
             return
 
         count = len(target_ids)
-        msg = f"Voulez-vous mettre à jour les {count} mod(s) sélectionné(s) avec sauvegarde automatique ?"
+        msg = tr("updates.batch_confirm_msg", count=count)
         reply = QMessageBox.question(
             self,
-            "Mettre à jour la sélection",
+            tr("updates.batch_confirm_title"),
             msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.progress_dlg = ProgressDialog("Mise à jour de la sélection", self)
-            self.progress_dlg.set_status(f"Mise à jour séquentielle de {count} mod(s)...")
+            self.progress_dlg = ProgressDialog(tr("updates.batch_progress_title"), self)
+            self.progress_dlg.set_status(tr("updates.batch_progress_status", count=count))
             self.progress_dlg.set_indeterminate(True)
             self.progress_dlg.show()
 
@@ -561,19 +568,19 @@ class UpdatesView(QWidget):
     def update_all_mods(self):
         updatable_mods = [item for item in self.all_mods if item.get("has_update")]
         if not updatable_mods:
-            QMessageBox.information(self, "Tout mettre à jour", "Tous vos mods sont déjà à jour !")
+            QMessageBox.information(self, tr("updates.all_confirm_title"), tr("updates.already_up_to_date_msg"))
             return
 
         count = len(updatable_mods)
         reply = QMessageBox.question(
             self,
-            "Tout mettre à jour",
-            f"Voulez-vous mettre à jour tous les {count} mod(s) obsolètes avec sauvegarde automatique ?",
+            tr("updates.all_confirm_title"),
+            tr("updates.all_confirm_msg", count=count),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.progress_dlg = ProgressDialog("Mise à jour globale", self)
-            self.progress_dlg.set_status(f"Mise à jour séquentielle de {count} mod(s)...")
+            self.progress_dlg = ProgressDialog(tr("updates.all_progress_title"), self)
+            self.progress_dlg.set_status(tr("updates.batch_progress_status", count=count))
             self.progress_dlg.set_indeterminate(True)
             self.progress_dlg.show()
 
@@ -585,10 +592,10 @@ class UpdatesView(QWidget):
         if hasattr(self, "progress_dlg") and self.progress_dlg:
             self.progress_dlg.close()
         if success:
-            QMessageBox.information(self, "Mise à jour", msg)
+            QMessageBox.information(self, tr("updates.update_success_title"), msg)
             self.updates_applied.emit()
         else:
-            QMessageBox.warning(self, "Erreur de mise à jour", msg)
+            QMessageBox.warning(self, tr("updates.update_error_title"), msg)
         self.refresh_updates()
 
     def _set_table_headers(self):
@@ -608,8 +615,12 @@ class UpdatesView(QWidget):
         self.main_title.setText(tr("updates.title"))
         self.refresh_btn.setText(tr("updates.refresh_btn"))
         self.update_all_btn.setText(tr("updates.update_all_btn"))
+        self.select_updates_btn.setText(tr("updates.select_updates_btn"))
+        self.select_updates_btn.setToolTip(tr("updates.select_updates_tip"))
+        self.select_all_btn.setText(tr("updates.select_all_btn"))
+        self.deselect_all_btn.setText(tr("updates.deselect_all_btn"))
+        self.search_input.setPlaceholderText(tr("updates.search_placeholder"))
         self._set_table_headers()
         self._on_selection_changed()
-        if not self.all_mods:
-            self.counter_label.setText(tr("updates.up_to_date_title"))
+        self._update_counter_label()
         self._render_table()

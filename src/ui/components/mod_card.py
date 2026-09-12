@@ -1,6 +1,5 @@
 import webbrowser
 from PySide6.QtWidgets import (
-    QFrame,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -10,6 +9,8 @@ from PySide6.QtCore import Qt, Signal
 
 from src.ui.components.base_mod_card import BaseModCard
 from src.ui.components.status_badge import StatusBadge
+from src.ui.components.dependencies_summary_widget import DependenciesSummaryWidget
+from src.i18n import tr
 
 
 class ModCard(BaseModCard):
@@ -120,81 +121,18 @@ class ModCard(BaseModCard):
         layout.addWidget(self.title_label)
 
         # 4. Author & Date
-        author = self.mod_data.get("author", "Inconnu")
+        author = self.mod_data.get("author") or tr("common.unknown")
         updated = self.mod_data.get("updated_date")
         date_str = updated.strftime("%d/%m/%Y") if updated and hasattr(updated, "strftime") else ""
-        meta_label = QLabel(f"Par {author}  •  {date_str}")
+        meta_label = QLabel(tr("catalog.by_author", author=author, date=date_str or tr("common.recently")))
         meta_label.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: 500;")
         layout.addWidget(meta_label)
 
         # 5. Dependencies Box if requirements exist
         dependencies = self.mod_data.get("dependencies", [])
         if dependencies:
-            deps_container = QFrame()
-            deps_container.setStyleSheet("""
-                QFrame {
-                    background-color: #0b0e1a;
-                    border: 1px solid #1a2035;
-                    border-radius: 6px;
-                    padding: 3px 6px;
-                }
-            """)
-            deps_layout = QVBoxLayout(deps_container)
-            deps_layout.setContentsMargins(4, 2, 4, 2)
-            deps_layout.setSpacing(2)
-
-            header_lbl = QLabel(f"🔗 Requis ({len(dependencies)}) :")
-            header_lbl.setStyleSheet("font-size: 10px; font-weight: 700; color: #94a3b8;")
-            deps_layout.addWidget(header_lbl)
-
-            max_show = 2
-            for dep in dependencies[:max_show]:
-                d_title = dep.get("title") if isinstance(dep, dict) else getattr(dep, "title", "Mod")
-                d_status = (
-                    dep.get("status") if isinstance(dep, dict) else getattr(dep, "status", "DETECTED_NOT_INSTALLED")
-                )
-                is_inst = dep.get("is_installed") if isinstance(dep, dict) else getattr(dep, "is_installed", False)
-                is_dlc = dep.get("is_game_dlc") if isinstance(dep, dict) else getattr(dep, "is_game_dlc", False)
-
-                if is_dlc or d_status == "GAME_DLC":
-                    pill_text = f"🎮 {d_title} (DLC Sims 4)"
-                    pill_style = "background-color: #3b0764; color: #d8b4fe; border: 1px solid #7e22ce;"
-                elif is_inst or d_status == "INSTALLED":
-                    pill_text = f"🟢 {d_title} (Installé)"
-                    pill_style = "background-color: #064e3b; color: #a7f3d0; border: 1px solid #059669;"
-                elif d_status == "DETECTED_NOT_INSTALLED":
-                    pill_text = f"🔵 {d_title} (Détecté)"
-                    pill_style = "background-color: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb;"
-                elif d_status == "NOT_DETECTED_SCANNING":
-                    pill_text = f"🟡 {d_title} (Scan en cours)"
-                    pill_style = "background-color: #451a03; color: #fde68a; border: 1px solid #d97706;"
-                else:
-                    pill_text = f"⚪ {d_title} (Non détecté)"
-                    pill_style = "background-color: #27272a; color: #d4d4d8; border: 1px solid #52525b;"
-
-                pill = QLabel(pill_text)
-                pill.setStyleSheet(f"""
-                    font-size: 9px;
-                    font-weight: 600;
-                    border-radius: 4px;
-                    padding: 1px 4px;
-                    {pill_style}
-                """)
-                pill.setToolTip(f"Dépendance: {d_title}\nStatut: {pill_text}")
-                deps_layout.addWidget(pill)
-
-            if len(dependencies) > max_show:
-                extra_count = len(dependencies) - max_show
-                more_lbl = QLabel(f"+ {extra_count} autre{'s' if extra_count > 1 else ''}...")
-                more_lbl.setStyleSheet("font-size: 9px; color: #64748b; font-style: italic;")
-                full_tooltip = "Dépendances complètes :\n" + "\n".join(
-                    f"• {d.get('title') if isinstance(d, dict) else (d.title if hasattr(d, 'title') else str(d))}"
-                    for d in dependencies
-                )
-                more_lbl.setToolTip(full_tooltip)
-                deps_layout.addWidget(more_lbl)
-
-            layout.addWidget(deps_container)
+            deps_widget = DependenciesSummaryWidget(dependencies, max_show=2)
+            layout.addWidget(deps_widget)
 
         layout.addStretch()
 
@@ -211,9 +149,8 @@ class ModCard(BaseModCard):
 
         if self.has_update:
             # Update Available
-            self.action_btn.setText("🔄 Mettre à Jour")
+            self.action_btn.setText(tr("catalog.btn_update_available"))
             self.action_btn.setEnabled(True)
-            self.action_btn.setToolTip("Une version plus récente a été publiée. Cliquez pour mettre à jour.")
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #d97706;
@@ -229,9 +166,8 @@ class ModCard(BaseModCard):
             """)
         elif self.is_installed:
             # Already Installed (Disabled button per user request)
-            self.action_btn.setText("✓ Déjà Installé")
+            self.action_btn.setText(tr("catalog.btn_already_installed"))
             self.action_btn.setEnabled(False)
-            self.action_btn.setToolTip("Ce mod est déjà installé dans votre jeu Sims 4.")
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #064e3b;
@@ -244,11 +180,8 @@ class ModCard(BaseModCard):
             """)
         elif requires_loverslab and not self.is_loverslab_auth:
             # User is NOT logged in with a registered member account on LoversLab
-            self.action_btn.setText("🔒 Compte LoversLab Requis")
+            self.action_btn.setText(tr("catalog.btn_login_loverslab_required"))
             self.action_btn.setEnabled(False)
-            self.action_btn.setToolTip(
-                "LoversLab interdit le téléchargement aux invités. Vous devez renseigner votre nom d'utilisateur et mot de passe LoversLab dans l'onglet 'Comptes & Anti-Bot' pour télécharger."
-            )
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #3b141d;
@@ -261,11 +194,8 @@ class ModCard(BaseModCard):
             """)
         elif requires_patreon and not self.is_patreon_auth:
             # User is NOT logged in on Patreon
-            self.action_btn.setText("🔒 Connexion Patreon Requise")
+            self.action_btn.setText(tr("catalog.btn_login_patreon_required"))
             self.action_btn.setEnabled(False)
-            self.action_btn.setToolTip(
-                "Vous devez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour accéder à ce mod."
-            )
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #3b141d;
@@ -278,12 +208,8 @@ class ModCard(BaseModCard):
             """)
         elif patreon_status == "LOCKED":
             # Post requires a higher Patreon tier
-            tier_text = self.mod_data.get("patreon_tier") or "Abonnement requis"
-            self.action_btn.setText(f"🔒 Verrouillé ({tier_text})")
+            self.action_btn.setText(tr("catalog.btn_patreon_sub_required"))
             self.action_btn.setEnabled(False)
-            self.action_btn.setToolTip(
-                "Ce mod nécessite un niveau d'abonnement payant Patreon non inclus dans votre compte."
-            )
             self.action_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2b141b;
@@ -308,11 +234,8 @@ class ModCard(BaseModCard):
             )
 
             if has_unfound_deps:
-                self.action_btn.setText("⚠️ Installation Partielle")
+                self.action_btn.setText(tr("dependencies.btn_confirm_partial"))
                 self.action_btn.setEnabled(True)
-                self.action_btn.setToolTip(
-                    "Certaines dépendances sont introuvables sur LoversLab. Le mod peut être installé partiellement."
-                )
                 self.action_btn.setStyleSheet("""
                     QPushButton {
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #b45309);
@@ -328,9 +251,8 @@ class ModCard(BaseModCard):
                 """)
             else:
                 # Ready to Install
-                self.action_btn.setText("📥 Installer")
+                self.action_btn.setText(tr("mod_detail.btn_install"))
                 self.action_btn.setEnabled(True)
-                self.action_btn.setToolTip("Télécharger et installer ce mod dans Les Sims 4.")
                 self.action_btn.setStyleSheet("""
                     QPushButton {
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);

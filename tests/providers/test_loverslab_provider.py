@@ -173,15 +173,27 @@ def test_loverslab_scrape_page1_titles():
             assert m["page_url"].startswith("http")
 
 
-def test_image_format_detection():
-    from src.ui.components.mod_detail_modal import DescriptionFetchWorker
+def test_image_format_detection(tmp_path, monkeypatch):
+    from src.ui.workers.detail_workers import DescriptionImageLoaderWorker
+    from src.core.session_manager import SessionManager
 
-    worker = DescriptionFetchWorker(1)
     html = """
     <div>
         <img src="http://example.com/pic1.png" />
     </div>
     """
-    # Verify resolve_images handles parsing without error
-    res = worker._resolve_images(html)
-    assert "<img" in res
+    worker = DescriptionImageLoaderWorker(html)
+    worker.cache_dir = tmp_path
+    mock_sess = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b"fake_bytes"
+    mock_sess.get.return_value = mock_resp
+    monkeypatch.setattr(SessionManager, "get_http_session", lambda name: mock_sess)
+
+    results = []
+    worker.images_updated.connect(lambda h: results.append(h))
+    worker.run()
+
+    assert len(results) >= 1
+    assert "img_" in results[-1]

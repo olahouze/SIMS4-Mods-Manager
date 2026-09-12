@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from src.i18n import tr
+
 
 class DependenciesDialog(QDialog):
     """
@@ -37,7 +39,7 @@ class DependenciesDialog(QDialog):
         self.game_dlcs = game_dlcs or []
         self.is_partial = is_partial or bool(self.unfound)
 
-        self.setWindowTitle("Installation Partielle" if self.is_partial else "Dépendances requises")
+        self.setWindowTitle(tr("dependencies.dlg_title_partial") if self.is_partial else tr("dependencies.dlg_title_full"))
         self.setMinimumWidth(580)
         self.setMinimumHeight(440)
         self.init_ui()
@@ -56,25 +58,19 @@ class DependenciesDialog(QDialog):
 
         # Header Title
         if self.is_partial:
-            title_lbl = QLabel(f"⚠️ Installation Partielle pour\n« {self.mod_title} »")
+            title_lbl = QLabel(tr("dependencies.header_partial", title=self.mod_title))
             title_lbl.setStyleSheet("font-size: 16px; font-weight: 800; color: #f59e0b;")
         else:
-            title_lbl = QLabel(f"📦 Dépendances requises pour\n« {self.mod_title} »")
+            title_lbl = QLabel(tr("dependencies.header_full", title=self.mod_title))
             title_lbl.setStyleSheet("font-size: 16px; font-weight: 700; color: #f8fafc;")
         title_lbl.setWordWrap(True)
         layout.addWidget(title_lbl)
 
         if self.is_partial:
-            info_lbl = QLabel(
-                "Certaines dépendances requises pour ce mod n'ont pas été trouvées sur LoversLab.\n"
-                "Vous pouvez tout de même procéder à une installation partielle, mais le mod risque de ne pas fonctionner correctement sans ces composants :"
-            )
+            info_lbl = QLabel(tr("dependencies.info_partial"))
             info_lbl.setStyleSheet("font-size: 12px; color: #fde68a; line-height: 1.4;")
         else:
-            info_lbl = QLabel(
-                "Ce mod nécessite d'autres composants pour fonctionner correctement dans Les Sims 4.\n"
-                "Vérifiez l'état des dépendances ci-dessous avant de procéder :"
-            )
+            info_lbl = QLabel(tr("dependencies.info_full"))
             info_lbl.setStyleSheet("font-size: 12px; color: #94a3b8; line-height: 1.4;")
         info_lbl.setWordWrap(True)
         layout.addWidget(info_lbl)
@@ -91,14 +87,11 @@ class DependenciesDialog(QDialog):
 
         # 0. Official Sims 4 Game DLCs section
         if self.game_dlcs:
-            dlc_header = QLabel(f"🎮 Packs / DLCs officiels Les Sims 4 requis ({len(self.game_dlcs)}) :")
+            dlc_header = QLabel(tr("dependencies.dlc_header", count=len(self.game_dlcs)))
             dlc_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #a78bfa;")
             c_layout.addWidget(dlc_header)
 
-            dlc_notice = QLabel(
-                "ℹ️ Ces éléments sont des extensions officielles du jeu Les Sims 4 (EA / Steam) et non des mods à télécharger.\n"
-                "Veuillez vérifier que vous possédez bien ces packs installés sur votre jeu :"
-            )
+            dlc_notice = QLabel(tr("dependencies.dlc_notice"))
             dlc_notice.setStyleSheet("font-size: 11px; color: #c4b5fd; margin-bottom: 2px;")
             dlc_notice.setWordWrap(True)
             c_layout.addWidget(dlc_notice)
@@ -115,7 +108,7 @@ class DependenciesDialog(QDialog):
                 f_layout.setContentsMargins(4, 4, 4, 4)
                 dlc_title = dlc.get("title") or dlc.get("dlc_name") or "DLC Sims 4"
                 is_inst = dlc.get("is_installed", False)
-                stat_text = "✅ Détecté dans votre jeu" if is_inst else "⚠️ À vérifier dans votre jeu"
+                stat_text = tr("dependencies.dlc_detected") if is_inst else tr("dependencies.dlc_check")
                 lbl = QLabel(f"🎮 {dlc_title}")
                 lbl.setStyleSheet("color: #e0e7ff; font-size: 12px; font-weight: 600;")
                 badge = QLabel(stat_text)
@@ -131,7 +124,7 @@ class DependenciesDialog(QDialog):
 
         # 1. Unfound dependencies section (Partial install warning)
         if self.unfound:
-            unf_header = QLabel(f"⚠️ Dépendances non trouvées / indisponibles ({len(self.unfound)}) :")
+            unf_header = QLabel(tr("dependencies.unfound_header", count=len(self.unfound)))
             unf_header.setStyleSheet("font-size: 13px; font-weight: 800; color: #f87171;")
             c_layout.addWidget(unf_header)
 
@@ -146,14 +139,14 @@ class DependenciesDialog(QDialog):
                 f_layout = QHBoxLayout(frame)
                 f_layout.setContentsMargins(4, 4, 4, 4)
                 dep_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                lbl = QLabel(f"⚠️ {dep_title} (Introuvable sur le site)")
+                lbl = QLabel(f"⚠️ {dep_title} ({tr('dependencies.unfound_badge')})")
                 lbl.setStyleSheet("color: #fca5a5; font-size: 12px; font-weight: 600;")
                 f_layout.addWidget(lbl)
                 c_layout.addWidget(frame)
 
         # 2. Already installed section (if any)
         if self.already_installed:
-            ok_header = QLabel(f"✅ Déjà installés sur votre PC ({len(self.already_installed)}) :")
+            ok_header = QLabel(tr("dependencies.already_header", count=len(self.already_installed)))
             ok_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #34d399;")
             c_layout.addWidget(ok_header)
 
@@ -175,7 +168,7 @@ class DependenciesDialog(QDialog):
 
         # 3. Missing dependencies to install (if any)
         if self.missing:
-            miss_header = QLabel(f"📥 Seront automatiquement téléchargés et installés ({len(self.missing)}) :")
+            miss_header = QLabel(tr("dependencies.missing_header", count=len(self.missing)))
             miss_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #60a5fa;")
             c_layout.addWidget(miss_header)
 
@@ -204,7 +197,7 @@ class DependenciesDialog(QDialog):
         btn_layout.setSpacing(12)
         btn_layout.addStretch()
 
-        cancel_btn = QPushButton("Annuler")
+        cancel_btn = QPushButton(tr("dialogs.cancel"))
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setStyleSheet("""
             QPushButton {
@@ -222,7 +215,7 @@ class DependenciesDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
 
         if self.is_partial:
-            confirm_btn = QPushButton("⚠️ Valider l'Installation Partielle")
+            confirm_btn = QPushButton(tr("dependencies.btn_confirm_partial"))
             confirm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             confirm_btn.setStyleSheet("""
                 QPushButton {
@@ -237,7 +230,7 @@ class DependenciesDialog(QDialog):
                 QPushButton:hover { background-color: #b45309; }
             """)
         else:
-            confirm_btn = QPushButton("Installer le mod et ses dépendances")
+            confirm_btn = QPushButton(tr("dependencies.btn_confirm_full"))
             confirm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             confirm_btn.setStyleSheet("""
                 QPushButton {

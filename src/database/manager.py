@@ -20,6 +20,7 @@ class DatabaseManager:
         self.engine = create_db_engine(db_path)
         init_db_schema(self.engine)
         self.SessionLocal = get_session_factory(self.engine)
+        self._cleanup_legacy_fts()
         self.clean_and_repair_catalog()
         logger.info(f"Database initialized at: {db_path or self.engine.url}")
 
@@ -34,6 +35,18 @@ class DatabaseManager:
 
     def get_session(self) -> Session:
         return self.SessionLocal()
+
+    def _cleanup_legacy_fts(self) -> None:
+        """Removes any obsolete or corrupted FTS5 triggers to prevent operational errors on deletions."""
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("DROP TRIGGER IF EXISTS trg_catalog_mods_ai"))
+                conn.execute(text("DROP TRIGGER IF EXISTS trg_catalog_mods_ad"))
+                conn.execute(text("DROP TRIGGER IF EXISTS trg_catalog_mods_au"))
+                conn.execute(text("DROP TABLE IF EXISTS catalog_mods_fts"))
+                conn.commit()
+        except Exception as e:
+            logger.debug(f"FTS cleanup skipped: {e}")
 
     def clean_and_repair_catalog(self) -> None:
         """

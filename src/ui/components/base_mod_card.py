@@ -30,11 +30,9 @@ class ImageDownloadTask(QRunnable):
 
     def run(self):
         try:
-            import httpx
-
-            client = get_api_client()
-            resp = httpx.get(
-                f"{client.base_url}/api/catalog/thumbnail",
+            api_client = get_api_client()
+            resp = api_client.client.get(
+                "/api/catalog/thumbnail",
                 params={"source": self.source, "remote_id": self.remote_id, "url": self.url},
                 timeout=20.0,
             )
@@ -87,16 +85,10 @@ class BaseModCard(QFrame):
         if not thumb_url:
             return
 
-        cached_pix = ImageCache.get(thumb_url)
-        if cached_pix:
-            scaled = cached_pix.scaled(
-                self.thumb_width,
-                self.thumb_height,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
+        scaled_pix = ImageCache.get_or_scale(thumb_url, self.thumb_width, self.thumb_height)
+        if scaled_pix:
             if self.thumb_label:
-                self.thumb_label.setPixmap(scaled)
+                self.thumb_label.setPixmap(scaled_pix)
                 self.thumb_label.setText("")
             return
 
@@ -117,18 +109,19 @@ class BaseModCard(QFrame):
             self._display_image(local_path)
 
     def _display_image(self, image_path: str):
-        """Displays pixmap on thumb_label and saves to memory cache."""
+        """Displays pixmap on thumb_label and saves both raw and pre-scaled versions to memory cache."""
         pixmap = QPixmap(image_path)
         if not pixmap.isNull():
             thumb_url = self.mod_data.get("thumbnail_url", "")
-            if thumb_url:
-                ImageCache.set(thumb_url, pixmap)
             scaled = pixmap.scaled(
                 self.thumb_width,
                 self.thumb_height,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
+            if thumb_url:
+                ImageCache.set(thumb_url, pixmap)
+                ImageCache.set_scaled(thumb_url, self.thumb_width, self.thumb_height, scaled)
             if self.thumb_label:
                 self.thumb_label.setPixmap(scaled)
                 self.thumb_label.setText("")

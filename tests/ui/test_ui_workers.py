@@ -1,6 +1,4 @@
 from unittest.mock import MagicMock
-from PySide6.QtWidgets import QApplication
-import pytest
 
 from src.ui.workers import (
     SyncTriggerWorker,
@@ -12,12 +10,7 @@ from src.ui.workers import (
 from src.core.session_manager import SessionManager
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    app = QApplication.instance()
-    if not app:
-        app = QApplication([])
-    return app
+
 
 
 def test_sync_trigger_worker(qapp):

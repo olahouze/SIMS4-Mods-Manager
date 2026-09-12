@@ -14,6 +14,7 @@ from PySide6.QtGui import QPixmap, QKeyEvent
 from src.core.config import AppConfig
 from src.core.session_manager import SessionManager
 from src.utils.cache_utils import hash_url, infer_extension
+from src.i18n import tr
 
 
 class FullImageFetchWorker(QThread):
@@ -59,14 +60,14 @@ class ImageViewerModal(QDialog):
         self.cache_dir = AppConfig.get_screenshots_cache_dir()
         self.fetch_worker = None
 
-        self.setWindowTitle("Visionneuse de Captures d'écran")
+        self.setWindowTitle(tr("image_viewer.title"))
         self.resize(1050, 750)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         self._init_ui()
         if self.images:
-            self.counter_lbl.setText(f"Photo {self.current_index + 1} / {len(self.images)}")
+            self.counter_lbl.setText(tr("image_viewer.photo_counter", current=self.current_index + 1, total=len(self.images)))
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -86,13 +87,13 @@ class ImageViewerModal(QDialog):
 
         # Header: Counter and Close button
         header_layout = QHBoxLayout()
-        self.counter_lbl = QLabel(f"Photo {self.current_index + 1} / {len(self.images)}")
+        self.counter_lbl = QLabel(tr("image_viewer.photo_counter", current=self.current_index + 1, total=len(self.images)))
         self.counter_lbl.setStyleSheet("font-size: 14px; font-weight: 700; color: #94a3b8;")
         header_layout.addWidget(self.counter_lbl)
 
         header_layout.addStretch()
 
-        close_btn = QPushButton("✕ Fermer")
+        close_btn = QPushButton(tr("image_viewer.btn_close"))
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.setFixedHeight(30)
         close_btn.setStyleSheet("""
@@ -134,7 +135,7 @@ class ImageViewerModal(QDialog):
         nav_layout = QHBoxLayout()
         nav_layout.setSpacing(12)
 
-        self.prev_btn = QPushButton("◀ Précédente")
+        self.prev_btn = QPushButton(tr("image_viewer.btn_prev"))
         self.prev_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.prev_btn.setFixedHeight(36)
         self.prev_btn.setStyleSheet("""
@@ -155,7 +156,7 @@ class ImageViewerModal(QDialog):
 
         nav_layout.addStretch()
 
-        self.next_btn = QPushButton("Suivante ▶")
+        self.next_btn = QPushButton(tr("image_viewer.btn_next"))
         self.next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.next_btn.setFixedHeight(36)
         self.next_btn.setStyleSheet("""

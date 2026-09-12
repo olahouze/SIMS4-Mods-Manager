@@ -199,22 +199,73 @@ classDiagram
 classDiagram
     class MainWindow {
         +ApiClient api_client
+        +I18nManager i18n
         +setup_navigation()
         +switch_view(view_index)
+        +retranslate_ui()
+    }
+
+    class I18nManager {
+        <<Singleton>>
+        +Signal language_changed(lang)
+        +get_language() str
+        +set_language(lang)
+        +translate(key, kwargs) str
+    }
+
+    class ResponsiveCardGrid {
+        +int card_width
+        +int card_height
+        +int spacing
+        +set_cards(widgets)
+        +clear_cards()
+        +recalculate_grid(container_width)
     }
 
     class CatalogView {
         +SyncTriggerWorker sync_worker
         +InstallWorker install_worker
+        +ResponsiveCardGrid grid
         +on_search_changed()
         +on_install_clicked()
+        +retranslate_ui()
+    }
+
+    class InstalledView {
+        +ResponsiveCardGrid grid
+        +refresh_installed_mods()
+        +on_delete_mod()
+        +retranslate_ui()
+    }
+
+    class DependenciesSummaryWidget {
+        +list dependencies
+        +int max_show
+        +init_ui()
+    }
+
+    class DialogHelper {
+        <<Utility>>
+        +confirm(parent, title, text, details) bool
+        +information(parent, title, text)
+        +warning(parent, title, text)
+        +error(parent, title, text)
     }
 
     class ModDetailView {
         +FetchDetailsWorker details_worker
-        +GalleryThumbWorker thumb_worker
+        +GalleryBatchWorker gallery_worker
         +DescriptionImageLoaderWorker img_worker
         +load_mod(mod_id, page_url)
+    }
+
+    class ImageCache {
+        <<ThreadSafe>>
+        +int max_bytes
+        +get(key) QPixmap
+        +set(key, pixmap)
+        +get_or_scale(key, path, w, h) QPixmap
+        +clear()
     }
 
     class SyncTriggerWorker {
@@ -237,26 +288,19 @@ classDiagram
         +run()
     }
 
-    class GalleryThumbWorker {
-        <<QThread>>
-        +Signal thumb_ready(int, QPixmap)
-        +run()
-    }
-
-    class DescriptionImageLoaderWorker {
-        <<QThread>>
-        +Signal images_updated(str)
-        +cancel()
-        +run()
-    }
-
     MainWindow *-- CatalogView
+    MainWindow *-- InstalledView
     MainWindow *-- ModDetailView
+    MainWindow ..> I18nManager : observe
+    CatalogView *-- ResponsiveCardGrid
+    InstalledView *-- ResponsiveCardGrid
     CatalogView ..> SyncTriggerWorker : instancie
     CatalogView ..> InstallWorker : instancie
+    CatalogView ..> DialogHelper : utilise
+    InstalledView ..> DialogHelper : utilise
+    ModCard *-- DependenciesSummaryWidget
+    InstalledCard *-- DependenciesSummaryWidget
     ModDetailView ..> FetchDetailsWorker : instancie
-    ModDetailView ..> GalleryBatchWorker : instancie
-    ModDetailView ..> DescriptionImageLoaderWorker : instancie
     ModDetailView ..> ImageCache : consulte
     ModCard ..> ImageCache : consulte/alimente
     InstalledCard ..> ImageCache : consulte/alimente

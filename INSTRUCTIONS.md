@@ -142,28 +142,56 @@ Le code source est strictement structuré selon le principe de responsabilité u
 
 ### 7.2 Ségrégation Threads UI / Tâches Asynchrones
 - L'interface ne doit jamais exécuter d'I/O réseau, d'extraction zip ou de requêtes lourdes sur le thread principal PySide6.
-- Utiliser systématiquement les workers `QThread` dédiés de `src/ui/workers/` (`CatalogFetchWorker`, `CatalogStatsWorker`, `ModDetailFetchWorker`).
+- Utiliser systématiquement les workers `QThread` dédiés de `src/ui/workers/` (`CatalogFetchWorker`, `CatalogStatsWorker`, `ModDetailFetchWorker`, `GalleryBatchWorker`).
+
+### 7.3 Internationalisation Dynamique (i18n)
+- **Singleton `I18nManager` (`src/i18n.py`)** : Charge les catalogues JSON de `src/locales/{fr,en,es}.json` et émet le signal `language_changed(lang: str)` lors de tout changement de langue.
+- **Fonction `tr(key, **kwargs)`** : Fonction canonique d'accès aux clés avec interpolation de paramètres et repli automatique sur la langue française par défaut si une clé est introuvable.
+- **Parité Stricte 100%** : Toute nouvelle clé ajoutée dans un fichier de locale doit obligatoirement être répliquée avec exactitude dans `fr.json`, `en.json` et `es.json`.
+- **Retraduction à Chaud (`retranslate_ui`)** : Chaque vue ou widget dynamique implémente `retranslate_ui()` connecté au signal `language_changed` pour basculer instantanément les libellés, badges, placeholders et tooltips sans redémarrage de l'application.
+
+### 7.4 Grille Réactive, Composants Partagés & Performance UI
+- **Grille Dynamique `ResponsiveCardGrid` (`src/ui/components/responsive_card_grid.py`)** : Calcule en temps réel le nombre optimal de colonnes selon la largeur disponible (`max(1, (width + spacing) // (card_width + spacing))`). Réordonne les cartes existantes sans réinstanciation pour éliminer les scintillements.
+- **Composant Partagé `DependenciesSummaryWidget` (`src/ui/components/dependencies_summary_widget.py`)** : Standardise l'affichage des prérequis entre `ModCard` et `InstalledCard`, évitant toute duplication de template.
+- **Factorisation des Dialogues `DialogHelper` (`src/ui/components/dialog_helper.py`)** : Centralise les boîtes de dialogue modales (confirmation, information, avertissement, erreur) avec le thème sombre premium et les traductions automatiques.
+- **Cache LRU Mémoire `ImageCache` (`src/utils/image_cache.py`)** : Cache d'images thread-safe à budget d'octets fixe (128 Mo par défaut). Méthode `get_or_scale(key, file_path, width, height)` qui réutilise les pixmaps déjà redimensionnées pour garantir 0 ms de latence et aucune fuite RAM.
+- **Pooling HTTP Keep-Alive** : Les tâches de téléchargement d'images d'arrière-plan (`ImageDownloadTask`) réutilisent la session HTTP existante (`api_client.client.get(...)`) au lieu d'instancier une nouvelle connexion par miniature.
+
+### 7.5 Polling Adaptatif (`CatalogView`)
+- Pour minimiser la consommation CPU et réseau tout en offrant un feedback instantané, la fréquence de vérification de l'état de synchronisation est adaptative :
+  - **État Veille (`IDLE_MONITOR_INTERVAL_MS = 4000`)** : 1 requête toutes les 4 secondes lorsque le catalogue est stable.
+  - **État Actif (`ACTIVE_MONITOR_INTERVAL_MS = 600`)** : 1 requête toutes les 600 ms dès qu'un scraping est lancé jusqu'à son achèvement.
 
 ---
 
-## 8. Standards de Développement & Suite de Tests
+## 8. Injection de Dépendances FastAPI (`get_db`)
 
-### 8.1 Organisation des Tests
+- Les routes FastAPI (`src/api/routes/*_router.py`) n'accèdent jamais directement à l'instance globale de `DatabaseManager`.
+- Elles utilisent le pattern d'injection de dépendances standard via `Depends(get_db)` défini dans `src/api/deps.py`.
+- Cela facilite le mocking lors des tests unitaires d'API et garantit un découplage propre du cycle de vie des connexions.
+
+---
+
+## 9. Standards de Développement & Suite de Tests
+
+### 9.1 Organisation des Tests (151 Tests - 100% Green State)
 La suite de tests est organisée en miroirs stricts des packages de `src/` :
+- `tests/core/` : Tests des constantes, des exceptions typées et des DTOs canoniques.
+- `tests/utils/` : Tests des extracteurs de version, du système i18n, du matcher de DLCs/titres et des utilitaires d'archives.
+- `tests/database/` : Tests de connexion SQLite, pragmas WAL, pooling et opérations CRUD.
 - `tests/api/` : Validation unitaire et intégration de chaque routeur FastAPI via `TestClient`.
-- `tests/services/` : Tests unitaires de chaque service métier isolé avec mocks BDD/HTTP.
-- `tests/database/` : Tests de connexion SQLite et opérations CRUD du `DatabaseManager`.
 - `tests/providers/` : Tests des parseurs, extracteurs et clients LoversLab et Patreon.
-- `tests/ui/` : Tests de robustesse des workers et signaux PySide6.
-- `tests/utils/` : Tests des extracteurs de version, de slug et gestionnaires de logs.
+- `tests/ui/` : Tests des composants PySide6, du `ResponsiveCardGrid`, du `DialogHelper`, du cache LRU et des workers asynchrones.
+- `tests/services/` : Tests unitaires de chaque service métier isolé avec mocks BDD/HTTP.
 
-### 8.2 Règle de Validation Obligatoire (Green State)
+### 9.2 Règle de Validation Obligatoire (Green State)
 Avant chaque commit ou validation de tâche :
 ```bash
 # 1. Analyse statique et linter (doit retourner 0 erreur)
 uv run ruff check src/ tests/
 
 # 2. Exécution des tests ÉLÉMENT PAR ÉLÉMENT en terminal visible (JAMAIS la suite globale d'un bloc ni en background)
+uv run pytest tests/core -v
 uv run pytest tests/utils -v
 uv run pytest tests/database -v
 uv run pytest tests/api -v
@@ -172,20 +200,20 @@ uv run pytest tests/ui -v
 uv run pytest tests/services -v
 ```
 
-### 8.3 Isolation Stricte de la Base de Données de Test
+### 9.3 Isolation Stricte de la Base de Données de Test
 - **Règle absolue** : Les tests automatisés ne doivent **jamais** polluer ni modifier la base de données réelle de l'utilisateur (`sims4_mods.db`).
 - `src/core/config.py` lit la variable d'environnement `SIMS4_DB_PATH`.
 - `tests/conftest.py` configure une fixture de session `isolate_test_database` créant une base temporaire dédiée pour toute la durée des tests, garantissant une étanchéité totale avec l'environnement utilisateur.
 
-### 8.4 Exécution des Tests en Terminal Visible et par Module (Zéro Background Silencieux)
+### 9.4 Exécution des Tests en Terminal Visible et par Module (Zéro Background Silencieux)
 - **Interdiction Formelle du Bloc Global** : Ne JAMAIS lancer `pytest tests/` globalement en une seule commande, sous peine de gel/blocage des processus sur Windows.
-- **Règle d'exécution par Élément** : Toujours exécuter les tests module par module (`tests/utils/`, `tests/database/`, `tests/api/`, `tests/providers/`, `tests/ui/`, `tests/services/`) ou fichier par fichier avec le mode verbeux explicite (`-v`, jamais `-q`).
+- **Règle d'exécution par Élément** : Toujours exécuter les tests module par module (`tests/core/`, `tests/utils/`, `tests/database/`, `tests/api/`, `tests/providers/`, `tests/ui/`, `tests/services/`) avec le mode verbeux explicite (`-v`, jamais `-q`).
 - **Terminal Visible Synchrone (Zéro Background Tasks)** : Les commandes de test doivent impérativement s'exécuter de façon synchrone dans un terminal visible avec timeout (`WaitMsBeforeAsync: 10000`). Ne jamais déléguer l'exécution des tests à des background tasks silencieuses qui restent plantées.
 - **Zéro Warning & Zero Live Network** : Aucun test ne doit interroger internet en direct sans mock. Tous les avertissements tiers doivent être filtrés ou corrigés pour garantir un statut 100% propre (0 warning).
 
 ---
 
-## 9. Documentation Technique de Référence
+## 10. Documentation Technique de Référence
 Pour approfondir un sujet particulier, se référer aux documents détaillés dans le dossier [`documentation/`](file:///documentation/) :
 - [Architecture & Guide des Dossiers](file:///documentation/architecture.md) : Principes d'organisation et découplage Clean Architecture.
 - [Spécification Complète de l'API](file:///documentation/api_reference.md) : Endpoints REST, modèles Pydantic et streaming NDJSON.

@@ -151,8 +151,8 @@ class LogsView(QWidget):
         if search and search not in line.lower():
             return False
 
-        level_filter = self.level_combo.currentText()
-        if level_filter != "Tous les niveaux":
+        level_filter = self.level_combo.currentData()
+        if level_filter:
             if f"[{level_filter}]" not in line:
                 return False
 
@@ -183,36 +183,35 @@ class LogsView(QWidget):
             if self._matches_filter(line):
                 self._append_formatted_line(line)
         self.info_label.setText(
-            f"{self.log_text.document().blockCount() - 1} message(s) affiché(s) sur {len(self.all_logs)} au total."
+            f"{self.log_text.document().blockCount() - 1} / {len(self.all_logs)}"
         )
 
     def copy_all_logs(self):
         text = self.log_text.toPlainText()
         if not text:
-            QMessageBox.information(self, "Information", "Aucun log à copier.")
             return
 
         clipboard = QApplication.clipboard()
         clipboard.setText(text)
-        self.info_label.setText("✓ Tous les logs affichés ont été copiés dans le presse-papiers !")
+        self.info_label.setText(tr("logs.copy_success_msg"))
 
     def clear_logs(self):
         try:
             self.api_client.clear_logs()
             self.all_logs.clear()
             self.log_text.clear()
-            self.info_label.setText("Vue des logs effacée via l'API.")
+            self.info_label.setText(tr("common.ready"))
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Échec de l'effacement des logs via l'API: {e}")
+            QMessageBox.warning(self, tr("common.error"), f"{e}")
 
     def open_logs_folder(self):
         try:
             self.api_client.open_logs_folder()
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le dossier des logs via l'API: {e}")
+            QMessageBox.warning(self, tr("common.error"), f"{e}")
 
     def _populate_level_combo(self):
-        current_idx = self.level_combo.currentIndex() if self.level_combo.count() > 0 else 0
+        current_data = self.level_combo.currentData()
         self.level_combo.blockSignals(True)
         self.level_combo.clear()
         self.level_combo.addItem(tr("logs.filter_all"), "")
@@ -220,8 +219,9 @@ class LogsView(QWidget):
         self.level_combo.addItem("WARNING", "WARNING")
         self.level_combo.addItem("ERROR", "ERROR")
         self.level_combo.addItem("DEBUG", "DEBUG")
-        if 0 <= current_idx < self.level_combo.count():
-            self.level_combo.setCurrentIndex(current_idx)
+        idx = self.level_combo.findData(current_data)
+        if idx >= 0:
+            self.level_combo.setCurrentIndex(idx)
         self.level_combo.blockSignals(False)
 
     def retranslate_ui(self):
@@ -232,3 +232,5 @@ class LogsView(QWidget):
         self.clear_btn.setText(tr("logs.clear_btn"))
         self.open_logs_btn.setText(tr("logs.open_folder_btn"))
         self._populate_level_combo()
+        if not self.all_logs:
+            self.info_label.setText(tr("common.ready"))

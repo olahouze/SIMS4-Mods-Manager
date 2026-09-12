@@ -9,11 +9,14 @@ L'application centralise la recherche, le contournement des protections anti-bot
 ## ✨ Fonctionnalités Clés
 
 - **🌐 100% Découplé via API REST** : L'interface graphique communique exclusivement avec une API REST interne documentée (`/docs`).
+- **🌍 Internationalisation Complète (i18n)** : Support dynamique multilingue (Français, Anglais, Espagnol) avec bascule à chaud et parité totale des clés de traduction.
 - **🛡️ Contournement Anti-Bot & Sessions** : Navigateur Playwright intégré pour la validation Cloudflare et la synchronisation des sessions LoversLab / Patreon.
+- **🖼️ Grille Réactive & Cache Haute Performance** : Grille de cartes responsive s'adaptant à la résolution (`ResponsiveCardGrid`), cache mémoire LRU borné à 128 Mo (`ImageCache`) et réutilisation de pool HTTP Keep-Alive.
 - **📦 Installation Intelligente** : Extraction d'archives (`.zip`, `.rar`, `.7z`), validation DBPF et **respect strict de la règle de profondeur du moteur Sims 4** (les `.ts4script` sont automatiquement remontés au niveau 1).
-- **🧩 Résolution de Dépendances** : Détection des prérequis (WickedWhims, Nisa's Wicked Perversions, etc.) catégorisés selon 4 statuts avec installation en cascade.
+- **🧩 Résolution de Dépendances** : Détection des prérequis (WickedWhims, Nisa's Wicked Perversions, etc.) catégorisés selon 4 statuts avec installation en cascade et composant partagé réutilisable.
 - **⚡ Mises à Jour en 1 Clic** : Détection différentielle de version et de date avec archivage de sauvegarde (rollback automatique en cas d'erreur).
 - **🎛️ Activation / Désactivation Propre** : Désactivation non-destructive via renommage `.disabled` sans altérer vos fichiers d'origine.
+- **📊 Polling Adaptatif** : Fréquence d'actualisation dynamique (4000ms en veille, 600ms pendant les synchronisations de catalogue actives).
 
 ---
 
@@ -48,7 +51,8 @@ uv run python run.py --server --port 8000
 
 ### 4. Tests & Vérification
 ```powershell
-# Exécution de la suite de tests par module (115 tests - 100% vert, 0 warning)
+# Exécution de la suite complète par module (151 tests - 100% vert, 0 warning)
+uv run pytest tests/core -v
 uv run pytest tests/utils -v
 uv run pytest tests/database -v
 uv run pytest tests/api -v

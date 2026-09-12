@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
+from src.i18n import tr
+
 
 class ProviderDrawer(QWidget):
     """
@@ -26,6 +28,7 @@ class ProviderDrawer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._ll_is_expanded = True
+        self._last_status: Optional[Dict[str, Any]] = None
         self.subcat_rows: Dict[str, Tuple[QLabel, QLabel, QLabel]] = {}
 
         self._init_ui()
@@ -50,10 +53,10 @@ class ProviderDrawer(QWidget):
         tab_layout.setContentsMargins(4, 6, 4, 6)
         tab_layout.setSpacing(6)
 
-        self.btn_toggle_drawer = QPushButton("🛰️ Sites ◀")
+        self.btn_toggle_drawer = QPushButton(tr("drawer.btn_toggle_collapsed"))
         self.btn_toggle_drawer.setFixedHeight(32)
         self.btn_toggle_drawer.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_toggle_drawer.setToolTip("Cliquer pour ouvrir / fermer le tiroir de statut des scrapers")
+        self.btn_toggle_drawer.setToolTip(tr("drawer.btn_toggle_tip"))
         self.btn_toggle_drawer.clicked.connect(self.toggle_drawer)
         self._style_toggle_button("OK")
         tab_layout.addWidget(self.btn_toggle_drawer)
@@ -62,7 +65,7 @@ class ProviderDrawer(QWidget):
         self.tab_loverslab_pill = QLabel("LoversLab 🟢")
         self.tab_loverslab_pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.tab_loverslab_pill.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_loverslab_pill.setToolTip("Statut LoversLab - Cliquer pour ouvrir les détails")
+        self.tab_loverslab_pill.setToolTip(tr("drawer.pill_tip_ll"))
         self.tab_loverslab_pill.mousePressEvent = lambda e: self.toggle_drawer()
         self._style_site_tab_pill(self.tab_loverslab_pill, "OK", "LoversLab 🟢")
         tab_layout.addWidget(self.tab_loverslab_pill)
@@ -71,7 +74,7 @@ class ProviderDrawer(QWidget):
         self.tab_patreon_pill = QLabel("Patreon 🟢")
         self.tab_patreon_pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.tab_patreon_pill.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_patreon_pill.setToolTip("Statut Patreon - Prêt")
+        self.tab_patreon_pill.setToolTip(tr("drawer.pill_tip_patreon"))
         self.tab_patreon_pill.mousePressEvent = lambda e: self.toggle_drawer()
         self._style_site_tab_pill(self.tab_patreon_pill, "OK", "Patreon 🟢")
         tab_layout.addWidget(self.tab_patreon_pill)
@@ -97,9 +100,9 @@ class ProviderDrawer(QWidget):
 
         # Drawer Header
         d_header = QHBoxLayout()
-        d_title = QLabel("🛰️ Fournisseurs de Mods")
-        d_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #f8fafc;")
-        d_header.addWidget(d_title)
+        self.d_title = QLabel(tr("drawer.title"))
+        self.d_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #f8fafc;")
+        d_header.addWidget(self.d_title)
         d_header.addStretch()
 
         btn_close = QPushButton("✕")
@@ -150,8 +153,8 @@ class ProviderDrawer(QWidget):
         ll_header.addWidget(ll_name)
         ll_header.addStretch()
 
-        self.drawer_status_pill = QLabel("🟢 Prêt")
-        self._style_status_pill("OK")
+        self.drawer_status_pill = QLabel(tr("drawer.status_ready"))
+        self._style_status_pill("OK", tr("drawer.status_ready"))
         ll_header.addWidget(self.drawer_status_pill)
 
         self.btn_collapse_ll = QPushButton("▼")
@@ -176,7 +179,7 @@ class ProviderDrawer(QWidget):
         cs_layout = QVBoxLayout(self.ll_collapsed_summary)
         cs_layout.setContentsMargins(0, 2, 0, 2)
         cs_layout.setSpacing(4)
-        self.ll_collapsed_summary_lbl = QLabel("14 sous-catégories • 0 mods")
+        self.ll_collapsed_summary_lbl = QLabel(tr("drawer.summary", count=0))
         self.ll_collapsed_summary_lbl.setStyleSheet("font-size: 11px; color: #94a3b8;")
         cs_layout.addWidget(self.ll_collapsed_summary_lbl)
         self.ll_collapsed_summary.setVisible(False)
@@ -205,26 +208,26 @@ class ProviderDrawer(QWidget):
         """)
         ed_layout.addWidget(self.drawer_progress_bar)
 
-        self.drawer_lbl_progress = QLabel("📄 Progression : 0 / 0 pages (0%)")
+        self.drawer_lbl_progress = QLabel(tr("drawer.progress", done=0, total=0, pct=0))
         self.drawer_lbl_progress.setStyleSheet("font-size: 11px; color: #cbd5e1; font-weight: 600;")
         ed_layout.addWidget(self.drawer_lbl_progress)
 
-        self.drawer_lbl_category = QLabel("📂 En cours : Prêt")
+        self.drawer_lbl_category = QLabel(tr("drawer.category_current", cat=tr("common.ready")))
         self.drawer_lbl_category.setStyleSheet("font-size: 11px; color: #94a3b8;")
         ed_layout.addWidget(self.drawer_lbl_category)
 
-        self.drawer_lbl_mods = QLabel("📦 Mods indexés : 0")
+        self.drawer_lbl_mods = QLabel(tr("drawer.mods_count", count=0))
         self.drawer_lbl_mods.setStyleSheet("font-size: 11px; color: #94a3b8;")
         ed_layout.addWidget(self.drawer_lbl_mods)
 
-        self.drawer_lbl_last_sync = QLabel("🕒 Dernier scan : En attente")
+        self.drawer_lbl_last_sync = QLabel(tr("drawer.last_scan", time=tr("common.pending")))
         self.drawer_lbl_last_sync.setStyleSheet("font-size: 10px; color: #64748b;")
         ed_layout.addWidget(self.drawer_lbl_last_sync)
 
         # Subcategories
-        lbl_subcats = QLabel("Progression par sous-catégorie (14) :")
-        lbl_subcats.setStyleSheet("font-size: 11px; font-weight: 700; color: #60a5fa; margin-top: 4px;")
-        ed_layout.addWidget(lbl_subcats)
+        self.lbl_subcats = QLabel(tr("drawer.subcats_title"))
+        self.lbl_subcats.setStyleSheet("font-size: 11px; font-weight: 700; color: #60a5fa; margin-top: 4px;")
+        ed_layout.addWidget(self.lbl_subcats)
 
         subcats_scroll = QScrollArea()
         subcats_scroll.setFixedHeight(180)
@@ -250,7 +253,7 @@ class ProviderDrawer(QWidget):
         ctrl_layout.setSpacing(6)
 
         # Primary start / resync button
-        self.btn_resync = QPushButton("🔄 Relancer LoversLab")
+        self.btn_resync = QPushButton(tr("drawer.btn_resync"))
         self.btn_resync.setFixedHeight(32)
         self.btn_resync.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_resync_button()
@@ -261,7 +264,7 @@ class ProviderDrawer(QWidget):
         btn_sub_row = QHBoxLayout()
         btn_sub_row.setSpacing(6)
 
-        self.btn_pause_resume = QPushButton("⏸️ Mettre en pause")
+        self.btn_pause_resume = QPushButton(tr("drawer.btn_pause"))
         self.btn_pause_resume.setFixedHeight(30)
         self.btn_pause_resume.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_pause_button(is_paused=False)
@@ -269,7 +272,7 @@ class ProviderDrawer(QWidget):
         self.btn_pause_resume.clicked.connect(self._on_pause_resume_clicked)
         btn_sub_row.addWidget(self.btn_pause_resume, stretch=1)
 
-        self.btn_stop = QPushButton("⏹️ Arrêter")
+        self.btn_stop = QPushButton(tr("drawer.btn_stop"))
         self.btn_stop.setFixedHeight(30)
         self.btn_stop.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_stop_button()
@@ -302,8 +305,8 @@ class ProviderDrawer(QWidget):
         p_name.setStyleSheet("font-size: 13px; font-weight: 700; color: #f8fafc;")
         p_header.addWidget(p_name)
         p_header.addStretch()
-        p_status = QLabel("🟢 Prêt")
-        p_status.setStyleSheet("""
+        self.patreon_status_pill = QLabel(tr("drawer.status_ready"))
+        self.patreon_status_pill.setStyleSheet("""
             background-color: #064e3b;
             color: #a7f3d0;
             border: 1px solid #059669;
@@ -312,11 +315,11 @@ class ProviderDrawer(QWidget):
             font-size: 10px;
             font-weight: 700;
         """)
-        p_header.addWidget(p_status)
+        p_header.addWidget(self.patreon_status_pill)
         p_card_layout.addLayout(p_header)
-        p_desc = QLabel("Vérification des accès abonnés et liens de téléchargement.")
-        p_desc.setStyleSheet("font-size: 10px; color: #64748b;")
-        p_card_layout.addWidget(p_desc)
+        self.p_desc = QLabel(tr("drawer.patreon_desc"))
+        self.p_desc.setStyleSheet("font-size: 10px; color: #64748b;")
+        p_card_layout.addWidget(self.p_desc)
         providers_layout.addWidget(patreon_card)
 
         providers_layout.addStretch()
@@ -399,13 +402,14 @@ class ProviderDrawer(QWidget):
 
     def update_sync_status(self, status: Dict[str, Any]):
         """Updates drawer status, progress bar, action buttons, and persistent tab."""
+        self._last_status = status
         is_running = status.get("is_running", False)
         is_paused = status.get("is_paused", False)
         is_stopped = status.get("is_stopped", False)
         pct = status.get("progress_percent", 0)
         pages_done = status.get("pages_completed", 0)
         total_pages = status.get("total_pages", 0)
-        cur_cat = status.get("current_category") or "Prêt"
+        cur_cat = status.get("current_category") or tr("common.ready")
         has_error = status.get("has_error", False)
         total_scraped = status.get("total_scraped", 0)
         last_completed = status.get("last_completed_at") or ""
@@ -435,35 +439,35 @@ class ProviderDrawer(QWidget):
 
         # 2. Update Header Status Pill
         if has_error:
-            self._style_status_pill("ERROR")
+            self._style_status_pill("ERROR", tr("drawer.status_error"))
         elif is_paused:
-            self._style_status_pill("PAUSED", f"⏸️ En pause ({pct}%)")
+            self._style_status_pill("PAUSED", f"{tr('drawer.status_paused')} ({pct}%)")
         elif is_running:
-            self._style_status_pill("RUNNING", f"🔵 En cours ({pct}%)")
+            self._style_status_pill("RUNNING", f"{tr('drawer.status_running')} ({pct}%)")
         elif is_stopped:
-            self._style_status_pill("STOPPED", "⏹️ Arrêté")
+            self._style_status_pill("STOPPED", tr("drawer.status_stopped"))
         else:
-            self._style_status_pill("OK", "🟢 Prêt / Terminé")
+            self._style_status_pill("OK", tr("drawer.status_ready"))
 
         # 3. Update Progress and Category Stats
         self.ll_collapsed_summary_lbl.setText(
-            f"14 sous-catégories • {total_scraped} mods indexés • p.{pages_done}/{total_pages}"
+            f"{tr('drawer.summary', count=total_scraped)} • p.{pages_done}/{total_pages}"
         )
         self.drawer_progress_bar.setValue(pct)
         if total_pages > 0:
-            self.drawer_lbl_progress.setText(f"📄 Progression : Page {pages_done} / {total_pages} ({pct}%)")
+            self.drawer_lbl_progress.setText(tr("drawer.progress", done=pages_done, total=total_pages, pct=pct))
         else:
-            self.drawer_lbl_progress.setText(f"📄 Progression : Page {pages_done}")
+            self.drawer_lbl_progress.setText(f"📄 Page {pages_done}")
         if not is_running and not is_paused:
-            self.drawer_lbl_category.setText("📂 Statut : Terminé (analyse complète)")
+            self.drawer_lbl_category.setText(f"📂 {tr('common.status')} : {tr('common.completed')}")
         elif is_paused:
-            self.drawer_lbl_category.setText(f"📂 En pause : {cur_cat}")
+            self.drawer_lbl_category.setText(f"📂 {tr('drawer.status_paused')} : {cur_cat}")
         else:
-            self.drawer_lbl_category.setText(f"📂 En cours : {cur_cat}")
-        self.drawer_lbl_mods.setText(f"📦 Mods indexés : {total_scraped}")
+            self.drawer_lbl_category.setText(tr("drawer.category_current", cat=cur_cat))
+        self.drawer_lbl_mods.setText(tr("drawer.mods_count", count=total_scraped))
         if last_completed:
             date_part = last_completed.replace("T", " ")[:19]
-            self.drawer_lbl_last_sync.setText(f"🕒 Dernier scan : {date_part}")
+            self.drawer_lbl_last_sync.setText(tr("drawer.last_scan", time=date_part))
 
         # 4. Update Subcategory Rows
         for cat_item in categories_progress:
@@ -475,19 +479,19 @@ class ProviderDrawer(QWidget):
                 c_total = cat_item.get("total_pages", 0)
                 c_mods = cat_item.get("mods_count", 0)
 
+                completed_text = tr("common.completed")
                 if not is_running and not is_paused and not is_stopped:
-                    # Scan fully finished: show green completion with count of items
                     lbl_icon.setText("🟢")
                     if c_done > 0:
                         lbl_detail.setText(f"{c_done}/{c_total} p. ({c_mods} mods)")
                     elif c_mods > 0:
-                        lbl_detail.setText(f"Terminé ({c_mods} mods)")
+                        lbl_detail.setText(f"{completed_text} ({c_mods} mods)")
                     else:
-                        lbl_detail.setText(f"Terminé ({c_total} p.)")
+                        lbl_detail.setText(f"{completed_text} ({c_total} p.)")
                     lbl_detail.setStyleSheet("font-size: 9px; color: #a7f3d0; font-weight: 600;")
                 elif is_paused and c_stat == "IN_PROGRESS":
                     lbl_icon.setText("⏸️")
-                    lbl_detail.setText(f"En pause (p. {c_done}/{c_total})")
+                    lbl_detail.setText(f"{tr('drawer.status_paused')} (p. {c_done}/{c_total})")
                     lbl_detail.setStyleSheet("font-size: 9px; color: #fbbf24; font-weight: 600;")
                 elif c_stat == "COMPLETED":
                     lbl_icon.setText("🟢")
@@ -499,15 +503,15 @@ class ProviderDrawer(QWidget):
                     lbl_detail.setStyleSheet("font-size: 9px; color: #93c5fd; font-weight: 600;")
                 elif c_stat == "STOPPED":
                     lbl_icon.setText("⏹️")
-                    lbl_detail.setText(f"Arrêté ({c_done} p.)")
+                    lbl_detail.setText(f"{tr('drawer.status_stopped')} ({c_done} p.)")
                     lbl_detail.setStyleSheet("font-size: 9px; color: #fbbf24;")
                 elif c_stat == "ERROR":
                     lbl_icon.setText("🔴")
-                    lbl_detail.setText("Erreur")
+                    lbl_detail.setText(tr("common.error"))
                     lbl_detail.setStyleSheet("font-size: 9px; color: #fca5a5;")
                 else:
                     lbl_icon.setText("⏳")
-                    lbl_detail.setText(f"Attente ({c_total} p.)")
+                    lbl_detail.setText(f"{tr('common.pending')} ({c_total} p.)")
                     lbl_detail.setStyleSheet("font-size: 9px; color: #64748b;")
 
         # 5. Update Control Buttons States
@@ -517,34 +521,60 @@ class ProviderDrawer(QWidget):
 
             if is_paused:
                 self.btn_resync.setEnabled(False)
-                self.btn_resync.setText("⏸️ Scraping en pause...")
+                self.btn_resync.setText(tr("drawer.scraping_paused"))
                 self._style_resync_button(loading=True, is_paused=True)
 
-                self.btn_pause_resume.setText("▶️ Reprendre")
+                self.btn_pause_resume.setText(tr("drawer.btn_resume"))
                 self._style_pause_button(is_paused=True)
             else:
                 self.btn_resync.setEnabled(False)
-                self.btn_resync.setText("⏳ Scraping en cours...")
+                self.btn_resync.setText(tr("drawer.scraping_running"))
                 self._style_resync_button(loading=True, is_paused=False)
 
-                self.btn_pause_resume.setText("⏸️ Mettre en pause")
+                self.btn_pause_resume.setText(tr("drawer.btn_pause"))
                 self._style_pause_button(is_paused=False)
         else:
             self.btn_resync.setEnabled(True)
-            self.btn_resync.setText("🔄 Relancer LoversLab")
+            self.btn_resync.setText(tr("drawer.btn_resync"))
             self._style_resync_button(loading=False, is_paused=False)
 
             self.btn_pause_resume.setEnabled(False)
-            self.btn_pause_resume.setText("⏸️ Pause")
+            self.btn_pause_resume.setText(tr("drawer.btn_pause"))
             self._style_pause_button(is_paused=False, disabled=True)
 
             self.btn_stop.setEnabled(False)
+            self.btn_stop.setText(tr("drawer.btn_stop"))
             self._style_stop_button(disabled=True)
+
+    def retranslate_ui(self):
+        """Retranslates all static and dynamic UI texts according to current language."""
+        self.d_title.setText(tr("drawer.title"))
+        self.lbl_subcats.setText(tr("drawer.subcats_title"))
+        self.p_desc.setText(tr("drawer.patreon_desc"))
+        self.btn_toggle_drawer.setToolTip(tr("drawer.btn_toggle_tip"))
+        self.tab_loverslab_pill.setToolTip(tr("drawer.pill_tip_ll"))
+        self.tab_patreon_pill.setToolTip(tr("drawer.pill_tip_patreon"))
+        self.patreon_status_pill.setText(tr("drawer.status_ready"))
+
+        if self._last_status:
+            self.update_sync_status(self._last_status)
+        else:
+            arrow = "▶" if self.drawer_panel.isVisible() else "◀"
+            self.btn_toggle_drawer.setText(f"🛰️ Sites {arrow}")
+            self._style_status_pill("OK", tr("drawer.status_ready"))
+            self.ll_collapsed_summary_lbl.setText(tr("drawer.summary", count=0))
+            self.drawer_lbl_progress.setText(tr("drawer.progress", done=0, total=0, pct=0))
+            self.drawer_lbl_category.setText(tr("drawer.category_current", cat=tr("common.ready")))
+            self.drawer_lbl_mods.setText(tr("drawer.mods_count", count=0))
+            self.drawer_lbl_last_sync.setText(tr("drawer.last_scan", time=tr("common.pending")))
+            self.btn_resync.setText(tr("drawer.btn_resync"))
+            self.btn_pause_resume.setText(tr("drawer.btn_pause"))
+            self.btn_stop.setText(tr("drawer.btn_stop"))
 
     # --- Styling Helpers ---
     def _style_status_pill(self, state: str, text: Optional[str] = None):
         if state == "ERROR":
-            self.drawer_status_pill.setText(text or "🔴 Erreur")
+            self.drawer_status_pill.setText(text or tr("drawer.status_error"))
             self.drawer_status_pill.setStyleSheet("""
                 background-color: #450a0a; color: #fca5a5;
                 border: 1px solid #dc2626; border-radius: 4px;

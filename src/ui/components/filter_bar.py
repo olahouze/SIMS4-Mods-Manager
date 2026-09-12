@@ -88,11 +88,11 @@ class FilterBar(QWidget):
         acc_curr = self.access_combo.currentData() or "all"
         self.access_combo.blockSignals(True)
         self.access_combo.clear()
-        self.access_combo.addItem("Tous les états", "all")
-        self.access_combo.addItem("🌐 Directement sur le site", "direct")
-        self.access_combo.addItem("🔑 Nécessite une connexion (compte)", "needs_account")
-        self.access_combo.addItem("⭐ Nécessite un abonnement", "needs_sub")
-        self.access_combo.addItem("✅ Débloqué (Abonné)", "unlocked")
+        self.access_combo.addItem(tr("filter_bar.all_access"), "all")
+        self.access_combo.addItem(tr("filter_bar.access_direct"), "direct")
+        self.access_combo.addItem(tr("filter_bar.access_needs_account"), "needs_account")
+        self.access_combo.addItem(tr("filter_bar.access_needs_sub"), "needs_sub")
+        self.access_combo.addItem(tr("filter_bar.access_unlocked"), "unlocked")
         idx = self.access_combo.findData(acc_curr)
         if idx >= 0:
             self.access_combo.setCurrentIndex(idx)
@@ -102,10 +102,10 @@ class FilterBar(QWidget):
         stat_curr = self.status_combo.currentData() or "all"
         self.status_combo.blockSignals(True)
         self.status_combo.clear()
-        self.status_combo.addItem("Toutes les installations", "all")
-        self.status_combo.addItem("Non installés", "not_installed")
-        self.status_combo.addItem("Déjà installés", "installed")
-        self.status_combo.addItem("Mises à jour disponibles", "updates_available")
+        self.status_combo.addItem(tr("filter_bar.all_statuses"), "all")
+        self.status_combo.addItem(tr("filter_bar.status_not_installed"), "not_installed")
+        self.status_combo.addItem(tr("filter_bar.status_installed"), "installed")
+        self.status_combo.addItem(tr("filter_bar.status_updates_available"), "updates_available")
         idx = self.status_combo.findData(stat_curr)
         if idx >= 0:
             self.status_combo.setCurrentIndex(idx)
@@ -125,6 +125,15 @@ class FilterBar(QWidget):
     def _on_control_changed(self, *args):
         """Emits filters_changed regardless of any arguments passed by widget signals."""
         self.filters_changed.emit()
+
+    def reset_filters(self):
+        """Resets all filter controls to their default states."""
+        self.search_input.clear()
+        self.source_combo.setCurrentIndex(0)
+        self.type_combo.setCurrentIndex(0)
+        self.access_combo.setCurrentIndex(0)
+        self.status_combo.setCurrentIndex(0)
+        self.sort_combo.setCurrentIndex(0)
 
     def get_filter_state(self) -> dict:
         """Returns the current filter parameters as a dict with robust data keys."""

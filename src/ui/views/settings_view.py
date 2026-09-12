@@ -27,6 +27,8 @@ class SettingsView(QWidget):
         self.api_client = get_api_client()
         self.i18n = I18nManager.instance()
         self.lang_buttons = {}
+        self._has_valid_mods = False
+        self._backups_dir = ""
         self.init_ui()
         self.i18n.language_changed.connect(self.retranslate_ui)
 
@@ -177,6 +179,7 @@ class SettingsView(QWidget):
         path_h.setSpacing(10)
         self.mods_path_input = QLineEdit()
         self.mods_path_input.setStyleSheet(input_style)
+        self.mods_path_input.textChanged.connect(self._on_mods_path_changed)
         path_h.addWidget(self.mods_path_input, stretch=3)
 
         self.browse_mods_btn = QPushButton(tr("settings.browse"))
@@ -357,6 +360,21 @@ class SettingsView(QWidget):
         except Exception as e:
             logger.error(f"Erreur API lors de la sauvegarde de la langue: {e}")
 
+    def _on_mods_path_changed(self, text: str):
+        self._validate_mods_path(text)
+
+    def _validate_mods_path(self, path_str: str):
+        from pathlib import Path
+        p = Path(path_str.strip()) if path_str.strip() else None
+        self._has_valid_mods = bool(p and p.exists() and p.is_dir())
+        self._update_mods_status_label()
+
+    def _update_mods_status_label(self):
+        self.mods_status_lbl.setText(
+            tr("settings.folder_valid") if self._has_valid_mods else tr("settings.folder_invalid")
+        )
+        self.mods_status_lbl.setStyleSheet("color: #34d399;" if self._has_valid_mods else "color: #f87171;")
+
     def retranslate_ui(self):
         """Retranslates all text in the settings view dynamically."""
         self.title_lbl.setText(tr("settings.title"))
@@ -364,6 +382,7 @@ class SettingsView(QWidget):
         self.lang_desc_lbl.setText(tr("settings.language_desc"))
         self.mods_section_title.setText(tr("settings.mods_folder_section"))
         self.browse_mods_btn.setText(tr("settings.browse"))
+        self._update_mods_status_label()
         self.game_section_title.setText(tr("settings.game_exe_section"))
         self.browse_exe_btn.setText(tr("settings.browse"))
         self.launch_btn.setText(tr("nav.launch_game"))
@@ -371,6 +390,7 @@ class SettingsView(QWidget):
         self.backup_chk.setText(tr("settings.auto_backup"))
         self.adult_chk.setText(tr("settings.adult_content"))
         self.clear_cache_btn.setText(tr("settings.clear_cache"))
+        self.cache_lbl.setText(tr("settings.backups_path", path=self._backups_dir or "-"))
         self.db_section_title.setText(tr("settings.db_section"))
         self.db_desc_lbl.setText(tr("settings.db_purge_desc"))
         self.purge_db_btn.setText(tr("settings.purge_db_btn"))
@@ -402,14 +422,11 @@ class SettingsView(QWidget):
             self.backup_chk.setChecked(settings.get("auto_backup", True))
             self.adult_chk.setChecked(settings.get("adult_content_enabled", True))
 
-            backups_dir = settings.get("backups_dir", "")
-            self.cache_lbl.setText(tr("settings.backups_path", path=backups_dir))
+            self._backups_dir = settings.get("backups_dir", "")
+            self.cache_lbl.setText(tr("settings.backups_path", path=self._backups_dir or "-"))
 
-            has_valid_mods = bool(settings.get("detected_mods_dir"))
-            self.mods_status_lbl.setText(
-                tr("settings.folder_valid") if has_valid_mods else tr("settings.folder_invalid")
-            )
-            self.mods_status_lbl.setStyleSheet("color: #34d399;" if has_valid_mods else "color: #f87171;")
+            self._has_valid_mods = bool(settings.get("detected_mods_dir"))
+            self._update_mods_status_label()
 
             self.load_database_stats()
 
@@ -461,10 +478,11 @@ class SettingsView(QWidget):
         dir_path = QFileDialog.getExistingDirectory(self, tr("settings.select_mods_dir"))
         if dir_path:
             self.mods_path_input.setText(dir_path)
+            self._validate_mods_path(dir_path)
 
     def browse_game_exe(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, tr("settings.select_game_exe"), "", "Exécutables (*.exe)"
+            self, tr("settings.select_game_exe"), "", tr("settings.exe_filter")
         )
         if file_path:
             self.exe_path_input.setText(file_path)
