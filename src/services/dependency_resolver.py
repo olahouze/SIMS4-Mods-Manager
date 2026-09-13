@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from src.api.schemas.catalog import DependencyItem
 from src.database.models import CatalogMod
 from src.utils.mod_matcher import ModMatcher
-from src.utils.game_dlc_matcher import GameDlcMatcher
+from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
 
 
 # Table de correspondance pour les cas spécifiques de dépendances.
@@ -66,8 +66,8 @@ def find_special_dependency_case(name: str) -> Optional[Dict[str, Any]]:
             if raw_lower == alias_lower or compressed == alias_compressed:
                 return case
 
-            # Tolérance pour variations suffixées de version (ex: "WickedWhims v175")
-            if len(alias_compressed) > 2 and alias_compressed in compressed:
+            # Tolérance pour variations suffixées de version (ex: "WickedWhims v175", "XML Injector v4")
+            if len(alias_compressed) >= 5 and alias_compressed in compressed:
                 return case
 
     return None
@@ -103,19 +103,33 @@ def resolve_mod_dependencies(
         url = dep.get("url", "")
 
         # 0. Check if this is an official Game DLC / Pack (multilingual support)
-        is_dlc = dep.get("is_game_dlc", False)
+        is_dlc = dep.get("is_game_dlc", False) or dep.get("status") == "GAME_DLC"
         dlc_name = dep.get("dlc_name")
         dlc_code = dep.get("dlc_code")
+        clean_t = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", title or "").strip()
+        clean_t = re.sub(
+            r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+            "",
+            clean_t,
+        ).strip().strip("'\"`[](){}")
 
-        if not is_dlc and title:
-            # Skip base game only references
-            if GameDlcMatcher.is_base_game_only(title):
-                continue
-            matched, matched_name, matched_code = GameDlcMatcher.match_dlc(title)
-            if matched:
+        if GameDlcMatcher.is_base_game_only(clean_t):
+            continue
+
+        starts_with_sims4 = bool(SIMS4_PREFIX_REGEX.match(clean_t))
+        matched, matched_name, matched_code = GameDlcMatcher.match_dlc(clean_t)
+
+        if not is_dlc and clean_t:
+            if matched or starts_with_sims4:
                 is_dlc = True
-                dlc_name = matched_name
-                dlc_code = matched_code
+                clean_extracted_name = re.sub(
+                    r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\s*[:\-–—]?\s*",
+                    "",
+                    clean_t,
+                    flags=re.IGNORECASE,
+                ).strip()
+                dlc_name = matched_name or dlc_name or clean_extracted_name or title
+                dlc_code = matched_code or dlc_code
 
         if is_dlc:
             in_game = GameDlcMatcher.is_dlc_installed_in_game(dlc_code)
@@ -155,7 +169,7 @@ def resolve_mod_dependencies(
                 else:
                     cat_match = (
                         session.query(CatalogMod)
-                        .filter((CatalogMod.title.ilike(f"%{title}%")) | (CatalogMod.remote_id == title))
+                        .filter((CatalogMod.title.ilike(title)) | (CatalogMod.remote_id == title))
                         .first()
                     )
                     if cat_match:

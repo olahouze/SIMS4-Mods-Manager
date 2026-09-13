@@ -76,7 +76,58 @@ class ModMatcher:
         "info",
         "notes",
         "note",
+        "objects",
+        "object",
+        "tuning",
+        "tunings",
+        "strings",
+        "string",
+        "cas assets",
+        "assets",
+        "asset",
+        "xml resources",
+        "resources",
+        "resource",
+        "framework",
+        "library",
+        "libraries",
+        "third-party",
+        "third party",
+        "party library",
+        "no third",
+        "package",
+        "packages",
+        "script",
+        "scripts",
+        "script-only",
     }
+
+    # Common English & French grammatical stop words to ignore during token prioritization
+    STOP_WORDS = {
+        "the", "a", "an", "and", "or", "of", "for", "with", "in", "on", "at", "by", "from", "to",
+        "le", "la", "les", "un", "une", "des", "du", "de", "d", "et", "ou", "pour", "avec", "dans", "par",
+    }
+
+    @classmethod
+    def get_dynamic_threshold(cls, query: str, base_threshold: float = 0.70) -> float:
+        """
+        Dynamically adjusts the minimum matching threshold based on the number
+        of significant tokens in the query to prevent false positives on short/generic terms.
+        - <= 1 token: strict threshold 0.95 (almost exact match required)
+        - 2 tokens: threshold 0.85
+        - >= 3 tokens: base_threshold (default 0.70)
+        """
+        if not query:
+            return base_threshold
+        q_clean = cls.clean_mod_title(query)
+        tokens = cls.get_significant_tokens(q_clean)
+        informative = [t for t in tokens if t.lower() not in cls.STOP_WORDS]
+        count = len(informative) if informative else len(tokens)
+        if count <= 1:
+            return max(base_threshold, 0.95)
+        elif count == 2:
+            return max(base_threshold, 0.85)
+        return base_threshold
 
     @classmethod
     def strip_accents(cls, text: str) -> str:
@@ -110,6 +161,11 @@ class ModMatcher:
                 parts = by_text.split()
                 if len(parts) >= 2:
                     author = parts[-1]
+            else:
+                # Check for 'Author - ...'
+                m_dash = cls.CREATOR_DASH_PREFIX_PATTERN.match(title)
+                if m_dash:
+                    author = re.sub(r"\s*[-–:]\s*$", "", m_dash.group(0)).strip()
 
         # Check for version
         m_ver = cls.VERSION_PATTERN.search(title)
@@ -207,6 +263,12 @@ class ModMatcher:
         if not q_tokens or not c_tokens:
             return 0.0
 
+        # Token sort check: insensitive to word permutations (e.g. "Career Mod Kuttoe" vs "Kuttoe Career Mod")
+        sorted_q = " ".join(sorted(q_tokens))
+        sorted_c = " ".join(sorted(c_tokens))
+        if sorted_q == sorted_c:
+            return 0.98
+
         q_set = set(q_tokens)
         c_set = set(c_tokens)
 
@@ -224,6 +286,11 @@ class ModMatcher:
         # If query has substantial words NOT in candidate (candidate is missing critical words)
         missing_from_candidate = [w for w in diff_q if w not in ("mod", "mods")]
         if missing_from_candidate:
+            extracted_author, _ = cls.extract_author_and_version(candidate_title)
+            effective_author = (candidate_author or extracted_author or "").strip().lower()
+            author_tokens = set(cls.get_significant_tokens(effective_author)) if effective_author else set()
+            if author_tokens and set(missing_from_candidate) <= author_tokens:
+                return 0.95
             overlap = len(q_set.intersection(c_set)) / len(q_set)
             return round(0.40 * overlap, 3)
 
@@ -234,6 +301,9 @@ class ModMatcher:
             extracted_author, _ = cls.extract_author_and_version(candidate_title)
             if not extra or (candidate_author and extra <= {candidate_author.lower()}) or (extracted_author and extra <= {extracted_author.lower()}):
                 return 0.95
+            # Guard against 1-token generic queries matching long mod titles
+            if len(q_set) == 1 and ratio < 0.5:
+                return round(0.40 * ratio, 3)
             return round(0.80 + 0.15 * ratio, 3)
 
         # 3. Intersection / Jaccard token score
@@ -248,9 +318,12 @@ class ModMatcher:
         else:
             base_score = 0.0
 
-        # Fuzzy similarity only if token overlap is already significant
+        # Fuzzy similarity incorporating token-sort sequence matching
         if intersection and len(intersection) >= len(q_tokens) * 0.75:
-            str_ratio = difflib.SequenceMatcher(None, q_clean, c_clean).ratio()
+            str_ratio = max(
+                difflib.SequenceMatcher(None, q_clean, c_clean).ratio(),
+                difflib.SequenceMatcher(None, sorted_q, sorted_c).ratio(),
+            )
             final_score = max(base_score, str_ratio * 0.85)
         else:
             final_score = base_score
@@ -275,7 +348,8 @@ class ModMatcher:
         """
         Searches the CatalogMod database table for the best matching mod according to regex cleaning
         and similarity score.
-        Returns (catalog_mod, score) or None if no candidate exceeds min_threshold.
+        Uses dynamic thresholding based on token count and prioritizes specific keywords for SQL pre-filtering.
+        Returns (catalog_mod, score) or None if no candidate exceeds the dynamic threshold.
         """
         from src.database.models import CatalogMod
 
@@ -291,12 +365,20 @@ class ModMatcher:
         q_clean = cls.clean_mod_title(query)
         if not q_clean or len(q_clean) < 2 or q_clean.lower() in cls.GENERIC_EXCLUDED_WORDS:
             return None
+
+        dynamic_threshold = cls.get_dynamic_threshold(query, min_threshold)
         tokens = cls.get_significant_tokens(q_clean)
 
+        # Filter out stopwords and prioritize longest/most specific tokens for SQL pre-selection
+        informative_tokens = [tok for tok in tokens if tok.lower() not in cls.STOP_WORDS and len(tok) >= 3]
+        if not informative_tokens:
+            informative_tokens = [tok for tok in tokens if len(tok) >= 2]
+        informative_tokens.sort(key=len, reverse=True)
+
         candidate_query = session.query(CatalogMod)
-        if tokens:
+        if informative_tokens:
             from sqlalchemy import or_
-            token_filters = [CatalogMod.title.ilike(f"%{tok}%") for tok in tokens[:3]]
+            token_filters = [CatalogMod.title.ilike(f"%{tok}%") for tok in informative_tokens[:3]]
             candidates = candidate_query.filter(or_(*token_filters)).limit(100).all()
         else:
             candidates = candidate_query.limit(50).all()
@@ -310,10 +392,10 @@ class ModMatcher:
                 best_score = score
                 best_mod = cand
 
-        if best_mod and best_score >= min_threshold:
+        if best_mod and best_score >= dynamic_threshold:
             logger.debug(
                 f"[ModMatcher] Match catalog trouvé pour '{query}': '{best_mod.title}' "
-                f"(score={best_score:.2f} >= {min_threshold})"
+                f"(score={best_score:.2f} >= {dynamic_threshold:.2f})"
             )
             return best_mod, best_score
 
@@ -328,6 +410,10 @@ class ModMatcher:
     ) -> Optional[Tuple[Any, float]]:
         """
         Searches a list of InstalledMod objects for the best match for query.
+        Matches against:
+        1. im.title
+        2. im.folder_name
+        3. package and script filenames in im.installed_files
         Returns (installed_mod, score) or None.
         """
         if not query or not installed_mods:
@@ -337,20 +423,50 @@ class ModMatcher:
         if not q_clean or len(q_clean) < 2 or q_clean.lower() in cls.GENERIC_EXCLUDED_WORDS:
             return None
 
+        dynamic_threshold = cls.get_dynamic_threshold(query, min_threshold)
+
         best_mod = None
         best_score = 0.0
 
         for im in installed_mods:
             im_title = getattr(im, "title", "") or ""
-            score = cls.match_score(query, im_title)
-            if score > best_score:
-                best_score = score
+            im_folder = getattr(im, "folder_name", "") or ""
+
+            candidates = [im_title]
+            if im_folder:
+                candidates.append(im_folder)
+
+            files_list = []
+            if hasattr(im, "get_installed_files_list"):
+                try:
+                    files_list = im.get_installed_files_list() or []
+                except Exception:
+                    files_list = []
+            elif hasattr(im, "installed_files") and isinstance(im.installed_files, list):
+                files_list = im.installed_files
+
+            for fpath in files_list[:15]:
+                fname = fpath.replace("\\", "/").split("/")[-1]
+                f_base = re.sub(r"\.(?:package|ts4script)$", "", fname, flags=re.I)
+                if f_base:
+                    candidates.append(f_base)
+
+            im_best = 0.0
+            for cand in candidates:
+                if not cand:
+                    continue
+                score = cls.match_score(query, cand)
+                if score > im_best:
+                    im_best = score
+
+            if im_best > best_score:
+                best_score = im_best
                 best_mod = im
 
-        if best_mod and best_score >= min_threshold:
+        if best_mod and best_score >= dynamic_threshold:
             logger.debug(
                 f"[ModMatcher] Match mod installé trouvé pour '{query}': '{best_mod.title}' "
-                f"(score={best_score:.2f} >= {min_threshold})"
+                f"(score={best_score:.2f} >= {dynamic_threshold:.2f})"
             )
             return best_mod, best_score
 

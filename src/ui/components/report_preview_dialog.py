@@ -1,0 +1,410 @@
+from typing import List, Optional, Tuple
+from PySide6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTextEdit,
+    QPushButton,
+    QFrame,
+    QMessageBox,
+    QCheckBox,
+    QRadioButton,
+    QButtonGroup,
+)
+from PySide6.QtCore import Qt, Signal, QThread
+
+from src.api.client import get_api_client
+from src.services.requirement_reporter_service import RequirementReporterService
+from src.i18n import tr
+from src.utils.logger import logger
+
+
+class SubmitReportWorker(QThread):
+    """Asynchronous worker to submit the forum report via API."""
+
+    finished_result = Signal(bool, str, str)  # success, message, reported_at
+
+    def __init__(self, payload: dict, parent=None):
+        super().__init__(parent)
+        self.payload = payload
+
+    def run(self):
+        client = get_api_client()
+        try:
+            res = client.report_missing_requirements(self.payload)
+            success = res.get("success", False)
+            msg = res.get("message", "")
+            reported_at = res.get("reported_at", "à l'instant")
+            self.finished_result.emit(success, msg, reported_at)
+        except Exception as e:
+            logger.error(f"SubmitReportWorker error: {e}")
+            self.finished_result.emit(False, str(e), "")
+
+
+class ReportPreviewDialog(QDialog):
+    """
+    Modal dialog allowing the user to review the standardized English message
+    before posting it to the mod creator's forum/page.
+    Each detected requirement can be tagged as a 'missing mod' or 'not a mod (to remove)'.
+    """
+
+    report_sent = Signal(str)  # emitted with reported_at string on success
+
+    def __init__(
+        self,
+        mod_title: str,
+        author: str,
+        missing_modules: List[str],
+        source: str = "loverslab",
+        page_url: str = "",
+        remote_id: str = "",
+        catalog_mod_id: Optional[int] = None,
+        initial_message: str = "",
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.mod_title = mod_title
+        self.author = author or "Author"
+        self.missing_modules = missing_modules or []
+        self.source = source
+        self.page_url = page_url
+        self.remote_id = remote_id
+        self.catalog_mod_id = catalog_mod_id
+        self.initial_message = initial_message
+
+        self.module_items: List[dict] = []
+        self.module_checkboxes: List[QCheckBox] = []
+
+        if not self.initial_message and self.missing_modules:
+            self.initial_message = RequirementReporterService.build_english_message(
+                self.mod_title, self.author, self.missing_modules
+            )
+
+        self.setWindowTitle(tr("report_dialog.title"))
+        self.setMinimumWidth(620)
+        self.setMinimumHeight(520)
+        self._init_ui()
+
+    def _init_ui(self):
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #0d111d;
+                color: #f8fafc;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(14)
+
+        # Header Title
+        title_lbl = QLabel(tr("report_dialog.header"))
+        title_lbl.setStyleSheet("font-size: 16px; font-weight: 800; color: #f8fafc;")
+        layout.addWidget(title_lbl)
+
+        # Subtitle info
+        author_display = self.author if self.author.startswith("@") else f"@{self.author}"
+        info_lbl = QLabel(
+            tr("report_dialog.info", author=author_display, count=len(self.missing_modules))
+        )
+        info_lbl.setStyleSheet("font-size: 12px; color: #94a3b8; line-height: 1.4;")
+        info_lbl.setWordWrap(True)
+        layout.addWidget(info_lbl)
+
+        # Missing modules summary banner with choice cards
+        summary_frame = QFrame()
+        summary_frame.setStyleSheet("""
+            background-color: #1e1b4b;
+            border: 1px solid #4f46e5;
+            border-radius: 8px;
+            padding: 10px 12px;
+        """)
+        s_layout = QVBoxLayout(summary_frame)
+        s_layout.setContentsMargins(8, 8, 8, 8)
+        s_layout.setSpacing(8)
+
+        s_title = QLabel(f"📦 {tr('report_dialog.unfound_list_title')}")
+        s_title.setStyleSheet("font-size: 12px; font-weight: 700; color: #c7d2fe;")
+        s_layout.addWidget(s_title)
+
+        s_hint = QLabel(tr("report_dialog.checkbox_hint"))
+        s_hint.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 2px;")
+        s_layout.addWidget(s_hint)
+
+        self.module_items = []
+        self.module_checkboxes = []
+
+        for mod_name in self.missing_modules:
+            row_frame = QFrame()
+            row_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #121829;
+                    border: 1px solid #2e3856;
+                    border-radius: 6px;
+                    padding: 4px 8px;
+                }
+            """)
+            r_layout = QVBoxLayout(row_frame)
+            r_layout.setContentsMargins(6, 6, 6, 6)
+            r_layout.setSpacing(4)
+
+            top_row = QHBoxLayout()
+            cb = QCheckBox(mod_name)
+            cb.setChecked(True)
+            cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            cb.setStyleSheet("""
+                QCheckBox {
+                    color: #f1f5f9;
+                    font-size: 12px;
+                    font-weight: 700;
+                    spacing: 8px;
+                }
+                QCheckBox::indicator {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 4px;
+                    border: 1px solid #6366f1;
+                    background-color: #0b0e1a;
+                }
+                QCheckBox::indicator:hover { border-color: #818cf8; }
+                QCheckBox::indicator:checked { background-color: #4f46e5; border-color: #6366f1; }
+            """)
+            top_row.addWidget(cb)
+            top_row.addStretch()
+            r_layout.addLayout(top_row)
+
+            # Radios for choice: Missing Mod vs Unnecessary / Not a mod
+            choice_layout = QHBoxLayout()
+            choice_layout.setContentsMargins(24, 0, 0, 2)
+            choice_layout.setSpacing(16)
+
+            btn_group = QButtonGroup(self)
+            rb_missing = QRadioButton(tr("report_dialog.choice_missing_mod"))
+            rb_missing.setChecked(True)
+            rb_missing.setCursor(Qt.CursorShape.PointingHandCursor)
+            rb_missing.setStyleSheet("""
+                QRadioButton {
+                    color: #93c5fd;
+                    font-size: 11px;
+                    font-weight: 600;
+                    spacing: 6px;
+                }
+                QRadioButton::indicator {
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 7px;
+                    border: 1px solid #60a5fa;
+                    background-color: #0f172a;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #3b82f6;
+                    border: 3px solid #0f172a;
+                }
+            """)
+
+            rb_unnecessary = QRadioButton(tr("report_dialog.choice_not_a_mod"))
+            rb_unnecessary.setChecked(False)
+            rb_unnecessary.setCursor(Qt.CursorShape.PointingHandCursor)
+            rb_unnecessary.setStyleSheet("""
+                QRadioButton {
+                    color: #fda4af;
+                    font-size: 11px;
+                    font-weight: 600;
+                    spacing: 6px;
+                }
+                QRadioButton::indicator {
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 7px;
+                    border: 1px solid #f43f5e;
+                    background-color: #0f172a;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #f43f5e;
+                    border: 3px solid #0f172a;
+                }
+            """)
+
+            btn_group.addButton(rb_missing, 0)
+            btn_group.addButton(rb_unnecessary, 1)
+
+            choice_layout.addWidget(rb_missing)
+            choice_layout.addWidget(rb_unnecessary)
+            choice_layout.addStretch()
+            r_layout.addLayout(choice_layout)
+
+            # Connect toggle handlers
+            def _make_toggled_handler(c=cb, m=rb_missing, u=rb_unnecessary):
+                def _handler():
+                    m.setEnabled(c.isChecked())
+                    u.setEnabled(c.isChecked())
+                    self._on_module_selection_changed()
+                return _handler
+
+            cb.stateChanged.connect(_make_toggled_handler())
+            rb_missing.toggled.connect(self._on_module_selection_changed)
+            rb_unnecessary.toggled.connect(self._on_module_selection_changed)
+
+            s_layout.addWidget(row_frame)
+            self.module_checkboxes.append(cb)
+            self.module_items.append({
+                "name": mod_name,
+                "cb": cb,
+                "rb_missing": rb_missing,
+                "rb_unnecessary": rb_unnecessary,
+            })
+
+        layout.addWidget(summary_frame)
+
+        # Message Text Edit
+        msg_lbl = QLabel(tr("report_dialog.message_label"))
+        msg_lbl.setStyleSheet("font-size: 12px; font-weight: 700; color: #cbd5e1; margin-top: 4px;")
+        layout.addWidget(msg_lbl)
+
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlainText(self.initial_message)
+        self.text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #0b0e1a;
+                color: #e2e8f0;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 10px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+            QTextEdit:focus {
+                border-color: #6366f1;
+            }
+        """)
+        layout.addWidget(self.text_edit, stretch=1)
+
+        # Notice
+        notice_lbl = QLabel(tr("report_dialog.account_notice", source=self.source.capitalize()))
+        notice_lbl.setStyleSheet("font-size: 11px; color: #64748b; font-style: italic;")
+        notice_lbl.setWordWrap(True)
+        layout.addWidget(notice_lbl)
+
+        # Action Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+        btn_layout.addStretch()
+
+        self.cancel_btn = QPushButton(tr("dialogs.cancel"))
+        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1e253b;
+                color: #cbd5e1;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 9px 18px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #28314d; color: #ffffff; }
+        """)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(self.cancel_btn)
+
+        self.send_btn = QPushButton(tr("report_dialog.btn_send"))
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4f46e5;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+                padding: 9px 20px;
+                font-weight: 700;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #6366f1; }
+            QPushButton:disabled { background-color: #3730a3; color: #94a3b8; }
+        """)
+        self.send_btn.clicked.connect(self._on_send_clicked)
+        btn_layout.addWidget(self.send_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _get_categorized_modules(self) -> Tuple[List[str], List[str]]:
+        missing = []
+        unnecessary = []
+        for item in self.module_items:
+            if item["cb"].isChecked():
+                if item["rb_missing"].isChecked():
+                    missing.append(item["name"])
+                else:
+                    unnecessary.append(item["name"])
+        return missing, unnecessary
+
+    def _get_selected_modules(self) -> List[str]:
+        missing, unnecessary = self._get_categorized_modules()
+        return missing + unnecessary
+
+    def _on_module_selection_changed(self):
+        missing, unnecessary = self._get_categorized_modules()
+        if not missing and not unnecessary:
+            self.send_btn.setEnabled(False)
+            self.send_btn.setToolTip(tr("report_dialog.select_at_least_one"))
+        else:
+            self.send_btn.setEnabled(True)
+            self.send_btn.setToolTip("")
+
+        new_msg = RequirementReporterService.build_english_message(
+            self.mod_title, self.author, missing, unnecessary
+        )
+        self.text_edit.setPlainText(new_msg)
+
+    def _on_send_clicked(self):
+        missing, unnecessary = self._get_categorized_modules()
+        if not missing and not unnecessary:
+            QMessageBox.warning(self, tr("dialogs.warning"), tr("report_dialog.select_at_least_one"))
+            return
+
+        message_to_send = self.text_edit.toPlainText().strip()
+        if not message_to_send:
+            QMessageBox.warning(self, tr("dialogs.warning"), tr("report_dialog.empty_message_error"))
+            return
+
+        self.send_btn.setEnabled(False)
+        self.send_btn.setText(tr("report_dialog.sending"))
+        self.cancel_btn.setEnabled(False)
+
+        payload = {
+            "catalog_mod_id": self.catalog_mod_id,
+            "source": self.source,
+            "remote_id": self.remote_id,
+            "page_url": self.page_url,
+            "title": self.mod_title,
+            "author": self.author,
+            "missing_modules": missing,
+            "unnecessary_modules": unnecessary,
+            "custom_message": message_to_send,
+        }
+
+        self.worker = SubmitReportWorker(payload, parent=self)
+        self.worker.finished_result.connect(self._on_submit_finished)
+        self.worker.start()
+
+    def _on_submit_finished(self, success: bool, message: str, reported_at: str):
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText(tr("report_dialog.btn_send"))
+        self.cancel_btn.setEnabled(True)
+
+        if success:
+            QMessageBox.information(
+                self,
+                tr("report_dialog.success_title"),
+                tr("report_dialog.success_body", author=self.author),
+            )
+            self.report_sent.emit(reported_at or "à l'instant")
+            self.accept()
+        else:
+            QMessageBox.warning(
+                self,
+                tr("report_dialog.error_title"),
+                message or tr("report_dialog.generic_error"),
+            )

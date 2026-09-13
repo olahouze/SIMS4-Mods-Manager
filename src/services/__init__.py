@@ -37,6 +37,10 @@ from src.services.game_service import (
     LOCALIZED_SIMS4_FOLDERS,
 )
 
+from src.services.requirement_reporter_service import (
+    RequirementReporterService,
+)
+
 __all__ = [
     "SPECIAL_DEPENDENCY_CASES",
     "SPECIAL_DEPENDENCY_REMOTE_IDS",
@@ -60,4 +64,6 @@ __all__ = [
     "is_sims4_folder",
     "normalize_folder_name",
     "LOCALIZED_SIMS4_FOLDERS",
+    "RequirementReporterService",
 ]
+

@@ -49,3 +49,27 @@ def test_sanitize_description_html_strips_scripts_and_cleans_styles():
     assert 'src="https://www.loverslab.com/uploads/images/sample.jpg"' in clean_html
     # Link was resolved to absolute URL
     assert 'href="https://www.loverslab.com/files/file/123-dep/"' in clean_html
+
+
+def test_requirements_negative_statements_and_settings_skipped():
+    from src.providers.loverslab.scraper import LoversLabProvider
+
+    provider = LoversLabProvider()
+    html = """
+    <ul class="cFileInfo">
+        <li>
+            <strong class="ipsDataItem_size3">Requirements</strong>
+            <div class="cFileInfoData">
+                <p>REQUIREMENTS</p>
+                <p>- The Sims 4 for PC or Mac.</p>
+                <p>- Script Mods enabled in Game Options.</p>
+                <p>- No third-party library or framework is required.</p>
+                <p>- No .package file is required. Conversation Lock is a script-only mod and does not add tuning, strings, CAS assets, objects, or XML resources.</p>
+            </div>
+        </li>
+    </ul>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    _text, _status, reqs = provider.extract_requirements(soup)
+    assert len(reqs) == 0, f"Expected 0 requirements extracted from negative text, got: {reqs}"
+

@@ -44,3 +44,23 @@ class BaseSourceProvider(ABC):
         Checks accessibility status (e.g. PUBLIC, UNLOCKED, LOCKED).
         """
         pass
+
+    @abstractmethod
+    def check_user_already_commented(
+        self, page_url: str, required_keywords: List[str]
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Checks live on the provider's site/forum if the authenticated user has already
+        posted a comment/message containing the given keywords.
+        Returns (already_commented, formatted_datetime_or_snippet).
+        """
+        pass
+
+    @abstractmethod
+    def post_mod_comment(self, page_url: str, message: str) -> Tuple[bool, str]:
+        """
+        Posts a comment or message on the mod page/forum using the authenticated member session.
+        Returns (success, message_or_error).
+        """
+        pass
+

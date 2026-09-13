@@ -139,7 +139,18 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
+    def check_missing_report(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        resp = self._client.post("/api/catalog/check-missing-report", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+    def report_missing_requirements(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        resp = self._client.post("/api/catalog/report-missing-requirements", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
     def install_mod_stream(self, payload: Dict[str, Any]):
+
         """Streams real-time progress events from the API during mod installation."""
         import json
 

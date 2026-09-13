@@ -12,8 +12,8 @@ SIMS4_PREFIX_REGEX = re.compile(
 
 # Base game indicators to exclude from DLC categorization
 BASE_GAME_REGEX = re.compile(
-    r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4(?:\s*(?:base\s*game|jeu\s*de\s*base|basisspiel|juego\s*base|gioco\s*base))?$|"
-    r"^ts4(?:\s*(?:base\s*game|jeu\s*de\s*base|basisspiel))?$|"
+    r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4(?:\s*[:\-–—]?\s*(?:base\s*game|jeu\s*de\s*base|basisspiel|juego\s*base|gioco\s*base|\(?\s*(?:for|pour)?\s*(?:pc\s*(?:or|/|and|et|oder)\s*mac|pc|mac|windows|osx|linux)\s*\)?))?$|"
+    r"^ts4(?:\s*[:\-–—]?\s*(?:base\s*game|jeu\s*de\s*base|basisspiel|\(?\s*(?:for|pour)?\s*(?:pc\s*(?:or|/|and|et|oder)\s*mac|pc|mac|windows|osx|linux)\s*\)?))?$|"
     r"^(?:base\s*game|jeu\s*de\s*base|basisspiel|juego\s*base|none|aucun|aucun[e]?|n/?a|-)$",
     re.IGNORECASE,
 )
@@ -85,6 +85,44 @@ KNOWN_DLC_NAMES = {
     "my wedding stories": ("GP11", "My Wedding Stories / Mariage"),
     "werewolves": ("GP12", "Werewolves / Loups-Garous"),
     "loups garous": ("GP12", "Werewolves / Loups-Garous"),
+    # Stuff Packs (SP)
+    "luxury party": ("SP01", "Luxury Party / Soirée de Luxe"),
+    "soiree de luxe": ("SP01", "Luxury Party / Soirée de Luxe"),
+    "perfect patio": ("SP02", "Perfect Patio / Ambiance Patio"),
+    "ambiance patio": ("SP02", "Perfect Patio / Ambiance Patio"),
+    "cool kitchen": ("SP03", "Cool Kitchen / En Cuisine"),
+    "en cuisine": ("SP03", "Cool Kitchen / En Cuisine"),
+    "spooky": ("SP04", "Spooky / Accessoires Effrayants"),
+    "accessoires effrayants": ("SP04", "Spooky / Accessoires Effrayants"),
+    "movie hangout": ("SP05", "Movie Hangout / Comme au Cinéma"),
+    "comme au cinema": ("SP05", "Movie Hangout / Comme au Cinéma"),
+    "romantic garden": ("SP06", "Romantic Garden / Jardin Romantique"),
+    "jardin romantique": ("SP06", "Romantic Garden / Jardin Romantique"),
+    "kids room": ("SP07", "Kids Room / Chambre d'enfants"),
+    "chambre d enfants": ("SP07", "Kids Room / Chambre d'enfants"),
+    "backyard": ("SP08", "Backyard / En Plein Air"),
+    "en plein air": ("SP08", "Backyard / En Plein Air"),
+    "vintage glamour": ("SP09", "Vintage Glamour / Accessoires Vintage"),
+    "accessoires vintage": ("SP09", "Vintage Glamour / Accessoires Vintage"),
+    "bowling night": ("SP10", "Bowling Night / Soirée Bowling"),
+    "soiree bowling": ("SP10", "Bowling Night / Soirée Bowling"),
+    "fitness": ("SP11", "Fitness"),
+    "toddler": ("SP12", "Toddler / Bambins"),
+    "bambins": ("SP12", "Toddler / Bambins"),
+    "laundry day": ("SP13", "Laundry Day / Jour de Lessive"),
+    "jour de lessive": ("SP13", "Laundry Day / Jour de Lessive"),
+    "my first pet": ("SP14", "My First Pet / Premier Animal"),
+    "premier animal": ("SP14", "My First Pet / Premier Animal"),
+    "moschino": ("SP15", "Moschino"),
+    "tiny living": ("SP16", "Tiny Living / Mini-Maisons"),
+    "mini maisons": ("SP16", "Tiny Living / Mini-Maisons"),
+    "nifty knitting": ("SP17", "Nifty Knitting / Tricot de Pro"),
+    "tricot de pro": ("SP17", "Nifty Knitting / Tricot de Pro"),
+    "paranormal": ("SP18", "Paranormal"),
+    "home chef hustle": ("SP19", "Home Chef Hustle / Passion Cuisine"),
+    "passion cuisine": ("SP19", "Home Chef Hustle / Passion Cuisine"),
+    "crystal creations": ("SP20", "Crystal Creations / Créations en Cristal"),
+    "creations en cristal": ("SP20", "Crystal Creations / Créations en Cristal"),
 }
 
 
@@ -99,8 +137,18 @@ class GameDlcMatcher:
         """Returns True if the text only refers to the Sims 4 base game without any pack."""
         if not text:
             return False
-        clean = text.strip()
-        return bool(BASE_GAME_REGEX.fullmatch(clean))
+        clean = text.strip().strip("'\"`[](){}").rstrip(".,;:-")
+        if BASE_GAME_REGEX.fullmatch(clean):
+            return True
+        m = SIMS4_PREFIX_REGEX.match(clean)
+        if m:
+            rest = clean[m.end() :].strip(" :\\-–—.,;()[]")
+            if not rest or re.fullmatch(
+                r"(?i)(?:base\s*game|jeu\s*de\s*base|basisspiel|juego\s*base|gioco\s*base|(?:for|pour)?\s*(?:pc\s*(?:or|/|and|et|oder)\s*mac|pc|mac|windows|osx|linux).*)",
+                rest,
+            ):
+                return True
+        return False
 
     @classmethod
     def match_dlc(cls, text: str) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -115,38 +163,58 @@ class GameDlcMatcher:
         if not text:
             return False, None, None
 
-        cleaned = text.strip().strip("'\"`[](){}")
-        if cls.is_base_game_only(cleaned):
+        # Clean leading bullets, dashes, brackets, colons
+        clean = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", text).strip()
+        # Clean leading requirement prefixes (e.g. "Requires:", "Requirements:", "Need:", "DLC:", "Pack:")
+        clean = re.sub(
+            r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+            "",
+            clean,
+        ).strip().strip("'\"`[](){}")
+
+        if not clean or cls.is_base_game_only(clean):
             return False, None, None
 
         # Check if starts with a localized Sims 4 prefix
-        m_prefix = SIMS4_PREFIX_REGEX.match(cleaned)
+        m_prefix = SIMS4_PREFIX_REGEX.match(clean)
         is_sims_prefixed = m_prefix is not None
 
         dlc_candidate = ""
         if is_sims_prefixed:
             # Everything after the prefix
-            after_prefix = cleaned[m_prefix.end() :].strip()
-            # Remove leading punctuation like ":", "-", "–", or words like "Pack", "DLC"
-            dlc_candidate = re.sub(r"^[:\-–—\s]+", "", after_prefix).strip()
+            after_prefix = clean[m_prefix.end() :].strip()
+            # Remove leading and trailing punctuation, brackets, colons, dashes
+            dlc_candidate = re.sub(r"^[:\-–—\s\[\]\(\)\{\}\"\'\`]+", "", after_prefix).strip()
+            dlc_candidate = re.sub(r"[\s\[\]\(\)\{\}\"\'\`]+$", "", dlc_candidate).strip()
         else:
-            # Check if it has explicit pack code or keyword (e.g. "EP01 Get to Work" or "Get to Work Expansion Pack")
-            if DLC_KEYWORDS_REGEX.search(cleaned):
-                dlc_candidate = cleaned
+            # Check if cleaned matches a known DLC directly (e.g. "City Living", "Get to Work")
+            norm_cleaned = cls._normalize_lookup_key(clean)
+            if norm_cleaned in KNOWN_DLC_NAMES:
+                dlc_candidate = clean
+            else:
+                for k in KNOWN_DLC_NAMES:
+                    if k == norm_cleaned or (len(k) >= 5 and k in norm_cleaned):
+                        dlc_candidate = clean
+                        break
+            if not dlc_candidate and DLC_KEYWORDS_REGEX.search(clean):
+                dlc_candidate = clean
 
         if not dlc_candidate:
             return False, None, None
 
-        # If what remains is just "Base Game", "Jeu de base", etc., not a DLC
-        if re.fullmatch(r"(?i)\s*(base\s*game|jeu\s*de\s*base|basisspiel)\s*", dlc_candidate):
+        # If what remains is just "Base Game", "Jeu de base", platform specifier, etc., not a DLC
+        if re.fullmatch(
+            r"(?i)\s*(?:base\s*game|jeu\s*de\s*base|basisspiel|juego\s*base|gioco\s*base|for\s+(?:pc|mac|windows).*|\(?\s*(?:pc|mac|windows).*\)?)\s*",
+            dlc_candidate,
+        ):
             return False, None, None
 
         # Clean candidate of trailing pack descriptors (e.g. "Get to Work Expansion Pack" -> "Get to Work")
         clean_name = re.sub(
-            r"(?i)\s*\b(?:expansion\s*pack|game\s*pack|stuff\s*pack|kit\s*d['’]objets|pack\s*d['’]extension|pack\s*de\s*jeu|mini-?kit|dlc)\b\s*",
+            r"(?i)\s*\b(?:expansion\s*pack|game\s*pack|stuff\s*pack|kit\s*d['’]objets|pack\s*d['’]extension|pack\s*de\s*jeu|mini-?kit|dlc|ep\d+|gp\d+|sp\d+)\b\s*",
             "",
             dlc_candidate,
-        ).strip(": -–—")
+        ).strip(": -–—()[]{}")
 
         if not clean_name:
             clean_name = dlc_candidate
@@ -161,7 +229,7 @@ class GameDlcMatcher:
         else:
             # Check partial matches in KNOWN_DLC_NAMES
             for k, (code, std) in KNOWN_DLC_NAMES.items():
-                if k in normalized_key or normalized_key in k:
+                if k in normalized_key or (len(k) >= 4 and normalized_key in k):
                     pack_code = code
                     standard_name = std
                     break

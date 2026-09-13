@@ -24,8 +24,10 @@ class ApiServer:
         cls._host = host
         cls._port = port
 
+        from src.api.app import app
+
         config = uvicorn.Config(
-            app="src.api.app:app",
+            app=app,
             host=host,
             port=port,
             log_level="warning",
@@ -33,6 +35,7 @@ class ApiServer:
             reload=False,
         )
         cls._server_instance = uvicorn.Server(config)
+
 
         def _run():
             try:
@@ -73,14 +76,17 @@ class ApiServer:
         logger.info(f"Démarrage du serveur API autonome sur http://{host}:{port}")
         logger.info(f"Documentation Swagger interactive disponible sur : http://{host}:{port}/docs")
 
+        from src.api.app import app
+
         config = uvicorn.Config(
-            app="src.api.app:app",
+            app=app,
             host=host,
             port=port,
             log_level="info",
             access_log=True,
             reload=False,
         )
+
         server = uvicorn.Server(config)
         server.run()
 

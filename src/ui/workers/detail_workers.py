@@ -71,7 +71,12 @@ class FetchDetailsWorker(QThread):
                         "remote_id": self.remote_id,
                         "requirements_text": chk.get("requirements_text"),
                         "requirements_status": chk.get("requirements_status", "NONE"),
-                        "dependencies": chk.get("already_installed_dependencies", []) + chk.get("missing_dependencies", []),
+                        "dependencies": (
+                            chk.get("game_dlc_dependencies", [])
+                            + chk.get("already_installed_dependencies", [])
+                            + chk.get("missing_dependencies", [])
+                            + chk.get("unfound_dependencies", [])
+                        ),
                         "description": "",
                         "screenshots": [],
                     }

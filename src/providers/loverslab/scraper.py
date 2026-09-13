@@ -663,101 +663,179 @@ class LoversLabProvider(BaseSourceProvider):
                 })
 
         text_without_urls = re.sub(r"https?://\S+", "", raw_text)
-        cleaned_str = re.sub(r"\b(?:et|and|or|ou)\b", ",", text_without_urls, flags=re.IGNORECASE)
-        tokens = re.split(r"[\n\r,+/&]|\s+-\s*|-\s+", cleaned_str)
-        for t in tokens:
-            t_clean = t.strip()
-            if is_wickedwhims_name(t_clean) or is_nisa_name(t_clean):
-                sub_parts = [t_clean]
-            else:
-                sub_parts = re.split(r"(?<=[a-zA-Z0-9])-(?=[a-zA-Z0-9])", t)
+        raw_lines = [line_str.strip() for line_str in text_without_urls.splitlines() if line_str.strip()]
 
-            for sp in sub_parts:
-                candidate = sp.strip().strip('"\'`')
-                if not candidate or len(candidate) < 2:
+        NEGATIVE_RE = re.compile(
+            r"(?i)\b(no\s+(?:third[- ]party|additional|other|\.package|script|special|extra)?\s*(?:mods?|librar(?:y|ies)|frameworks?|files?|tools?|requirements?)\s*(?:is|are)?\s*(?:required|needed)|not\s+(?:required|needed)|none\s+required|nothing\s+required|no\s+requirements?|no\s+dependencies|no\s+third|aucun\s+requis|pas\s+de\s+pr[ée]requis|rien\s+de\s+requis)\b"
+        )
+        EXPLANATION_RE = re.compile(
+            r"(?i)\b(is\s+a\s+script[- ]only|does\s+not\s+(?:add|require|include)|will\s+not\s+work\s+without|how\s+to\s+install|unzip\s+to|extract\s+to|drag\s+and\s+drop|place\s+in|enabled?\s+in\s+game\s+options|in\s+game\s+options|game\s+options)\b"
+        )
+        HEADER_RE = re.compile(
+            r"(?i)^(requirements?|pr[ée]requis|prerequisites?|needs?|required\s*mods?)\s*:?$"
+        )
+
+        from src.utils.game_dlc_matcher import GameDlcMatcher
+
+        candidate_tokens: List[str] = []
+        for line in raw_lines:
+            clean_line = re.sub(r"^[\s•\*\-\–\—\d\.\)\:]+\s*", "", line).strip()
+            if not clean_line or len(clean_line) < 2:
+                continue
+
+            if HEADER_RE.match(clean_line):
+                continue
+
+            if NEGATIVE_RE.search(clean_line) or re.match(r"(?i)^\s*(no\b|none\b|none\.|aucun\b|aucun[e]?\b|n/?a\b)", clean_line):
+                continue
+
+            if EXPLANATION_RE.search(clean_line):
+                continue
+
+            if GameDlcMatcher.is_base_game_only(clean_line) or re.fullmatch(r"(?i)the\s+sims\s+4\s+for\s+(?:pc|mac)\.?", clean_line):
+                continue
+
+            # Strip leading requirement labels (e.g. "Requires: The Sims 4...")
+            unprefixed_line = re.sub(
+                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+                "",
+                clean_line,
+            ).strip()
+
+            # Protect titles with '&' from being split
+            protected_line = re.sub(r"(?i)\bcats\s*(?:&|and)\s*dogs\b", "Cats_and_Dogs", unprefixed_line)
+            protected_line = re.sub(r"(?i)\blife\s*(?:&|and)\s*death\b", "Life_and_Death", protected_line)
+
+            # Protect "The Sims 4 - " prefix before splitting on delimiters
+            protected_line = re.sub(
+                r"(?i)\b(sims\s*4|ts4)\s*[-–—]\s*",
+                r"\1 : ",
+                protected_line,
+            )
+            primary_tokens = re.split(r"[,;+/|]|\s+[-–—]\s*|\s+(?:and|et|as\s+well\s+as)\s+|\s+&\s+", protected_line)
+            line_tokens = []
+            for pt in primary_tokens:
+                pt_str = pt.replace("Cats_and_Dogs", "Cats & Dogs").replace("Life_and_Death", "Life & Death").strip()
+                if not pt_str:
                     continue
-
-                if candidate.lower() in ModMatcher.GENERIC_EXCLUDED_WORDS:
-                    continue
-
-                from src.utils.game_dlc_matcher import GameDlcMatcher
-
-                if GameDlcMatcher.is_base_game_only(candidate):
-                    continue
-
-                is_dlc, pack_name, pack_code = GameDlcMatcher.match_dlc(candidate)
-                if is_dlc:
-                    dlc_key = (pack_code or pack_name or candidate).lower()
-                    if dlc_key not in seen_titles:
-                        seen_titles.add(dlc_key)
-                        req_mods.append({
-                            "source": "game_dlc",
-                            "remote_id": pack_code or "",
-                            "title": f"The Sims 4 : {pack_name}",
-                            "url": "",
-                            "is_game_dlc": True,
-                            "dlc_name": pack_name,
-                            "dlc_code": pack_code,
-                        })
-                    continue
-
-                c_lower = candidate.lower()
-
-                if is_wickedwhims_name(candidate):
-                    alias_info = {
-                        "remote_id": "3169",
-                        "title": "WickedWhims",
-                        "url": "https://www.loverslab.com/files/file/3169-wickedwhims/",
-                    }
-                elif is_nisa_name(candidate):
-                    alias_info = {
-                        "remote_id": "9443",
-                        "title": "Nisa's Wicked Perversions",
-                        "url": "https://www.loverslab.com/files/file/9443-nisas-wicked-perversions/",
-                    }
+                is_dlc_item, _, _ = GameDlcMatcher.match_dlc(pt_str)
+                if is_wickedwhims_name(pt_str) or is_nisa_name(pt_str) or is_dlc_item or bool(re.match(r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\b|^ts4\b|^симс\s*4\b", pt_str, re.IGNORECASE)):
+                    line_tokens.append(pt_str)
                 else:
-                    c_cleaned = ModMatcher.clean_mod_title(candidate)
-                    alias_info = self.KNOWN_MOD_ALIASES.get(c_lower) or self.KNOWN_MOD_ALIASES.get(c_cleaned)
+                    # If an unspaced hyphen exists in a multi-word phrase (e.g. "Wicked whims-Basemental Drug")
+                    # split on the hyphen that is preceded by a word with a space
+                    sub_parts = re.split(r"(\s+[a-zA-Z0-9]+)-(?=[A-Z])", pt_str)
+                    if len(sub_parts) > 1:
+                        reconstructed = []
+                        curr = sub_parts[0]
+                        for i in range(1, len(sub_parts), 2):
+                            curr += sub_parts[i]
+                            reconstructed.append(curr.strip())
+                            curr = sub_parts[i + 1] if i + 1 < len(sub_parts) else ""
+                        if curr.strip():
+                            reconstructed.append(curr.strip())
+                        line_tokens.extend(reconstructed)
+                    else:
+                        line_tokens.append(pt_str)
 
-                if alias_info:
-                    r_id = alias_info["remote_id"]
-                    if r_id not in seen_ids:
-                        seen_ids.add(r_id)
-                        seen_titles.add(alias_info["title"].lower())
-                        req_mods.append({
-                            "source": "loverslab",
-                            "remote_id": r_id,
-                            "title": alias_info["title"],
-                            "url": alias_info["url"],
-                        })
-                    continue
+            for lt in line_tokens:
+                lt_clean = lt.strip().strip('"\'`').rstrip(".")
+                if lt_clean and len(lt_clean) >= 2:
+                    candidate_tokens.append(lt_clean)
 
-                is_duplicate = False
-                for existing in req_mods:
-                    e_title = existing["title"]
-                    if ModMatcher.match_score(candidate, e_title) >= 0.85:
-                        is_duplicate = True
-                        break
-                    e_lower = e_title.lower()
-                    if c_lower in e_lower or e_lower in c_lower:
-                        is_duplicate = True
-                        break
-                    c_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", c_lower))
-                    e_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", e_lower))
-                    if c_words and e_words and len(c_words.intersection(e_words)) >= 1:
-                        is_duplicate = True
-                        break
-                if is_duplicate:
-                    continue
+        for candidate in candidate_tokens:
+            if not candidate or len(candidate) < 2:
+                continue
 
-                if c_lower not in seen_titles:
-                    seen_titles.add(c_lower)
+            cand_clean = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", candidate).strip()
+            cand_clean = re.sub(
+                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+                "",
+                cand_clean,
+            ).strip()
+
+            if not cand_clean or cand_clean.lower() in ModMatcher.GENERIC_EXCLUDED_WORDS:
+                continue
+
+            from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
+
+            if GameDlcMatcher.is_base_game_only(cand_clean):
+                continue
+
+            c_starts_sims4 = bool(SIMS4_PREFIX_REGEX.match(cand_clean.strip()))
+            is_dlc, pack_name, pack_code = GameDlcMatcher.match_dlc(cand_clean)
+            if is_dlc or c_starts_sims4:
+                pack_name = pack_name or re.sub(
+                    r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\s*[:\-–—]?\s*",
+                    "",
+                    cand_clean,
+                    flags=re.IGNORECASE,
+                ).strip()
+                dlc_key = (pack_code or pack_name or cand_clean).lower()
+                if dlc_key not in seen_titles:
+                    seen_titles.add(dlc_key)
+                    req_mods.append({
+                        "source": "game_dlc",
+                        "remote_id": pack_code or "",
+                        "title": f"The Sims 4 : {pack_name}" if not cand_clean.lower().startswith("the sims 4") else cand_clean,
+                        "url": "",
+                        "is_game_dlc": True,
+                        "dlc_name": pack_name,
+                        "dlc_code": pack_code,
+                    })
+                continue
+
+            c_lower = candidate.lower()
+
+            if is_wickedwhims_name(candidate):
+                alias_info = {
+                    "remote_id": "3169",
+                    "title": "WickedWhims",
+                    "url": "https://www.loverslab.com/files/file/3169-wickedwhims/",
+                }
+            elif is_nisa_name(candidate):
+                alias_info = {
+                    "remote_id": "9443",
+                    "title": "Nisa's Wicked Perversions",
+                    "url": "https://www.loverslab.com/files/file/9443-nisas-wicked-perversions/",
+                }
+            else:
+                c_cleaned = ModMatcher.clean_mod_title(candidate)
+                alias_info = self.KNOWN_MOD_ALIASES.get(c_lower) or self.KNOWN_MOD_ALIASES.get(c_cleaned)
+
+            if alias_info:
+                r_id = alias_info["remote_id"]
+                if r_id not in seen_ids:
+                    seen_ids.add(r_id)
+                    seen_titles.add(alias_info["title"].lower())
                     req_mods.append({
                         "source": "loverslab",
-                        "remote_id": "",
-                        "title": candidate,
-                        "url": "",
+                        "remote_id": r_id,
+                        "title": alias_info["title"],
+                        "url": alias_info["url"],
                     })
+                continue
+
+            is_duplicate = False
+            for existing in req_mods:
+                e_title = existing["title"]
+                if ModMatcher.match_score(candidate, e_title) >= 0.85:
+                    is_duplicate = True
+                    break
+                if c_lower == e_title.lower():
+                    is_duplicate = True
+                    break
+            if is_duplicate:
+                continue
+
+            if c_lower not in seen_titles:
+                seen_titles.add(c_lower)
+                req_mods.append({
+                    "source": "loverslab",
+                    "remote_id": "",
+                    "title": candidate,
+                    "url": "",
+                })
 
         if req_mods:
             if all(bool(m.get("remote_id")) or m.get("is_game_dlc") for m in req_mods):
@@ -823,3 +901,188 @@ class LoversLabProvider(BaseSourceProvider):
             if "patreon.com" in link.lower():
                 return self.patreon_provider.check_post_access(link).get("status", "UNKNOWN")
         return "PUBLIC"
+
+    def check_user_already_commented(
+        self, page_url: str, required_keywords: List[str]
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Scrapes the live LoversLab file or topic page to check if the authenticated user
+        has already posted a comment referencing the missing requirements.
+        Returns (already_commented: bool, formatted_datetime: Optional[str]).
+        """
+        if not page_url:
+            return False, None
+
+        acc = SessionManager.get_saved_session("loverslab")
+        if not acc or not SessionManager.is_member_authenticated("loverslab"):
+            return False, None
+
+        cookies = acc.get_cookies_dict()
+        member_id = str(cookies.get("ips4_member_id") or "").strip()
+        user_display = (acc.user_display_name or "").strip().lower()
+
+        session = SessionManager.get_http_session("loverslab")
+        try:
+            resp = session.get(page_url, timeout=15)
+            if resp.status_code != 200:
+                logger.debug(f"check_user_already_commented: HTTP {resp.status_code} on {page_url}")
+                return False, None
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            def _search_comments_in_soup(page_soup: BeautifulSoup) -> Tuple[bool, Optional[str]]:
+                # Match comments in IPS files or forum posts
+                comment_nodes = page_soup.select(
+                    "article.ipsComment, article.cPost, div[id^='comment-'], div[id^='elComment_']"
+                )
+                for node in comment_nodes:
+                    # Check author identity
+                    node_author_id = str(node.get("data-memberid") or node.get("data-member-id") or "").strip()
+                    author_link = node.select_one("a[href*='/profile/']")
+                    author_href = author_link.get("href", "") if author_link else ""
+                    author_text = author_link.get_text(strip=True).lower() if author_link else ""
+
+                    is_user = False
+                    if member_id and member_id != "0":
+                        if node_author_id == member_id or f"/profile/{member_id}-" in author_href:
+                            is_user = True
+                    if not is_user and user_display and user_display in author_text:
+                        is_user = True
+
+                    if not is_user:
+                        continue
+
+                    # Author matched! Now inspect comment body
+                    content_node = (
+                        node.select_one("[data-role='commentContent']")
+                        or node.select_one(".ipsType_richText")
+                        or node
+                    )
+                    content_text = content_node.get_text(separator=" ", strip=True).lower()
+
+                    # Check for requirements / missing keywords signature
+                    has_signature = (
+                        "requirement" in content_text
+                        or "not identified" in content_text
+                        or "not found" in content_text
+                    )
+                    if not has_signature:
+                        continue
+
+                    # Check for at least one of the specific missing modules
+                    if required_keywords:
+                        kw_matched = any(kw.lower().strip() in content_text for kw in required_keywords if kw)
+                        if not kw_matched:
+                            continue
+
+                    # Found an existing comment matching the criteria!
+                    time_node = node.select_one("time")
+                    date_str = ""
+                    if time_node:
+                        raw_date = time_node.get("title") or time_node.get("datetime") or time_node.get_text(strip=True)
+                        try:
+                            dt = date_parser.parse(raw_date, dayfirst=True)
+                            date_str = dt.strftime("%d/%m/%Y à %H:%M")
+                        except Exception:
+                            date_str = raw_date
+                    return True, date_str or "Récemment"
+
+
+                return False, None
+
+            found, date_str = _search_comments_in_soup(soup)
+            if found:
+                return True, date_str
+
+            # If not found directly on file page, check if there is a linked discussion topic
+            topic_link = soup.select_one("a[href*='/topic/']")
+            if topic_link and topic_link.get("href"):
+                topic_url = topic_link["href"].split("?")[0]
+                try:
+                    # Fetch topic page
+                    topic_resp = session.get(topic_url, timeout=12)
+                    if topic_resp.status_code == 200:
+                        topic_soup = BeautifulSoup(topic_resp.text, "html.parser")
+                        found, date_str = _search_comments_in_soup(topic_soup)
+                        if found:
+                            return True, date_str
+                except Exception as ex_topic:
+                    logger.debug(f"Linked topic check failed for {topic_url}: {ex_topic}")
+
+            return False, None
+
+        except Exception as e:
+            logger.debug(f"check_user_already_commented exception for {page_url}: {e}")
+            return False, None
+
+    def post_mod_comment(self, page_url: str, message: str) -> Tuple[bool, str]:
+        """
+        Posts a comment or message on the LoversLab file page using authenticated IPS session and CSRF key.
+        """
+        if not page_url:
+            return False, "URL du mod invalide ou manquante."
+
+        if not SessionManager.is_member_authenticated("loverslab"):
+            return False, "Utilisateur non authentifié avec un compte membre LoversLab."
+
+        session = SessionManager.get_http_session("loverslab")
+        try:
+            get_resp = session.get(page_url, timeout=15)
+            if get_resp.status_code != 200:
+                return False, f"Impossible de charger la page du mod (Erreur HTTP {get_resp.status_code})."
+
+            soup = BeautifulSoup(get_resp.text, "html.parser")
+
+            # Extract CSRF key
+            csrf_input = soup.find("input", {"name": "csrfKey"})
+            csrf_key = csrf_input["value"] if csrf_input and csrf_input.get("value") else None
+            if not csrf_key:
+                match = re.search(r'csrfKey["\']?\s*[:=]\s*["\']([a-f0-9]{32,})["\']', get_resp.text)
+                if match:
+                    csrf_key = match.group(1)
+
+            if not csrf_key:
+                return False, "Jeton de sécurité CSRF introuvable sur la page LoversLab."
+
+            # Determine form action URL
+            form_action = page_url.rstrip("/") + "/?do=addComment"
+            for form in soup.find_all("form"):
+                action = form.get("action", "")
+                if "do=addComment" in action or "do=reply" in action:
+                    form_action = action
+                    break
+
+            post_data = {
+                "csrfKey": csrf_key,
+                "comment_value": message,
+                "file_comment_value": message,
+                "comment_value_editor": message,
+                "topic_comment": message,
+            }
+
+            headers = {
+                "Referer": page_url,
+                "Origin": "https://www.loverslab.com",
+            }
+
+            post_resp = session.post(form_action, data=post_data, headers=headers, timeout=20)
+            if post_resp.status_code in [200, 302, 303]:
+                # Check for IPS error message in 200 response
+                if post_resp.status_code == 200:
+                    post_soup = BeautifulSoup(post_resp.text, "html.parser")
+                    err_box = post_soup.select_one(".ipsMessage_error, .ipsType_warning")
+                    if err_box:
+                        err_text = err_box.get_text(strip=True)
+                        return False, f"Erreur LoversLab: {err_text}"
+
+                logger.info(f"Commentaire publié avec succès sur LoversLab ({page_url}).")
+                return True, "Message publié avec succès sur le forum LoversLab."
+            elif post_resp.status_code == 403:
+                return False, "Accès refusé par LoversLab (Erreur 403 / Protection Cloudflare)."
+            else:
+                return False, f"Erreur HTTP {post_resp.status_code} lors de la publication du message."
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la publication du commentaire sur {page_url}: {e}")
+            return False, f"Exception lors de la publication: {e}"
+

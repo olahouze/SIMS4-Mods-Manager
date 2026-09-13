@@ -47,7 +47,15 @@ def test_multilingual_dlc_detection():
         ("The Sims 4 Loups-Garous", "GP12"),
         ("The Sims 4 - For Rent", "EP15"),
         ("The Sims 4 Life & Death", "EP17"),
+        ("The Sims 4 Tiny Living", "SP16"),
+        ("Les Sims 4 Mini-Maisons", "SP16"),
+        ("The Sims 4 Bowling Night", "SP10"),
+        ("The Sims 4 Paranormal", "SP18"),
+        ("The Sims 4 Crystal Creations", "SP20"),
+        ("The Sims 4 xx", None),  # Generic unknown Sims 4 DLC
         ("The Sims 4 Custom Unknown Pack Name", None),  # Generic unknown Sims 4 DLC
+        ("TS4 Any Pack Whatsoever", None),
+        ("Les Sims 4 N'importe Quel Pack", None),
     ]
 
     for raw, expected_code in cases:

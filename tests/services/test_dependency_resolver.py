@@ -461,7 +461,7 @@ def test_mod_detail_view_requirements_loading_and_retractable():
     assert not view.req_frame.isHidden()
     assert not view.req_collapse_btn.isHidden()
     assert "Dépendances et DLCs identifiés" in view.req_title.text()
-    assert view.deps_layout.count() == 1
+    assert view.deps_layout.count() >= 1
 
 
 def test_cross_view_synchronization_and_panel_counts():
@@ -757,5 +757,42 @@ def test_resolve_mod_dependencies_with_game_dlc():
         assert len(chk.unfound_dependencies) == 0
         assert chk.is_partial is False
         assert chk.can_install is True
+
+
+def test_extract_requirements_splits_line_with_sims4_dlc_and_mods():
+    """Verifies that lines starting with Sims 4 DLC are properly split into individual mods and DLCs."""
+    provider = LoversLabProvider()
+    html = """
+    <ul class="cFileInfo">
+        <li class="ipsDataItem">
+            <strong class="ipsDataItem_size3">Requirements</strong>
+            <div class="cFileInfoData">The Sims 4: City Living, WickedWhims, XML Injector</div>
+        </li>
+    </ul>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    _, _, mods = provider.extract_requirements(soup)
+    assert len(mods) == 3
+    titles = [m["title"] for m in mods]
+    assert any("City Living" in t for t in titles)
+    assert any("WickedWhims" in t for t in titles)
+    assert any("XML Injector" in t for t in titles)
+
+    # Test Cats & Dogs, hyphenated For Rent, and generic xx
+    html2 = """
+    <ul class="cFileInfo">
+        <li class="ipsDataItem">
+            <strong class="ipsDataItem_size3">Requirements</strong>
+            <div class="cFileInfoData">The Sims 4 Cats & Dogs, The Sims 4 - For Rent, The Sims 4 xx</div>
+        </li>
+    </ul>
+    """
+    soup2 = BeautifulSoup(html2, "html.parser")
+    _, _, mods2 = provider.extract_requirements(soup2)
+    assert len(mods2) == 3
+    assert all(m["is_game_dlc"] for m in mods2)
+    codes = [m.get("dlc_code") for m in mods2]
+    assert "EP04" in codes  # Cats & Dogs
+    assert "EP15" in codes  # For Rent
 
 

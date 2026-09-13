@@ -1,3 +1,4 @@
+import re
 import webbrowser
 from typing import Optional, Dict, Any, List
 
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QTextBrowser,
     QProgressBar,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
@@ -19,6 +21,8 @@ from src.api.client import get_api_client
 from src.core.config import AppConfig
 from src.ui.components.status_badge import StatusBadge
 from src.ui.components.image_viewer_modal import ImageViewerModal
+from src.ui.components.dependencies_dialog import CheckReportStatusWorker
+from src.ui.components.report_preview_dialog import ReportPreviewDialog
 from src.ui.workers import (
     FetchDetailsWorker,
     GalleryBatchWorker,
@@ -93,6 +97,10 @@ class ModDetailView(QWidget):
         self.gallery_workers: List[GalleryThumbWorker] = []
         self.desc_img_worker: Optional[DescriptionImageLoaderWorker] = None
         self.cache_dir = AppConfig.get_screenshots_cache_dir()
+
+        self._check_report_worker: Optional[CheckReportStatusWorker] = None
+        self._report_status_result: Optional[dict] = None
+        self._unfound_dep_names: List[str] = []
 
         self.init_ui()
 
@@ -315,6 +323,14 @@ class ModDetailView(QWidget):
         self.deps_layout.setSpacing(8)
         self.req_body_layout.addWidget(self.deps_container)
 
+        # Interpellate author on forum button
+        self.btn_report_author = QPushButton(tr("dependencies.checking_report_status"))
+        self.btn_report_author.setFixedHeight(36)
+        self.btn_report_author.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_report_author.setVisible(False)
+        self.btn_report_author.clicked.connect(self._on_report_author_clicked)
+        self.req_body_layout.addWidget(self.btn_report_author)
+
         self.req_layout.addWidget(self.req_body)
         self.c_layout.addWidget(self.req_frame)
 
@@ -535,6 +551,14 @@ class ModDetailView(QWidget):
             self.gallery_batch_worker.terminate()
             self.gallery_batch_worker = None
 
+        if self._check_report_worker and self._check_report_worker.isRunning():
+            try:
+                self._check_report_worker.status_ready.disconnect()
+            except Exception:
+                pass
+            self._check_report_worker.terminate()
+            self._check_report_worker = None
+
         # 7. Trigger background fetch with load_id guard
         self.loading_bar.setVisible(True)
         mod_id = mod_data.get("id") or mod_data.get("catalog_mod_id")
@@ -558,6 +582,7 @@ class ModDetailView(QWidget):
 
     def _set_requirements_loading(self):
         """Displays an informative loading message in the requirements section while analysis is running."""
+        self.btn_report_author.setVisible(False)
         self.req_frame.setVisible(True)
         self.req_collapse_btn.setVisible(True)
         self.req_collapse_btn.setText("▲ Réduire")
@@ -582,10 +607,10 @@ class ModDetailView(QWidget):
                 it.widget().deleteLater()
 
     def _render_requirements(self, data: dict):
-        """Displays requirements status, dependencies list, or blocking warning."""
+        """Displays requirements status, dependencies list categorized by type, and forum interpellation."""
         req_text = data.get("requirements_text")
         req_status = data.get("requirements_status", "NONE")
-        dependencies = data.get("dependencies", [])
+        raw_deps = data.get("dependencies", [])
 
         # Clear existing dependency widgets
         while self.deps_layout.count():
@@ -593,116 +618,104 @@ class ModDetailView(QWidget):
             if it.widget():
                 it.widget().deleteLater()
 
-        self.req_collapse_btn.setText("▼ Développer" if self.req_body.isHidden() else "▲ Réduire")
+        # Always ensure req_body is visible when loading requirements
+        self.req_body.setVisible(True)
+        self.req_collapse_btn.setText("▲ Réduire")
 
-        has_unfound_deps = (
-            req_status == "PENDING_VERIFICATION"
-            or any(
-                (d.get("status") if isinstance(d, dict) else getattr(d, "status", ""))
-                in ["NOT_DETECTED_FINISHED", "NOT_DETECTED_SCANNING"]
-                for d in dependencies
-            )
-        )
+        # Categorize dependencies
+        game_dlcs = []
+        already_installed = []
+        to_install = []
+        unfound = []
 
-        if has_unfound_deps:
-            self.req_frame.setVisible(True)
-            self.req_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2b180a;
-                    border: 1px solid #d97706;
-                    border-radius: 12px;
-                    padding: 16px;
-                }
-            """)
-            self.req_title.setText("⚠️ Dépendances partiellement disponibles (Installation partielle autorisée)")
-            self.req_title.setStyleSheet("font-size: 14px; font-weight: 800; color: #fde68a;")
-            self.req_desc.setText(
-                f"Ce mod indique des dépendances dont certaines ne sont pas disponibles sur LoversLab :\n"
-                f"« {req_text or 'Prérequis textuels non résolus'} »\n\n"
-                f"L'installation partielle est autorisée. Le mod principal et ses dépendances trouvées seront installés, "
-                f"mais certaines fonctionnalités risquent de ne pas fonctionner correctement sans les composants manquants."
-            )
+        from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
 
-            # Also render any identified dependencies if present
-            for dep in dependencies:
-                d_frame = QFrame()
-                d_frame.setStyleSheet("""
-                    background-color: #1e293b;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                """)
-                df_layout = QHBoxLayout(d_frame)
-                df_layout.setContentsMargins(4, 4, 4, 4)
+        for d in raw_deps:
+            t = (d.get("title") or "").strip()
+            clean_t = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", t).strip()
+            clean_t = re.sub(
+                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+                "",
+                clean_t,
+            ).strip().strip("'\"`[](){}")
 
-                d_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                is_inst = dep.get("is_installed", False)
-                d_st = dep.get("status", "DETECTED_NOT_INSTALLED")
-                is_dlc = dep.get("is_game_dlc", False) or d_st == "GAME_DLC"
+            if GameDlcMatcher.is_base_game_only(clean_t):
+                continue
+            starts_with_sims4 = bool(SIMS4_PREFIX_REGEX.match(clean_t))
+            is_dlc_matched, _, _ = GameDlcMatcher.match_dlc(clean_t)
+            is_dlc = d.get("is_game_dlc", False) or d.get("status") == "GAME_DLC" or starts_with_sims4 or is_dlc_matched
+            is_inst = d.get("is_installed", False) or d.get("status") == "INSTALLED"
+            st = d.get("status", "DETECTED_NOT_INSTALLED")
 
-                if is_dlc:
-                    status_txt = "✅ Détecté dans le jeu" if is_inst else "🎮 DLC Jeu (À vérifier)"
-                    status_color = "#34d399" if is_inst else "#a78bfa"
-                    prefix = "🎮"
-                elif is_inst or d_st == "INSTALLED":
-                    status_txt = "✅ Déjà installé"
-                    status_color = "#34d399"
-                    prefix = "•"
-                elif d_st == "DETECTED_NOT_INSTALLED":
-                    status_txt = "📥 Sera installé"
-                    status_color = "#60a5fa"
-                    prefix = "•"
-                else:
-                    status_txt = "⚠️ Introuvable"
-                    status_color = "#f87171"
-                    prefix = "•"
+            if is_dlc:
+                game_dlcs.append(d)
+            elif is_inst:
+                already_installed.append(d)
+            elif st == "DETECTED_NOT_INSTALLED":
+                to_install.append(d)
+            else:
+                unfound.append(d)
 
-                lbl_name = QLabel(f"{prefix} {d_title}")
-                lbl_name.setStyleSheet("color: #f1f5f9; font-size: 12px; font-weight: 600;")
-                df_layout.addWidget(lbl_name, stretch=1)
+        # If req_status indicates unresolved requirements but unfound list is empty and req_text exists,
+        # add a synthetic unfound entry so the user sees what is missing (unless it is base game or DLC)
+        if (req_status in ["PENDING_VERIFICATION", "PARTIAL"] or (req_text and not raw_deps)) and not unfound and req_text and req_text.strip():
+            clean_req_text = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", req_text).strip()
+            clean_req_text = re.sub(
+                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+                "",
+                clean_req_text,
+            ).strip().strip("'\"`[](){}")
+            is_bg = GameDlcMatcher.is_base_game_only(clean_req_text)
+            is_dlc_text = bool(SIMS4_PREFIX_REGEX.match(clean_req_text)) or GameDlcMatcher.match_dlc(clean_req_text)[0]
+            if not is_bg and not is_dlc_text:
+                unfound.append({
+                    "title": req_text.strip(),
+                    "status": "NOT_DETECTED_FINISHED",
+                    "is_installed": False,
+                    "is_game_dlc": False,
+                })
 
-                lbl_st = QLabel(status_txt)
-                lbl_st.setStyleSheet(f"color: {status_color}; font-size: 11px; font-weight: 700;")
-                df_layout.addWidget(lbl_st)
+        has_deps = bool(game_dlcs or already_installed or to_install or unfound)
 
-                self.deps_layout.addWidget(d_frame)
-
-            if not self.is_installed:
-                self.install_btn.setEnabled(True)
-                self.install_btn.setText("⚠️ Installation Partielle")
-                self.install_btn.setStyleSheet("""
-                    QPushButton {
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #b45309);
-                        color: #ffffff;
-                        border: 1px solid #f59e0b;
-                        border-radius: 8px;
-                        font-weight: 700;
-                        font-size: 13px;
-                        padding: 8px 20px;
-                    }
-                    QPushButton:hover {
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b45309, stop:1 #92400e);
-                    }
-                """)
-
-        elif req_status == "RESOLVED" and dependencies:
+        if has_deps:
             self.req_frame.setVisible(True)
             self.req_collapse_btn.setVisible(True)
-            self.req_collapse_btn.setText("▲ Réduire" if self.req_body.isVisible() else "▼ Développer")
-            self.req_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #10192e;
-                    border: 1px solid #3b82f6;
-                    border-radius: 12px;
-                    padding: 16px;
-                }
-            """)
-            self.req_title.setText(f"🔗 Dépendances et DLCs identifiés ({len(dependencies)}) :")
-            self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #93c5fd;")
-            self.req_desc.setText(
-                "Ce mod s'appuie sur les composants suivants. Les mods manquants seront automatiquement téléchargés, "
-                "et les éventuels packs DLC officiels sont à vérifier dans votre jeu :"
-            )
-            for dep in dependencies:
+
+            # 1. Header banner & styling
+            if unfound:
+                self.req_frame.setStyleSheet("""
+                    QFrame {
+                        background-color: #1e1308;
+                        border: 1px solid #d97706;
+                        border-radius: 12px;
+                        padding: 16px;
+                    }
+                """)
+                total_cnt = len(raw_deps) or len(unfound)
+                self.req_title.setText(f"⚠️ Dépendances requises ({total_cnt}) - Composants manquants")
+                self.req_title.setStyleSheet("font-size: 14px; font-weight: 800; color: #fde68a;")
+                self.req_desc.setText(
+                    "Ce mod nécessite des composants dont certains ne sont pas trouvés sur LoversLab. "
+                    "L'installation partielle est autorisée pour installer les composants disponibles."
+                )
+            else:
+                self.req_frame.setStyleSheet("""
+                    QFrame {
+                        background-color: #10192e;
+                        border: 1px solid #3b82f6;
+                        border-radius: 12px;
+                        padding: 16px;
+                    }
+                """)
+                self.req_title.setText(f"🔗 Dépendances et DLCs identifiés ({len(raw_deps)}) :")
+                self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #93c5fd;")
+                self.req_desc.setText(
+                    "Ce mod s'appuie sur les composants suivants. Les mods manquants seront automatiquement téléchargés, "
+                    "et les éventuels packs DLC officiels sont à vérifier dans votre jeu :"
+                )
+
+            # Helper to create styled dependency items
+            def create_dep_card(title: str, badge_text: str, badge_bg: str, badge_fg: str, badge_border: str, prefix: str = "•"):
                 d_frame = QFrame()
                 d_frame.setStyleSheet("""
                     background-color: #1e293b;
@@ -710,52 +723,134 @@ class ModDetailView(QWidget):
                     padding: 6px 12px;
                 """)
                 df_layout = QHBoxLayout(d_frame)
-                df_layout.setContentsMargins(4, 4, 4, 4)
+                df_layout.setContentsMargins(6, 6, 6, 6)
 
-                d_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                is_inst = dep.get("is_installed", False)
-                is_dlc = dep.get("is_game_dlc", False) or dep.get("status") == "GAME_DLC"
-
-                if is_dlc:
-                    status_txt = "✅ Détecté dans le jeu" if is_inst else "🎮 DLC Jeu (À vérifier)"
-                    status_color = "#34d399" if is_inst else "#a78bfa"
-                    prefix = "🎮"
-                else:
-                    status_txt = "✅ Déjà installé" if is_inst else "📥 Sera installé automatiquement"
-                    status_color = "#34d399" if is_inst else "#60a5fa"
-                    prefix = "•"
-
-                lbl_name = QLabel(f"{prefix} {d_title}")
+                lbl_name = QLabel(f"{prefix} {title}")
                 lbl_name.setStyleSheet("color: #f1f5f9; font-size: 12px; font-weight: 600;")
                 df_layout.addWidget(lbl_name, stretch=1)
 
-                lbl_st = QLabel(status_txt)
-                lbl_st.setStyleSheet(f"color: {status_color}; font-size: 11px; font-weight: 700;")
+                lbl_st = QLabel(badge_text)
+                lbl_st.setStyleSheet(f"""
+                    color: {badge_fg};
+                    background-color: {badge_bg};
+                    border: 1px solid {badge_border};
+                    border-radius: 4px;
+                    padding: 2px 8px;
+                    font-size: 11px;
+                    font-weight: 700;
+                """)
                 df_layout.addWidget(lbl_st)
+                return d_frame
 
-                self.deps_layout.addWidget(d_frame)
+            def add_section_header(title_text: str, color: str):
+                header = QLabel(title_text)
+                header.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {color}; margin-top: 8px; margin-bottom: 2px;")
+                self.deps_layout.addWidget(header)
 
+            # Section 0: Official Sims 4 Game DLCs
+            if game_dlcs:
+                add_section_header(f"🎮 Packs DLC Officiels Sims 4 ({len(game_dlcs)}) :", "#c4b5fd")
+                for dlc in game_dlcs:
+                    t = dlc.get("title") or dlc.get("dlc_name") or "DLC Sims 4"
+                    is_inst = dlc.get("is_installed", False)
+                    if is_inst:
+                        card = create_dep_card(t, "✅ Détecté dans le jeu", "#064e3b", "#a7f3d0", "#059669", prefix="🎮")
+                    else:
+                        card = create_dep_card(t, "🎮 DLC Jeu (À vérifier)", "#3b0764", "#e9d5ff", "#7e22ce", prefix="🎮")
+                    self.deps_layout.addWidget(card)
+
+            # Section 1: Found dependencies to install automatically
+            if to_install:
+                add_section_header(f"📥 Dépendances trouvées à installer ({len(to_install)}) :", "#93c5fd")
+                for dep in to_install:
+                    t = dep.get("title") or f"Mod #{dep.get('remote_id')}"
+                    card = create_dep_card(t, "📥 Sera installé automatiquement", "#1e3a8a", "#93c5fd", "#2563eb", prefix="•")
+                    self.deps_layout.addWidget(card)
+
+            # Section 2: Already installed dependencies
+            if already_installed:
+                add_section_header(f"✅ Dépendances déjà installées ({len(already_installed)}) :", "#86efac")
+                for dep in already_installed:
+                    t = dep.get("title") or f"Mod #{dep.get('remote_id')}"
+                    card = create_dep_card(t, "✅ Déjà installé", "#064e3b", "#a7f3d0", "#059669", prefix="✓")
+                    self.deps_layout.addWidget(card)
+
+            # Section 3: Unfound dependencies
+            if unfound:
+                add_section_header(f"⚠️ Dépendances introuvables ({len(unfound)}) :", "#fca5a5")
+                for dep in unfound:
+                    t = dep.get("title") or f"Mod #{dep.get('remote_id')}"
+                    card = create_dep_card(t, "⚠️ Introuvable sur LoversLab", "#450a0a", "#fca5a5", "#ef4444", prefix="⚠️")
+                    self.deps_layout.addWidget(card)
+
+                self._unfound_dep_names = [
+                    (d.get("title") or f"Mod #{d.get('remote_id')}") for d in unfound
+                ]
+                self.btn_report_author.setVisible(True)
+                self.btn_report_author.setText(tr("dependencies.checking_report_status"))
+                self._apply_report_checking_style()
+                self.btn_report_author.setEnabled(False)
+                self._trigger_check_report_status(data)
+            else:
+                self._unfound_dep_names = []
+                self.btn_report_author.setVisible(False)
+
+            # Update install button
             if not self.is_installed:
                 self.install_btn.setEnabled(True)
-                self.install_btn.setText("📥 Installer (+ Dépendances)")
-                self.install_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #4f46e5;
-                        color: #ffffff;
-                        border: none;
-                        border-radius: 8px;
-                        font-weight: 700;
-                        font-size: 13px;
-                        padding: 8px 20px;
-                    }
-                    QPushButton:hover { background-color: #6366f1; }
-                """)
+                if unfound:
+                    self.install_btn.setText("⚠️ Installation Partielle")
+                    self.install_btn.setStyleSheet("""
+                        QPushButton {
+                            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #b45309);
+                            color: #ffffff;
+                            border: 1px solid #f59e0b;
+                            border-radius: 8px;
+                            font-weight: 700;
+                            font-size: 13px;
+                            padding: 8px 20px;
+                        }
+                        QPushButton:hover {
+                            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b45309, stop:1 #92400e);
+                        }
+                    """)
+                elif to_install:
+                    self.install_btn.setText("📥 Installer (+ Dépendances)")
+                    self.install_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #4f46e5;
+                            color: #ffffff;
+                            border: none;
+                            border-radius: 8px;
+                            font-weight: 700;
+                            font-size: 13px;
+                            padding: 8px 20px;
+                        }
+                        QPushButton:hover { background-color: #6366f1; }
+                    """)
+                else:
+                    self.install_btn.setText(tr("mod_detail.btn_install"))
+                    self.install_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #4f46e5;
+                            color: #ffffff;
+                            border: none;
+                            border-radius: 8px;
+                            font-weight: 700;
+                            font-size: 13px;
+                            padding: 8px 20px;
+                        }
+                        QPushButton:hover { background-color: #6366f1; }
+                    """)
 
         else:
+            self.btn_report_author.setVisible(False)
+            self._unfound_dep_names = []
             if req_text and req_text.strip():
                 self.req_frame.setVisible(True)
                 self.req_collapse_btn.setVisible(True)
-                self.req_collapse_btn.setText("▲ Réduire" if self.req_body.isVisible() else "▼ Développer")
+                self.req_collapse_btn.setText("▲ Réduire")
+                self.req_body.setVisible(True)
                 self.req_frame.setStyleSheet("""
                     QFrame {
                         background-color: #101424;
@@ -770,12 +865,151 @@ class ModDetailView(QWidget):
             else:
                 self.req_frame.setVisible(False)
 
+    def _apply_report_checking_style(self):
+        self.btn_report_author.setStyleSheet("""
+            QPushButton {
+                background-color: #1e2438;
+                color: #94a3b8;
+                border: 1px dashed #475569;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 12px;
+                padding: 6px 14px;
+            }
+        """)
+
+    def _apply_report_can_report_style(self):
+        self.btn_report_author.setStyleSheet("""
+            QPushButton {
+                background-color: #4f46e5;
+                color: #ffffff;
+                border: 1px solid #6366f1;
+                border-radius: 8px;
+                font-weight: 700;
+                font-size: 13px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #6366f1;
+            }
+        """)
+
+    def _apply_report_already_reported_style(self):
+        self.btn_report_author.setStyleSheet("""
+            QPushButton {
+                background-color: #064e3b;
+                color: #34d399;
+                border: 1px solid #059669;
+                border-radius: 8px;
+                font-weight: 700;
+                font-size: 12px;
+                padding: 8px 16px;
+            }
+        """)
+
+    def _trigger_check_report_status(self, data: dict):
+        if self._check_report_worker and self._check_report_worker.isRunning():
+            try:
+                self._check_report_worker.status_ready.disconnect()
+            except Exception:
+                pass
+            self._check_report_worker.terminate()
+            self._check_report_worker = None
+
+        mod_title = self.mod_data.get("title") or data.get("title", "")
+        author = self.mod_data.get("author") or data.get("author", "")
+        source = self.mod_data.get("source") or data.get("source", "loverslab")
+        remote_id = str(self.mod_data.get("remote_id") or data.get("remote_id", ""))
+        page_url = self.mod_data.get("page_url") or data.get("page_url", "")
+        cat_id = self.mod_data.get("id") or self.mod_data.get("catalog_mod_id") or data.get("id")
+
+        has_remote = bool(cat_id or page_url or remote_id)
+        if not has_remote:
+            self.btn_report_author.setText(tr("dependencies.btn_report_author"))
+            self._apply_report_can_report_style()
+            self.btn_report_author.setEnabled(True)
+            return
+
+        payload = {
+            "catalog_mod_id": cat_id,
+            "source": source,
+            "remote_id": remote_id,
+            "page_url": page_url,
+            "title": mod_title,
+            "author": author,
+            "missing_modules": self._unfound_dep_names,
+        }
+        self._check_report_worker = CheckReportStatusWorker(payload, parent=self)
+        self._check_report_worker.status_ready.connect(self._on_report_status_ready)
+        self._check_report_worker.start()
+
+    def _on_report_status_ready(self, res: dict):
+        self._report_status_result = res
+        already_reported = res.get("already_reported", False)
+        reported_at = res.get("reported_at")
+
+        if not hasattr(self, "btn_report_author"):
+            return
+
+        if already_reported:
+            date_display = reported_at or tr("dependencies.previously")
+            self.btn_report_author.setText(tr("dependencies.btn_already_reported", date=date_display))
+            self._apply_report_already_reported_style()
+            self.btn_report_author.setEnabled(False)
+            self.btn_report_author.setToolTip(tr("dependencies.already_reported_tooltip"))
+        else:
+            self.btn_report_author.setText(tr("dependencies.btn_report_author"))
+            self._apply_report_can_report_style()
+            self.btn_report_author.setEnabled(True)
+            self.btn_report_author.setToolTip(tr("dependencies.report_author_tooltip"))
+
+    def _on_report_author_clicked(self):
+        if not self._report_status_result:
+            return
+
+        is_auth = self._report_status_result.get("is_authenticated", True)
+        source = self.mod_data.get("source", "loverslab")
+        if not is_auth:
+            QMessageBox.warning(
+                self,
+                tr("dialogs.warning"),
+                tr("dependencies.not_authenticated_warning", source=source.capitalize()),
+            )
+            return
+
+        mod_title = self.mod_data.get("title", "")
+        author = self._report_status_result.get("author") or self.mod_data.get("author", "")
+        formatted_msg = self._report_status_result.get("formatted_message", "")
+        cat_id = self.mod_data.get("id") or self.mod_data.get("catalog_mod_id")
+
+        dlg = ReportPreviewDialog(
+            mod_title=mod_title,
+            author=author,
+            missing_modules=self._unfound_dep_names,
+            source=source,
+            page_url=self.mod_data.get("page_url", ""),
+            remote_id=str(self.mod_data.get("remote_id", "")),
+            catalog_mod_id=cat_id,
+            initial_message=formatted_msg,
+            parent=self,
+        )
+        dlg.report_sent.connect(self._on_report_sent_success)
+        dlg.exec()
+
+    def _on_report_sent_success(self, reported_at: str):
+        if hasattr(self, "btn_report_author"):
+            self.btn_report_author.setText(tr("dependencies.btn_already_reported_now"))
+            self._apply_report_already_reported_style()
+            self.btn_report_author.setEnabled(False)
+            self.btn_report_author.setToolTip(tr("dependencies.already_reported_tooltip"))
+
     def _on_details_fetched(self, full_details: dict, load_id: Optional[int] = None):
         if load_id is not None and load_id != self._current_load_id:
             logger.debug(f"Ignoring obsolete details fetched for load_id={load_id} (current={self._current_load_id})")
             return
 
         self.loading_bar.setVisible(False)
+        self.mod_data.update(full_details)
         self._render_requirements(full_details)
 
         # 1. Render Screenshots Gallery in parallel via GalleryBatchWorker

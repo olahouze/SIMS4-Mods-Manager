@@ -17,6 +17,10 @@ from src.api.schemas.catalog import (
     CatalogInstallResponse,
     ModDetailsResponse,
     DependenciesCheckResponse,
+    CheckMissingReportRequest,
+    CheckMissingReportResponse,
+    SubmitMissingReportRequest,
+    SubmitMissingReportResponse,
 )
 from src.core.config import AppConfig
 from src.database.models import CatalogMod, InstalledMod
@@ -32,8 +36,10 @@ from src.services.catalog_sync_service import (
 from src.services.dependency_resolver import resolve_mod_dependencies
 from src.services.mod_installer_service import perform_mod_install
 from src.services.mod_update_service import check_has_update
+from src.services.requirement_reporter_service import RequirementReporterService
 from src.utils.logger import logger
 from src.utils.mod_type_classifier import ModTypeClassifier
+
 
 _run_catalog_sync = run_catalog_sync
 _perform_install = perform_mod_install
@@ -361,6 +367,7 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
         or is_legacy
         or not m.requirements_status
         or m.requirements_status == "NONE"
+        or (m.requirements_text and not m.get_requirements_mods_list())
     ) and m.page_url:
         try:
             provider = ProviderRegistry.get_provider(m.source)
@@ -476,3 +483,55 @@ def install_mod_stream(payload: CatalogInstallRequest):
             yield json.dumps(item) + "\n"
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+
+@router.post("/check-missing-report", response_model=CheckMissingReportResponse)
+def check_missing_report(payload: CheckMissingReportRequest, session: Session = Depends(get_db)):
+    """Checks live on the provider forum if user has already commented about missing requirements."""
+    cat_mod = None
+    if payload.catalog_mod_id:
+        cat_mod = session.query(CatalogMod).filter_by(id=payload.catalog_mod_id).first()
+    elif payload.source and payload.remote_id:
+        cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
+
+    page_url = cat_mod.page_url if cat_mod else payload.page_url
+    source = cat_mod.source if cat_mod else (payload.source or "loverslab")
+    mod_title = cat_mod.title if cat_mod else (payload.title or "Mod")
+    author = cat_mod.author if cat_mod else (payload.author or "Author")
+
+    status = RequirementReporterService.check_report_status(
+        source=source,
+        page_url=page_url,
+        mod_title=mod_title,
+        author=author,
+        missing_modules=payload.missing_modules,
+        unnecessary_modules=payload.unnecessary_modules,
+    )
+    return CheckMissingReportResponse(**status)
+
+
+@router.post("/report-missing-requirements", response_model=SubmitMissingReportResponse)
+def report_missing_requirements(payload: SubmitMissingReportRequest, session: Session = Depends(get_db)):
+    """Posts a standardized message on the provider forum to notify the author about missing requirements."""
+    cat_mod = None
+    if payload.catalog_mod_id:
+        cat_mod = session.query(CatalogMod).filter_by(id=payload.catalog_mod_id).first()
+    elif payload.source and payload.remote_id:
+        cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
+
+    page_url = cat_mod.page_url if cat_mod else payload.page_url
+    source = cat_mod.source if cat_mod else (payload.source or "loverslab")
+    mod_title = cat_mod.title if cat_mod else (payload.title or "Mod")
+    author = cat_mod.author if cat_mod else (payload.author or "Author")
+
+    res = RequirementReporterService.submit_report(
+        source=source,
+        page_url=page_url,
+        mod_title=mod_title,
+        author=author,
+        missing_modules=payload.missing_modules,
+        unnecessary_modules=payload.unnecessary_modules,
+        custom_message=payload.custom_message,
+    )
+    return SubmitMissingReportResponse(**res)
+

@@ -310,6 +310,9 @@ class CatalogView(QWidget):
                     "updated_date": m["updated_date"],
                     "patreon_status": m["patreon_status"],
                     "patreon_tier": m["patreon_tier"],
+                    "requirements_text": m.get("requirements_text"),
+                    "requirements_status": m.get("requirements_status", "NONE"),
+                    "dependencies": m.get("dependencies", []),
                     "external_links": [],
                     "download_urls": [],
                 }
@@ -465,10 +468,12 @@ class CatalogView(QWidget):
                 unfound=unfound,
                 is_partial=is_partial,
                 game_dlcs=game_dlcs,
+                mod_data=mod_data,
                 parent=self,
             )
             if dlg.exec() != QDialog.DialogCode.Accepted:
                 return
+
 
         # 2. Proceed with installation
         self.progress_dlg = ProgressDialog(tr("catalog.install_progress_title", title=mod_data.get('title', '')), self)

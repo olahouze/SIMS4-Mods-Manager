@@ -122,3 +122,44 @@ class ModDetailsResponse(BaseModel):
     requirements_status: str = "NONE"
     dependencies: List[DependencyItem] = []
     screenshots: List[str] = []
+
+
+class CheckMissingReportRequest(BaseModel):
+    catalog_mod_id: Optional[int] = None
+    source: str = "loverslab"
+    remote_id: str = ""
+    page_url: str = ""
+    title: str = ""
+    author: str = ""
+    missing_modules: List[str] = []
+    unnecessary_modules: List[str] = []
+
+
+class CheckMissingReportResponse(BaseModel):
+    can_report: bool
+    already_reported: bool
+    reported_at: Optional[str] = None
+    formatted_message: str = ""
+    author: str = ""
+    is_authenticated: bool = True
+    reason: Optional[str] = None
+
+
+class SubmitMissingReportRequest(BaseModel):
+    catalog_mod_id: Optional[int] = None
+    source: str = "loverslab"
+    remote_id: str = ""
+    page_url: str = ""
+    title: str = ""
+    author: str = ""
+    missing_modules: List[str] = []
+    unnecessary_modules: List[str] = []
+    custom_message: Optional[str] = None
+
+
+class SubmitMissingReportResponse(BaseModel):
+    success: bool
+    message: str
+    already_reported: bool = False
+    reported_at: Optional[str] = None
+

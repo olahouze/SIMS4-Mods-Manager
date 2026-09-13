@@ -236,3 +236,13 @@ class PatreonProvider(BaseSourceProvider):
         page_url = mod_data.get("page_url", "")
         res = self.check_post_access(page_url)
         return res.get("status", "UNKNOWN")
+
+    def check_user_already_commented(
+        self, page_url: str, required_keywords: List[str]
+    ) -> Tuple[bool, Optional[str]]:
+        # Patreon does not support public forum thread commenting in the same way as LoversLab
+        return False, None
+
+    def post_mod_comment(self, page_url: str, message: str) -> Tuple[bool, str]:
+        return False, "Commentaires directs non supportés pour le fournisseur Patreon."
+

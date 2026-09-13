@@ -141,3 +141,57 @@ def test_generic_excluded_words_never_match(tmp_path):
             assert ModMatcher.match_score(noise, poster_mod.title) == 0.0
             assert ModMatcher.find_best_catalog_match(noise, session) is None
 
+
+def test_dynamic_threshold():
+    """Verify that short queries require higher threshold to avoid false positives."""
+    assert ModMatcher.get_dynamic_threshold("WickedWhims") == 0.95
+    assert ModMatcher.get_dynamic_threshold("XML Injector") == 0.85
+    assert ModMatcher.get_dynamic_threshold("Nisa Wicked Perversions") == 0.70
+    assert ModMatcher.get_dynamic_threshold("Basemental Drugs Extended Pack") == 0.70
+
+
+def test_token_sort_similarity():
+    """Verify token sort comparison handles word order differences gracefully."""
+    # Inverted word orders
+    score = ModMatcher.match_score("Career Mod Kuttoe", "Kuttoe - Career Mod")
+    assert score >= 0.95
+
+    score2 = ModMatcher.match_score("Basemental Alcohol", "Alcohol Basemental")
+    assert score2 >= 0.95
+
+
+def test_single_token_anti_false_positive():
+    """Single token queries must not falsely match large titles having that word."""
+    # "Story" inside "Super Epic Adventure Story Mega Overhaul"
+    score = ModMatcher.match_score("Story", "Super Epic Adventure Story Mega Overhaul")
+    assert score < 0.50
+
+
+def test_find_best_installed_match_by_folder_and_package():
+    """Installed mod matching should inspect folder_name and installed .package/.ts4script files."""
+    inst = InstalledMod(
+        source="loverslab",
+        remote_id="999",
+        title="Generic Mod Collection",
+        folder_name="kuttoe_mini_careers",
+        installed_files=[
+            "Mods/Kuttoe/kuttoe_career_injector.ts4script",
+            "Mods/Kuttoe/kuttoe_military_career.package",
+        ],
+    )
+    installed_list = [inst]
+
+    # Query matching the package filename
+    match = ModMatcher.find_best_installed_match("Military Career", installed_list, min_threshold=0.75)
+    assert match is not None
+    mod, score = match
+    assert mod.remote_id == "999"
+    assert score >= 0.75
+
+    # Query matching folder name
+    match2 = ModMatcher.find_best_installed_match("Mini Careers", installed_list, min_threshold=0.75)
+    assert match2 is not None
+    mod2, score2 = match2
+    assert mod2.remote_id == "999"
+
+
