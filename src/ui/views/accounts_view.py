@@ -274,6 +274,11 @@ class AccountsView(QWidget):
         self.refresh_statuses()
 
     def open_login_window(self, provider_name: str):
+        from src.ui.components.browser_download_dialog import BrowserDownloadDialog
+
+        if not BrowserDownloadDialog.ensure_browser_ready(parent=self):
+            return
+
         self.progress_dlg = ProgressDialog(tr("accounts.login_dlg_title", provider=provider_name), self)
         self.progress_dlg.set_status(tr("accounts.login_dlg_status", provider=provider_name))
         self.progress_dlg.set_details(tr("accounts.login_dlg_details"))

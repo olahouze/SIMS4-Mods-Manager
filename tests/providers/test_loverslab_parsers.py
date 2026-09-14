@@ -71,5 +71,19 @@ def test_requirements_negative_statements_and_settings_skipped():
     """
     soup = BeautifulSoup(html, "html.parser")
     _text, _status, reqs = provider.extract_requirements(soup)
-    assert len(reqs) == 0, f"Expected 0 requirements extracted from negative text, got: {reqs}"
+    # The Sims 4 for PC or Mac must be captured as Base Game DLC
+    base_game_item = next((r for r in reqs if r.get("is_game_dlc")), None)
+    assert base_game_item is not None
+    assert "The Sims 4" in base_game_item["title"]
+    assert base_game_item["is_installed"] is True
+
+    # Other text lines must be extracted as detected requirement items with remote_id=""
+    # so that the user can qualify them as comments
+    script_mod_item = next((r for r in reqs if "Script Mods" in r["title"]), None)
+    assert script_mod_item is not None
+    assert script_mod_item["remote_id"] == ""
+
+    no_third_item = next((r for r in reqs if "No third-party" in r["title"]), None)
+    assert no_third_item is not None
+    assert no_third_item["remote_id"] == ""
 

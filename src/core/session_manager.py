@@ -346,7 +346,6 @@ class SessionManager:
             ]
 
             channels_to_try = [None, "msedge", "chrome"]
-            last_err = None
 
             for ch in channels_to_try:
                 try:
@@ -363,11 +362,29 @@ class SessionManager:
                     logger.info(f"Navigateur ouvert avec succès (moteur={ch or 'playwright-chromium'}).")
                     break
                 except Exception as e:
-                    last_err = e
                     logger.warning(f"Échec du lancement avec le canal {ch}: {e}")
 
             if context is None:
-                return False, f"Impossible de lancer le navigateur (Erreur: {last_err}).", {}
+                # Tentative d'installation automatique de Chromium si aucun navigateur n'est utilisable
+                from src.services.browser_updater_service import BrowserUpdaterService
+                logger.info("Tentative d'installation automatique de Chromium pour Playwright...")
+                ok_install, install_msg = BrowserUpdaterService.install_chromium_stream()
+                if ok_install:
+                    cls._browser_available_cached = True
+                    try:
+                        kwargs = {
+                            "user_data_dir": str(profile_dir),
+                            "headless": False,
+                            "args": launch_args,
+                            "user_agent": cls.DEFAULT_USER_AGENT,
+                            "viewport": None,
+                        }
+                        context = p.chromium.launch_persistent_context(**kwargs)
+                        logger.info("Navigateur ouvert avec succès après installation de Chromium.")
+                    except Exception as e:
+                        return False, f"Impossible de lancer le navigateur après installation (Erreur: {e}).", {}
+                else:
+                    return False, f"Impossible de lancer le navigateur et échec du téléchargement de Chromium ({install_msg}).", {}
 
             # Reuse existing page to prevent a 2nd window with about:blank
             page = context.pages[0] if context.pages else context.new_page()

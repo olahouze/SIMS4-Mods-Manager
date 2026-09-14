@@ -66,17 +66,17 @@ class RequirementReporterService:
             items_str = "\n".join(f"- {m}" for m in clean_unnecessary)
             if clean_missing:
                 sections.append(
-                    f"2) Additionally, the following item(s) listed under Requirements do not appear to be mods or required files:\n"
+                    f"2) Additionally, the following item(s) listed under Requirements do not appear to be mods or required files (they appear to be comments or notes):\n"
                     f"{items_str}\n"
-                    f"Could you please remove or clarify these entries from the Requirements section to prevent confusion for players?"
+                    f"Could you please remove these comments from the Requirements section to ensure a coherent dependency list and avoid false detection results for players and mod managers?"
                 )
             else:
                 sections.append(
                     f"In the Requirements section for \"{title_str}\", the following item(s) are listed "
-                    f"but do not appear to be mods or required files:\n"
+                    f"but do not appear to be mods or required files (they appear to be comments or text notes):\n"
                     f"{items_str}\n\n"
-                    f"Could you please remove or clarify these entries from the Requirements section "
-                    f"to avoid confusion for players and mod managers?"
+                    f"Could you please remove these comments from the Requirements section "
+                    f"to maintain a coherent dependency list and avoid false detection results in mod managers?"
                 )
 
         body = "\n\n".join(sections)

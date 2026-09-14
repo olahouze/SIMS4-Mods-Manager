@@ -120,9 +120,10 @@ class InstalledView(QWidget):
         # 2. Scroll Area for Cards Grid
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("background-color: transparent; border: none;")
 
-        self.card_grid = ResponsiveCardGrid(min_card_width=250, spacing=16)
+        self.card_grid = ResponsiveCardGrid(min_card_width=295, spacing=16)
         scroll.setWidget(self.card_grid)
         layout.addWidget(scroll, stretch=1)
 

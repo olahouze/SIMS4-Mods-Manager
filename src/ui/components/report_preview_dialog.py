@@ -56,6 +56,7 @@ class ReportPreviewDialog(QDialog):
         mod_title: str,
         author: str,
         missing_modules: List[str],
+        unnecessary_modules: Optional[List[str]] = None,
         source: str = "loverslab",
         page_url: str = "",
         remote_id: str = "",
@@ -66,7 +67,8 @@ class ReportPreviewDialog(QDialog):
         super().__init__(parent)
         self.mod_title = mod_title
         self.author = author or "Author"
-        self.missing_modules = missing_modules or []
+        self.missing_modules = list(missing_modules or [])
+        self.unnecessary_modules = list(unnecessary_modules or [])
         self.source = source
         self.page_url = page_url
         self.remote_id = remote_id
@@ -76,9 +78,9 @@ class ReportPreviewDialog(QDialog):
         self.module_items: List[dict] = []
         self.module_checkboxes: List[QCheckBox] = []
 
-        if not self.initial_message and self.missing_modules:
+        if not self.initial_message and (self.missing_modules or self.unnecessary_modules):
             self.initial_message = RequirementReporterService.build_english_message(
-                self.mod_title, self.author, self.missing_modules
+                self.mod_title, self.author, self.missing_modules, self.unnecessary_modules
             )
 
         self.setWindowTitle(tr("report_dialog.title"))
@@ -135,7 +137,14 @@ class ReportPreviewDialog(QDialog):
         self.module_items = []
         self.module_checkboxes = []
 
-        for mod_name in self.missing_modules:
+        all_modules = []
+        for m in self.missing_modules:
+            all_modules.append((m, True))
+        for u in self.unnecessary_modules:
+            if u not in self.missing_modules:
+                all_modules.append((u, False))
+
+        for mod_name, is_missing_default in all_modules:
             row_frame = QFrame()
             row_frame.setStyleSheet("""
                 QFrame {
@@ -181,7 +190,7 @@ class ReportPreviewDialog(QDialog):
 
             btn_group = QButtonGroup(self)
             rb_missing = QRadioButton(tr("report_dialog.choice_missing_mod"))
-            rb_missing.setChecked(True)
+            rb_missing.setChecked(is_missing_default)
             rb_missing.setCursor(Qt.CursorShape.PointingHandCursor)
             rb_missing.setStyleSheet("""
                 QRadioButton {
@@ -204,7 +213,7 @@ class ReportPreviewDialog(QDialog):
             """)
 
             rb_unnecessary = QRadioButton(tr("report_dialog.choice_not_a_mod"))
-            rb_unnecessary.setChecked(False)
+            rb_unnecessary.setChecked(not is_missing_default)
             rb_unnecessary.setCursor(Qt.CursorShape.PointingHandCursor)
             rb_unnecessary.setStyleSheet("""
                 QRadioButton {
@@ -395,6 +404,18 @@ class ReportPreviewDialog(QDialog):
         self.cancel_btn.setEnabled(True)
 
         if success:
+            if self.catalog_mod_id:
+                try:
+                    missing, unnecessary = self._get_categorized_modules()
+                    overrides = {m: "MOD" for m in missing}
+                    overrides.update({u: "COMMENT" for u in unnecessary})
+                    get_api_client().save_requirements_override({
+                        "catalog_mod_id": self.catalog_mod_id,
+                        "overrides": overrides,
+                    })
+                except Exception as e:
+                    logger.debug(f"Erreur enregistrement automatique des overrides après rapport: {e}")
+
             QMessageBox.information(
                 self,
                 tr("report_dialog.success_title"),

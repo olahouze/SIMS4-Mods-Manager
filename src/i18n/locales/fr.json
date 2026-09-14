@@ -15,6 +15,15 @@
     "browser_required_title": "Navigateur Requis pour l'Anti-Bot",
     "browser_required_msg": "Aucun navigateur compatible (Chromium, Edge ou Chrome) n'a été détecté pour Playwright.\n\nPour activer les connexions automatiques et le contournement Cloudflare, veuillez exécuter :\n\nuv run playwright install chromium"
   },
+  "browser": {
+    "dialog_title": "Mise à jour du navigateur Chromium",
+    "dialog_header": "Téléchargement de Chromium pour Playwright",
+    "dialog_desc": "Le navigateur Chromium est nécessaire pour résoudre les protections Cloudflare et gérer les connexions de comptes. L'application prépare automatiquement la version requise.",
+    "starting_download": "Démarrage du téléchargement...",
+    "install_success": "Chromium a été installé et préparé avec succès.",
+    "install_error": "Échec du téléchargement ou de l'installation de Chromium",
+    "cancelling": "Annulation en cours..."
+  },
   "nav": {
     "accounts": "🌐  Comptes & Anti-Bot",
     "catalog": "📁  Catalogue Unifié",
@@ -317,7 +326,13 @@
     "already_reported_tooltip": "Vous avez déjà envoyé un message à l'auteur sur le forum pour ces dépendances non trouvées.",
     "report_author_tooltip": "Ouvre un message en anglais pré-rempli pour interpeler l'auteur sur le forum officiel.",
     "not_authenticated_warning": "Veuillez vous connecter avec votre compte membre {source} dans l'onglet 'Comptes & Anti-Bot' pour pouvoir poster un message.",
-    "previously": "précédemment"
+    "previously": "précédemment",
+    "btn_mark_comment": "💬 Commentaire",
+    "btn_mark_mod": "📦 Mod manquant",
+    "comment_badge": "Commentaire ignoré",
+    "comment_header": "💬 Commentaires identifiés ({count}) :",
+    "comment_info": "Ces éléments sont considérés comme de simples commentaires/instructions et n'empêchent pas l'installation complète du mod :",
+    "all_comments_resolved": "✓ Tous les éléments non trouvés ont été qualifiés comme commentaires. L'installation complète est maintenant autorisée."
   },
   "report_dialog": {
     "title": "Interpeler l'auteur sur le forum",

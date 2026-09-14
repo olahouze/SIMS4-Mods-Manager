@@ -665,17 +665,11 @@ class LoversLabProvider(BaseSourceProvider):
         text_without_urls = re.sub(r"https?://\S+", "", raw_text)
         raw_lines = [line_str.strip() for line_str in text_without_urls.splitlines() if line_str.strip()]
 
-        NEGATIVE_RE = re.compile(
-            r"(?i)\b(no\s+(?:third[- ]party|additional|other|\.package|script|special|extra)?\s*(?:mods?|librar(?:y|ies)|frameworks?|files?|tools?|requirements?)\s*(?:is|are)?\s*(?:required|needed)|not\s+(?:required|needed)|none\s+required|nothing\s+required|no\s+requirements?|no\s+dependencies|no\s+third|aucun\s+requis|pas\s+de\s+pr[ée]requis|rien\s+de\s+requis)\b"
-        )
-        EXPLANATION_RE = re.compile(
-            r"(?i)\b(is\s+a\s+script[- ]only|does\s+not\s+(?:add|require|include)|will\s+not\s+work\s+without|how\s+to\s+install|unzip\s+to|extract\s+to|drag\s+and\s+drop|place\s+in|enabled?\s+in\s+game\s+options|in\s+game\s+options|game\s+options)\b"
-        )
         HEADER_RE = re.compile(
             r"(?i)^(requirements?|pr[ée]requis|prerequisites?|needs?|required\s*mods?)\s*:?$"
         )
 
-        from src.utils.game_dlc_matcher import GameDlcMatcher
+        from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
 
         candidate_tokens: List[str] = []
         for line in raw_lines:
@@ -686,15 +680,6 @@ class LoversLabProvider(BaseSourceProvider):
             if HEADER_RE.match(clean_line):
                 continue
 
-            if NEGATIVE_RE.search(clean_line) or re.match(r"(?i)^\s*(no\b|none\b|none\.|aucun\b|aucun[e]?\b|n/?a\b)", clean_line):
-                continue
-
-            if EXPLANATION_RE.search(clean_line):
-                continue
-
-            if GameDlcMatcher.is_base_game_only(clean_line) or re.fullmatch(r"(?i)the\s+sims\s+4\s+for\s+(?:pc|mac)\.?", clean_line):
-                continue
-
             # Strip leading requirement labels (e.g. "Requires: The Sims 4...")
             unprefixed_line = re.sub(
                 r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
@@ -702,28 +687,28 @@ class LoversLabProvider(BaseSourceProvider):
                 clean_line,
             ).strip()
 
-            # Protect titles with '&' from being split
-            protected_line = re.sub(r"(?i)\bcats\s*(?:&|and)\s*dogs\b", "Cats_and_Dogs", unprefixed_line)
-            protected_line = re.sub(r"(?i)\blife\s*(?:&|and)\s*death\b", "Life_and_Death", protected_line)
+            # Determine whether to split tokens or treat as a single commentary / requirement line
+            has_delimiters = bool(re.search(r"[,;+/|]|\s+[-–—]\s*|\s+(?:and|et)\s+", unprefixed_line))
+            is_sentence = bool(re.search(r"(?i)\b(is|are|does|do|will|have|has|enabled)\b", unprefixed_line)) and not has_delimiters
 
-            # Protect "The Sims 4 - " prefix before splitting on delimiters
-            protected_line = re.sub(
-                r"(?i)\b(sims\s*4|ts4)\s*[-–—]\s*",
-                r"\1 : ",
-                protected_line,
-            )
-            primary_tokens = re.split(r"[,;+/|]|\s+[-–—]\s*|\s+(?:and|et|as\s+well\s+as)\s+|\s+&\s+", protected_line)
-            line_tokens = []
-            for pt in primary_tokens:
-                pt_str = pt.replace("Cats_and_Dogs", "Cats & Dogs").replace("Life_and_Death", "Life & Death").strip()
-                if not pt_str:
-                    continue
-                is_dlc_item, _, _ = GameDlcMatcher.match_dlc(pt_str)
-                if is_wickedwhims_name(pt_str) or is_nisa_name(pt_str) or is_dlc_item or bool(re.match(r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\b|^ts4\b|^симс\s*4\b", pt_str, re.IGNORECASE)):
-                    line_tokens.append(pt_str)
-                else:
-                    # If an unspaced hyphen exists in a multi-word phrase (e.g. "Wicked whims-Basemental Drug")
-                    # split on the hyphen that is preceded by a word with a space
+            if is_sentence:
+                line_tokens = [unprefixed_line]
+            else:
+                # Comma/delimiter separated list of mod names or DLCs
+                protected_line = re.sub(r"(?i)\bcats\s*(?:&|and)\s*dogs\b", "Cats_and_Dogs", unprefixed_line)
+                protected_line = re.sub(r"(?i)\blife\s*(?:&|and)\s*death\b", "Life_and_Death", protected_line)
+                protected_line = re.sub(
+                    r"(?i)\b(sims\s*4|ts4)\s*[-–—]\s*",
+                    r"\1 : ",
+                    protected_line,
+                )
+                primary_tokens = re.split(r"[,;+/|]|\s+[-–—]\s*|\s+(?:and|et|as\s+well\s+as)\s+|\s+&\s+", protected_line)
+                line_tokens = []
+                for pt in primary_tokens:
+                    pt_str = pt.replace("Cats_and_Dogs", "Cats & Dogs").replace("Life_and_Death", "Life & Death").strip()
+                    if not pt_str:
+                        continue
+                    # Check unspaced hyphen in multi-word phrase like 'Wicked whims-Basemental Drug'
                     sub_parts = re.split(r"(\s+[a-zA-Z0-9]+)-(?=[A-Z])", pt_str)
                     if len(sub_parts) > 1:
                         reconstructed = []
@@ -757,9 +742,24 @@ class LoversLabProvider(BaseSourceProvider):
             if not cand_clean or cand_clean.lower() in ModMatcher.GENERIC_EXCLUDED_WORDS:
                 continue
 
-            from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
-
-            if GameDlcMatcher.is_base_game_only(cand_clean):
+            # Check if candidate refers to base game
+            is_cand_bg = (
+                GameDlcMatcher.is_base_game_only(cand_clean)
+                or bool(re.search(r"(?i)\bthe\s+sims\s+4\b", cand_clean) and re.search(r"(?i)\b(?:pc|mac|base\s*game|jeu\s*de\s*base)\b", cand_clean))
+            )
+            if is_cand_bg:
+                bg_title = "The Sims 4 (Jeu de base)"
+                if "the sims 4" not in [x.get("title", "").lower() for x in req_mods]:
+                    seen_titles.add(bg_title.lower())
+                    req_mods.append({
+                        "source": "game_dlc",
+                        "remote_id": "BASE_GAME",
+                        "title": bg_title,
+                        "url": "",
+                        "is_game_dlc": True,
+                        "dlc_name": "Jeu de base",
+                        "is_installed": True,
+                    })
                 continue
 
             c_starts_sims4 = bool(SIMS4_PREFIX_REGEX.match(cand_clean.strip()))
@@ -838,12 +838,12 @@ class LoversLabProvider(BaseSourceProvider):
                 })
 
         if req_mods:
-            if all(bool(m.get("remote_id")) or m.get("is_game_dlc") for m in req_mods):
+            if all((bool(m.get("remote_id")) and m.get("remote_id") != "") or m.get("is_game_dlc") for m in req_mods):
                 status = "RESOLVED"
             else:
                 status = "PENDING_VERIFICATION"
         else:
-            status = "PENDING_VERIFICATION"
+            status = "NONE"
 
         return raw_text, status, req_mods
 

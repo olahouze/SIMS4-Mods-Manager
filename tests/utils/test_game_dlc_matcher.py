@@ -79,3 +79,27 @@ def test_regular_mods_not_dlcs():
     for mod in mod_examples:
         is_dlc, _, _ = GameDlcMatcher.match_dlc(mod)
         assert not is_dlc, f"Mod {mod} should not be classified as DLC"
+
+
+def test_dlc_formatting_variations():
+    """DLC detection with hyphens, underscores, merged words, and pack codes."""
+    variations = [
+        ("get-to-work", "EP01"),
+        ("gettowork", "EP01"),
+        ("get_to_work", "EP01"),
+        ("GetToWork", "EP01"),
+        ("au-travail", "EP01"),
+        ("autravail", "EP01"),
+        ("chiens-et-chats", "EP04"),
+        ("chiensetchats", "EP04"),
+        ("EP01", "EP01"),
+        ("ep-01", "EP01"),
+        ("EP_01", "EP01"),
+        ("GP04", "GP04"),
+        ("sp20", "SP20"),
+    ]
+    for text, expected_code in variations:
+        is_dlc, name, code = GameDlcMatcher.match_dlc(text)
+        assert is_dlc is True, f"Failed for {text}"
+        assert code == expected_code, f"Expected {expected_code} for {text}, got {code}"
+

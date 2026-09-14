@@ -228,22 +228,42 @@ QComboBox QAbstractItemView {
 /* Scrollbars */
 QScrollBar:vertical {
     background: transparent;
-    width: 8px;
+    width: 6px;
     margin: 0px;
 }
 
 QScrollBar::handle:vertical {
     background: #2d334d;
     min-height: 25px;
-    border-radius: 4px;
+    border-radius: 3px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #4f46e5;
+    background: #6366f1;
 }
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 6px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #2d334d;
+    min-width: 25px;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #6366f1;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
 }
 
 /* Progress Bar */

@@ -37,7 +37,9 @@ class ResponsiveCardGrid(QWidget):
         """Calculates optimal number of columns based on container width."""
         if available_width <= 0:
             return 1
-        cols = (available_width + self.grid_spacing) // (self.min_card_width + self.grid_spacing)
+        # Leave a safety margin of at least 14px to prevent vertical scrollbar trigger from causing horizontal overflow
+        effective_w = max(0, available_width - 14)
+        cols = (effective_w + self.grid_spacing) // (self.min_card_width + self.grid_spacing)
         return max(1, cols)
 
     def set_empty_message(self, message: str) -> None:

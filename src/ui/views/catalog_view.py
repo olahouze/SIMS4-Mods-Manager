@@ -120,9 +120,10 @@ class CatalogView(QWidget):
         # Scroll Area with Card Grid
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setStyleSheet("background-color: transparent; border: none;")
 
-        self.card_grid = ResponsiveCardGrid(min_card_width=250, spacing=16)
+        self.card_grid = ResponsiveCardGrid(min_card_width=295, spacing=16)
         self.scroll_area.setWidget(self.card_grid)
         layout.addWidget(self.scroll_area, stretch=1)
 
@@ -448,6 +449,7 @@ class CatalogView(QWidget):
         missing = chk.get("missing_dependencies", [])
         already = chk.get("already_installed_dependencies", [])
         unfound = chk.get("unfound_dependencies", [])
+        comments = chk.get("comment_dependencies", [])
         game_dlcs = chk.get("game_dlc_dependencies", [])
         is_partial = chk.get("is_partial", False) or bool(unfound)
 
@@ -459,13 +461,13 @@ class CatalogView(QWidget):
             QMessageBox.warning(self, tr("catalog.install_blocked_title"), reason)
             return
 
-        if missing or unfound or is_partial or game_dlcs:
+        if missing or unfound or comments or is_partial or game_dlcs:
             mod_title = mod_data.get("title", tr("common.untitled"))
             dlg = DependenciesDialog(
                 mod_title,
                 already,
                 missing,
-                unfound=unfound,
+                unfound=list(unfound) + list(comments),
                 is_partial=is_partial,
                 game_dlcs=game_dlcs,
                 mod_data=mod_data,

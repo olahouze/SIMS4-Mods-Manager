@@ -15,6 +15,15 @@
     "browser_required_title": "Navegador Requerido para Anti-Bot",
     "browser_required_msg": "No se detectó un navegador compatible (Chromium, Edge o Chrome) para Playwright.\n\nPara habilitar inicios de sesión automáticos y eludir Cloudflare, ejecute:\n\nuv run playwright install chromium"
   },
+  "browser": {
+    "dialog_title": "Actualización del navegador Chromium",
+    "dialog_header": "Descargando Chromium para Playwright",
+    "dialog_desc": "El navegador Chromium es necesario para resolver las protecciones de Cloudflare y administrar los inicios de sesión de cuentas. La aplicación prepara automáticamente la versión requerida.",
+    "starting_download": "Iniciando descarga...",
+    "install_success": "Chromium se ha instalado y preparado con éxito.",
+    "install_error": "Error al descargar o instalar Chromium",
+    "cancelling": "Cancelando..."
+  },
   "nav": {
     "accounts": "🌐  Cuentas y Anti-Bot",
     "catalog": "📁  Catálogo Unificado",
@@ -315,9 +324,15 @@
     "report_author_box_title": "Requisitos no identificados",
     "report_author_box_desc": "Notifique al autor del mod para que aclare o actualice el nombre o enlace exacto.",
     "already_reported_tooltip": "Ya ha enviado un mensaje al autor en el foro sobre estos requisitos no encontrados.",
-    "report_author_tooltip": "Abre un mensaje en inglés prellenado para notificar al autor en el foro oficial.",
-    "not_authenticated_warning": "Conéctese con su cuenta de miembro de {source} en la pestaña 'Cuentas y Anti-Bot' para publicar un mensaje.",
-    "previously": "previamente"
+    "report_author_tooltip": "Abre un mensaje en inglés prellenado para interpelar al autor en el foro oficial.",
+    "not_authenticated_warning": "Inicie sesión con su cuenta de miembro de {source} en la pestaña 'Cuentas y Anti-Bot' para poder publicar.",
+    "previously": "anteriormente",
+    "btn_mark_comment": "💬 Comentario",
+    "btn_mark_mod": "📦 Mod faltante",
+    "comment_badge": "Comentario ignorado",
+    "comment_header": "💬 Comentarios identificados ({count}):",
+    "comment_info": "Estos elementos se consideran comentarios/instrucciones y no impiden la instalación completa del mod:",
+    "all_comments_resolved": "✓ Todos los elementos no encontrados se han calificado como comentarios. La instalación completa está permitida."
   },
   "report_dialog": {
     "title": "Notificar al Autor en el Foro",

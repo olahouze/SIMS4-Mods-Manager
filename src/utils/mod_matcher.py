@@ -130,6 +130,32 @@ class ModMatcher:
         return base_threshold
 
     @classmethod
+    def split_camel_case(cls, text: str) -> str:
+        """
+        Splits PascalCase/camelCase into separated words while preserving acronyms.
+        Example: 'XMLInjector' -> 'XML Injector', 'WickedWhims' -> 'Wicked Whims'
+        """
+        if not text:
+            return ""
+        s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", text)
+        s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
+        return s
+
+    @classmethod
+    def canonical_fingerprint(cls, text: str) -> str:
+        """
+        Generates a normalized alphanumeric fingerprint for comparison:
+        - Accents stripped
+        - Lowercased
+        - All non-alphanumerics (spaces, hyphens, underscores, punctuation) stripped
+        Example: 'Wicked_Whims' -> 'wickedwhims', 'xml-injector' -> 'xmlinjector'
+        """
+        if not text:
+            return ""
+        s = cls.strip_accents(text).lower()
+        return re.sub(r"[^a-z0-9]", "", s)
+
+    @classmethod
     def strip_accents(cls, text: str) -> str:
         """Removes diacritical marks/accents from text."""
         nfkd = unicodedata.normalize("NFKD", text)
@@ -178,14 +204,18 @@ class ModMatcher:
     def clean_mod_title(cls, title: str) -> str:
         """
         Extracts the essential core name of a mod by stripping creator tags,
-        version identifiers, dates, and noise words.
-        Example: '[Scumbumbo] XML Injector v4.2 [Updated]' -> 'xml injector'
+        version identifiers, dates, and noise words, with space/dash/underscore unification.
+        Example: '[Scumbumbo] XML_Injector v4.2 [Updated]' -> 'xml injector'
         """
         if not title:
             return ""
 
         # Remove bracketed tags like [TS4], [v1.2], [Scumbumbo], (Updated)
         cleaned = cls.ANY_BRACKETS_PATTERN.sub(" ", title)
+
+        # Unify underscores and internal hyphens into spaces (preserves creator prefix dashes like 'Author - ...')
+        cleaned = cleaned.replace("_", " ")
+        cleaned = re.sub(r"(?<=\w)-(?=\w)", " ", cleaned)
 
         # Remove dates
         cleaned = cls.DATE_PATTERN.sub(" ", cleaned)
@@ -216,8 +246,7 @@ class ModMatcher:
         if len(cleaned.split()) > 1:
             cleaned = re.sub(r"\s+\bmod\b$", "", cleaned).strip()
 
-        # If stripping everything resulted in empty string (e.g. mod was literally named '[TS4] Mod'),
-        # fall back to basic alphanumeric lower of original
+        # If stripping everything resulted in empty string, fall back to basic alphanumeric lower of original
         if not cleaned:
             fallback = re.sub(r"[^a-zA-Z0-9\s]", " ", cls.strip_accents(title))
             cleaned = re.sub(r"\s+", " ", fallback).strip().lower()
@@ -255,6 +284,12 @@ class ModMatcher:
 
         # 1. Exact match on cleaned core names
         if q_clean == c_clean:
+            return 1.0
+
+        # 2. Exact match on canonical alphanumeric fingerprints (ignores hyphens, underscores, glued words)
+        q_fp = cls.canonical_fingerprint(q_clean)
+        c_fp = cls.canonical_fingerprint(c_clean)
+        if q_fp and c_fp and q_fp == c_fp:
             return 1.0
 
         q_tokens = cls.get_significant_tokens(q_clean)

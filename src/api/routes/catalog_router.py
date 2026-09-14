@@ -21,6 +21,7 @@ from src.api.schemas.catalog import (
     CheckMissingReportResponse,
     SubmitMissingReportRequest,
     SubmitMissingReportResponse,
+    RequirementsOverrideRequest,
 )
 from src.core.config import AppConfig
 from src.database.models import CatalogMod, InstalledMod
@@ -534,4 +535,24 @@ def report_missing_requirements(payload: SubmitMissingReportRequest, session: Se
         custom_message=payload.custom_message,
     )
     return SubmitMissingReportResponse(**res)
+
+
+@router.post("/requirements-override")
+def save_requirements_override(payload: RequirementsOverrideRequest, session: Session = Depends(get_db)):
+    """Saves user qualification ('MOD' vs 'COMMENT') for mod requirements."""
+    cat_mod = None
+    if payload.catalog_mod_id:
+        cat_mod = session.query(CatalogMod).filter_by(id=payload.catalog_mod_id).first()
+    elif payload.source and payload.remote_id:
+        cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
+
+    if not cat_mod:
+        raise HTTPException(status_code=404, detail="Mod introuvable dans le catalogue.")
+
+    current = cat_mod.get_requirements_overrides()
+    current.update(payload.overrides)
+    cat_mod.set_requirements_overrides(current)
+    session.commit()
+    logger.info(f"Overrides de prérequis mis à jour pour '{cat_mod.title}': {payload.overrides}")
+    return {"success": True, "overrides": current}
 

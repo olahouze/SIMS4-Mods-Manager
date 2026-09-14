@@ -195,3 +195,21 @@ def test_find_best_installed_match_by_folder_and_package():
     assert mod2.remote_id == "999"
 
 
+def test_hyphens_underscores_and_glued_words():
+    """Test resilience against hyphens, underscores, case differences, and glued words."""
+    # Canonical fingerprint
+    assert ModMatcher.canonical_fingerprint("Wicked_Whims") == "wickedwhims"
+    assert ModMatcher.canonical_fingerprint("wicked-whims") == "wickedwhims"
+    assert ModMatcher.canonical_fingerprint("Wicked Whims") == "wickedwhims"
+    assert ModMatcher.canonical_fingerprint("xml-injector") == "xmlinjector"
+    assert ModMatcher.canonical_fingerprint("XML_Injector") == "xmlinjector"
+
+    # Match scores across formatting differences
+    assert ModMatcher.match_score("wicked_whims", "Wicked Whims") == 1.0
+    assert ModMatcher.match_score("Wicked-Whims", "wickedwhims") == 1.0
+    assert ModMatcher.match_score("xml-injector", "XML_Injector") == 1.0
+    assert ModMatcher.match_score("XMLInjector", "xml injector") == 1.0
+    assert ModMatcher.match_score("XML_Injector_v4", "XML Injector") == 1.0
+
+
+

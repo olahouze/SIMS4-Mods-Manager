@@ -64,6 +64,8 @@ class DatabaseManager:
                     conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_status VARCHAR(50) DEFAULT 'NONE'"))
                 if "requirements_mods_json" not in col_names:
                     conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_mods_json TEXT DEFAULT '[]'"))
+                if "requirements_overrides_json" not in col_names:
+                    conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_overrides_json TEXT DEFAULT '{}'"))
                 conn.commit()
 
             with self.get_session() as session:

@@ -15,6 +15,15 @@
     "browser_required_title": "Browser Required for Anti-Bot",
     "browser_required_msg": "No compatible browser (Chromium, Edge or Chrome) detected for Playwright.\n\nTo enable automatic logins and Cloudflare bypass, please run:\n\nuv run playwright install chromium"
   },
+  "browser": {
+    "dialog_title": "Chromium Browser Update",
+    "dialog_header": "Downloading Chromium for Playwright",
+    "dialog_desc": "The Chromium browser is required to bypass Cloudflare protections and handle account logins. The application is automatically preparing the required version.",
+    "starting_download": "Starting download...",
+    "install_success": "Chromium has been installed and configured successfully.",
+    "install_error": "Failed to download or install Chromium",
+    "cancelling": "Cancelling..."
+  },
   "nav": {
     "accounts": "🌐  Accounts & Anti-Bot",
     "catalog": "📁  Unified Catalog",
@@ -316,8 +325,14 @@
     "report_author_box_desc": "Notify the mod author so they can clarify or update the exact name or link.",
     "already_reported_tooltip": "You have already sent a message to the author on the forum regarding these missing requirements.",
     "report_author_tooltip": "Opens a pre-filled English message to notify the author on the official forum.",
-    "not_authenticated_warning": "Please connect with your {source} member account in the 'Accounts & Anti-Bot' tab to post a message.",
-    "previously": "previously"
+    "not_authenticated_warning": "Please log in with your {source} member account in the 'Accounts & Anti-Bot' tab to post a message.",
+    "previously": "previously",
+    "btn_mark_comment": "💬 Comment",
+    "btn_mark_mod": "📦 Missing Mod",
+    "comment_badge": "Comment ignored",
+    "comment_header": "💬 Identified comments ({count}):",
+    "comment_info": "These items are considered comments/instructions and do not prevent full mod installation:",
+    "all_comments_resolved": "✓ All unfound items have been classified as comments. Full installation is now allowed."
   },
   "report_dialog": {
     "title": "Notify Author on Forum",

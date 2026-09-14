@@ -151,6 +151,16 @@ class GameDlcMatcher:
         return False
 
     @classmethod
+    def canonical_fingerprint(cls, text: str) -> str:
+        """Generates an alphanumeric fingerprint without spaces, hyphens, or accents."""
+        if not text:
+            return ""
+        name = unicodedata.normalize("NFKD", text)
+        name = "".join(c for c in name if not unicodedata.combining(c))
+        name = name.replace("&", "and")
+        return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
+
+    @classmethod
     def match_dlc(cls, text: str) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Analyzes a dependency string.
@@ -179,24 +189,26 @@ class GameDlcMatcher:
         m_prefix = SIMS4_PREFIX_REGEX.match(clean)
         is_sims_prefixed = m_prefix is not None
 
+        clean_fp = cls.canonical_fingerprint(clean)
+
+        # Pre-build fingerprint map
+        fp_map = {cls.canonical_fingerprint(k): v for k, v in KNOWN_DLC_NAMES.items()}
+
         dlc_candidate = ""
         if is_sims_prefixed:
-            # Everything after the prefix
             after_prefix = clean[m_prefix.end() :].strip()
-            # Remove leading and trailing punctuation, brackets, colons, dashes
             dlc_candidate = re.sub(r"^[:\-–—\s\[\]\(\)\{\}\"\'\`]+", "", after_prefix).strip()
             dlc_candidate = re.sub(r"[\s\[\]\(\)\{\}\"\'\`]+$", "", dlc_candidate).strip()
         else:
-            # Check if cleaned matches a known DLC directly (e.g. "City Living", "Get to Work")
             norm_cleaned = cls._normalize_lookup_key(clean)
-            if norm_cleaned in KNOWN_DLC_NAMES:
+            if norm_cleaned in KNOWN_DLC_NAMES or clean_fp in fp_map:
                 dlc_candidate = clean
             else:
-                for k in KNOWN_DLC_NAMES:
-                    if k == norm_cleaned or (len(k) >= 5 and k in norm_cleaned):
+                for k_fp in fp_map:
+                    if k_fp == clean_fp or (len(k_fp) >= 5 and k_fp in clean_fp):
                         dlc_candidate = clean
                         break
-            if not dlc_candidate and DLC_KEYWORDS_REGEX.search(clean):
+            if not dlc_candidate and (DLC_KEYWORDS_REGEX.search(clean) or re.search(r"\b(?:ep|gp|sp)[\s\-_]?\d{1,2}\b", clean, re.I)):
                 dlc_candidate = clean
 
         if not dlc_candidate:
@@ -209,7 +221,7 @@ class GameDlcMatcher:
         ):
             return False, None, None
 
-        # Clean candidate of trailing pack descriptors (e.g. "Get to Work Expansion Pack" -> "Get to Work")
+        # Clean candidate of trailing pack descriptors
         clean_name = re.sub(
             r"(?i)\s*\b(?:expansion\s*pack|game\s*pack|stuff\s*pack|kit\s*d['’]objets|pack\s*d['’]extension|pack\s*de\s*jeu|mini-?kit|dlc|ep\d+|gp\d+|sp\d+)\b\s*",
             "",
@@ -219,20 +231,35 @@ class GameDlcMatcher:
         if not clean_name:
             clean_name = dlc_candidate
 
-        # Look up in known packs dictionary
+        # Look up in known packs dictionary via fingerprint and keys
         normalized_key = cls._normalize_lookup_key(clean_name)
+        cand_fp = cls.canonical_fingerprint(clean_name)
         pack_code = None
         standard_name = clean_name
 
-        if normalized_key in KNOWN_DLC_NAMES:
-            pack_code, standard_name = KNOWN_DLC_NAMES[normalized_key]
-        else:
-            # Check partial matches in KNOWN_DLC_NAMES
-            for k, (code, std) in KNOWN_DLC_NAMES.items():
-                if k in normalized_key or (len(k) >= 4 and normalized_key in k):
-                    pack_code = code
+        # Check explicit pack code regex (e.g. EP01, EP1, GP05, SP13, ep-01, ep_01)
+        m_code = re.search(r"\b(EP|GP|SP)[\s\-_]?(\d{1,2})\b", clean, re.IGNORECASE)
+        if m_code:
+            prefix = m_code.group(1).upper()
+            num = int(m_code.group(2))
+            pack_code = f"{prefix}{num:02d}"
+            # Find display name for this pack code
+            for _k, (c, std) in KNOWN_DLC_NAMES.items():
+                if c == pack_code:
                     standard_name = std
                     break
+
+        if not pack_code:
+            if normalized_key in KNOWN_DLC_NAMES:
+                pack_code, standard_name = KNOWN_DLC_NAMES[normalized_key]
+            elif cand_fp in fp_map:
+                pack_code, standard_name = fp_map[cand_fp]
+            else:
+                for k_fp, (code, std) in fp_map.items():
+                    if k_fp in cand_fp or (len(k_fp) >= 5 and cand_fp in k_fp):
+                        pack_code = code
+                        standard_name = std
+                        break
 
         return True, standard_name, pack_code
 

@@ -271,18 +271,18 @@ class ModDetailView(QWidget):
             QFrame {
                 background-color: #101424;
                 border: 1px solid #232d45;
-                border-radius: 12px;
-                padding: 14px 18px;
+                border-radius: 8px;
+                padding: 10px 14px;
             }
         """)
         self.req_layout = QVBoxLayout(self.req_frame)
-        self.req_layout.setSpacing(10)
+        self.req_layout.setSpacing(6)
 
         # Retractable header with title and toggle button
         req_header = QHBoxLayout()
         req_header.setContentsMargins(0, 0, 0, 0)
         self.req_title = QLabel("🔗 Dépendances & Prérequis (Requirements) :")
-        self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #f8fafc;")
+        self.req_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #f8fafc;")
         req_header.addWidget(self.req_title, stretch=1)
 
         self.req_collapse_btn = QPushButton("▲ Réduire")
@@ -292,9 +292,9 @@ class ModDetailView(QWidget):
                 background-color: #1e293b;
                 color: #94a3b8;
                 border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 11px;
+                border-radius: 5px;
+                padding: 3px 8px;
+                font-size: 10px;
                 font-weight: 600;
             }
             QPushButton:hover {
@@ -591,16 +591,17 @@ class ModDetailView(QWidget):
             QFrame {
                 background-color: #0f172a;
                 border: 1px solid #1e293b;
-                border-radius: 12px;
-                padding: 14px 18px;
+                border-radius: 8px;
+                padding: 10px 14px;
             }
         """)
         self.req_title.setText("🔄 Analyse des dépendances et prérequis...")
-        self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #94a3b8;")
+        self.req_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #94a3b8;")
         self.req_desc.setText(
             "Analyse en cours des prérequis du mod et vérification des dépendances sur LoversLab...\n"
             "Veuillez patienter pendant l'inspection des données."
         )
+        self.req_desc.setStyleSheet("font-size: 11px; color: #64748b;")
         while self.deps_layout.count():
             it = self.deps_layout.takeAt(0)
             if it.widget():
@@ -623,10 +624,15 @@ class ModDetailView(QWidget):
         self.req_collapse_btn.setText("▲ Réduire")
 
         # Categorize dependencies
+        overrides = dict(self.mod_data.get("requirements_overrides", {}) or {})
+        if not overrides and data.get("requirements_overrides"):
+            overrides = dict(data.get("requirements_overrides", {}))
+
         game_dlcs = []
         already_installed = []
         to_install = []
         unfound = []
+        comments = []
 
         from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
 
@@ -640,6 +646,13 @@ class ModDetailView(QWidget):
             ).strip().strip("'\"`[](){}")
 
             if GameDlcMatcher.is_base_game_only(clean_t):
+                d["is_game_dlc"] = True
+                d["status"] = "GAME_DLC"
+                d["is_installed"] = True
+                d["dlc_name"] = "Jeu de base"
+                if not d.get("title") or d.get("title").lower() in ["sims 4", "the sims 4"]:
+                    d["title"] = "The Sims 4 (Jeu de base)"
+                game_dlcs.append(d)
                 continue
             starts_with_sims4 = bool(SIMS4_PREFIX_REGEX.match(clean_t))
             is_dlc_matched, _, _ = GameDlcMatcher.match_dlc(clean_t)
@@ -653,12 +666,15 @@ class ModDetailView(QWidget):
                 already_installed.append(d)
             elif st == "DETECTED_NOT_INSTALLED":
                 to_install.append(d)
+            elif d.get("is_comment") or st == "COMMENT_NOISE" or overrides.get(t) == "COMMENT":
+                d["is_comment"] = True
+                comments.append(d)
             else:
                 unfound.append(d)
 
         # If req_status indicates unresolved requirements but unfound list is empty and req_text exists,
         # add a synthetic unfound entry so the user sees what is missing (unless it is base game or DLC)
-        if (req_status in ["PENDING_VERIFICATION", "PARTIAL"] or (req_text and not raw_deps)) and not unfound and req_text and req_text.strip():
+        if (req_status in ["PENDING_VERIFICATION", "PARTIAL"] or (req_text and not raw_deps)) and not unfound and not comments and req_text and req_text.strip():
             clean_req_text = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", req_text).strip()
             clean_req_text = re.sub(
                 r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
@@ -668,14 +684,20 @@ class ModDetailView(QWidget):
             is_bg = GameDlcMatcher.is_base_game_only(clean_req_text)
             is_dlc_text = bool(SIMS4_PREFIX_REGEX.match(clean_req_text)) or GameDlcMatcher.match_dlc(clean_req_text)[0]
             if not is_bg and not is_dlc_text:
-                unfound.append({
+                synth_entry = {
                     "title": req_text.strip(),
                     "status": "NOT_DETECTED_FINISHED",
                     "is_installed": False,
                     "is_game_dlc": False,
-                })
+                }
+                if overrides.get(req_text.strip()) == "COMMENT":
+                    synth_entry["is_comment"] = True
+                    comments.append(synth_entry)
+                else:
+                    unfound.append(synth_entry)
 
-        has_deps = bool(game_dlcs or already_installed or to_install or unfound)
+        self._comment_deps = comments
+        has_deps = bool(game_dlcs or already_installed or to_install or unfound or comments)
 
         if has_deps:
             self.req_frame.setVisible(True)
@@ -687,46 +709,50 @@ class ModDetailView(QWidget):
                     QFrame {
                         background-color: #1e1308;
                         border: 1px solid #d97706;
-                        border-radius: 12px;
-                        padding: 16px;
+                        border-radius: 8px;
+                        padding: 10px 14px;
                     }
                 """)
                 total_cnt = len(raw_deps) or len(unfound)
                 self.req_title.setText(f"⚠️ Dépendances requises ({total_cnt}) - Composants manquants")
-                self.req_title.setStyleSheet("font-size: 14px; font-weight: 800; color: #fde68a;")
+                self.req_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #fde68a;")
                 self.req_desc.setText(
                     "Ce mod nécessite des composants dont certains ne sont pas trouvés sur LoversLab. "
-                    "L'installation partielle est autorisée pour installer les composants disponibles."
+                    "Vous pouvez marquer les faux positifs comme commentaires pour débloquer l'installation complète."
                 )
+                self.req_desc.setStyleSheet("font-size: 11px; color: #fcd34d; margin-top: 2px;")
             else:
                 self.req_frame.setStyleSheet("""
                     QFrame {
-                        background-color: #10192e;
-                        border: 1px solid #3b82f6;
-                        border-radius: 12px;
-                        padding: 16px;
+                        background-color: #0b1524;
+                        border: 1px solid #2563eb;
+                        border-radius: 8px;
+                        padding: 10px 14px;
                     }
                 """)
                 self.req_title.setText(f"🔗 Dépendances et DLCs identifiés ({len(raw_deps)}) :")
-                self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #93c5fd;")
+                self.req_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #93c5fd;")
                 self.req_desc.setText(
                     "Ce mod s'appuie sur les composants suivants. Les mods manquants seront automatiquement téléchargés, "
                     "et les éventuels packs DLC officiels sont à vérifier dans votre jeu :"
                 )
+                self.req_desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-top: 2px;")
 
             # Helper to create styled dependency items
-            def create_dep_card(title: str, badge_text: str, badge_bg: str, badge_fg: str, badge_border: str, prefix: str = "•"):
+            def create_dep_card(title: str, badge_text: str, badge_bg: str, badge_fg: str, badge_border: str, prefix: str = "•", action_btn: Optional[QPushButton] = None):
                 d_frame = QFrame()
                 d_frame.setStyleSheet("""
-                    background-color: #1e293b;
-                    border-radius: 6px;
-                    padding: 6px 12px;
+                    background-color: #141b2c;
+                    border: 1px solid #232f48;
+                    border-radius: 5px;
+                    padding: 3px 8px;
                 """)
                 df_layout = QHBoxLayout(d_frame)
-                df_layout.setContentsMargins(6, 6, 6, 6)
+                df_layout.setContentsMargins(4, 2, 4, 2)
+                df_layout.setSpacing(8)
 
                 lbl_name = QLabel(f"{prefix} {title}")
-                lbl_name.setStyleSheet("color: #f1f5f9; font-size: 12px; font-weight: 600;")
+                lbl_name.setStyleSheet("color: #f1f5f9; font-size: 11px; font-weight: 600;")
                 df_layout.addWidget(lbl_name, stretch=1)
 
                 lbl_st = QLabel(badge_text)
@@ -735,16 +761,18 @@ class ModDetailView(QWidget):
                     background-color: {badge_bg};
                     border: 1px solid {badge_border};
                     border-radius: 4px;
-                    padding: 2px 8px;
-                    font-size: 11px;
-                    font-weight: 700;
+                    padding: 1px 6px;
+                    font-size: 10px;
+                    font-weight: 600;
                 """)
                 df_layout.addWidget(lbl_st)
+                if action_btn:
+                    df_layout.addWidget(action_btn)
                 return d_frame
 
             def add_section_header(title_text: str, color: str):
                 header = QLabel(title_text)
-                header.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {color}; margin-top: 8px; margin-bottom: 2px;")
+                header.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {color}; margin-top: 4px; margin-bottom: 2px;")
                 self.deps_layout.addWidget(header)
 
             # Section 0: Official Sims 4 Game DLCs
@@ -780,7 +808,27 @@ class ModDetailView(QWidget):
                 add_section_header(f"⚠️ Dépendances introuvables ({len(unfound)}) :", "#fca5a5")
                 for dep in unfound:
                     t = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                    card = create_dep_card(t, "⚠️ Introuvable sur LoversLab", "#450a0a", "#fca5a5", "#ef4444", prefix="⚠️")
+
+                    btn_comm = QPushButton(tr("dependencies.btn_mark_comment"))
+                    btn_comm.setCursor(Qt.CursorShape.PointingHandCursor)
+                    btn_comm.setStyleSheet("""
+                        QPushButton {
+                            background-color: #1e253b;
+                            color: #cbd5e1;
+                            border: 1px solid #475569;
+                            border-radius: 4px;
+                            padding: 2px 6px;
+                            font-size: 10px;
+                            font-weight: 600;
+                        }
+                        QPushButton:hover {
+                            background-color: #334155;
+                            color: #ffffff;
+                        }
+                    """)
+                    btn_comm.clicked.connect(lambda _, d=dep: self._toggle_req_comment(d, to_comment=True))
+
+                    card = create_dep_card(t, "⚠️ Introuvable sur LoversLab", "#450a0a", "#fca5a5", "#ef4444", prefix="⚠️", action_btn=btn_comm)
                     self.deps_layout.addWidget(card)
 
                 self._unfound_dep_names = [
@@ -790,10 +838,44 @@ class ModDetailView(QWidget):
                 self.btn_report_author.setText(tr("dependencies.checking_report_status"))
                 self._apply_report_checking_style()
                 self.btn_report_author.setEnabled(False)
+                self.btn_report_author.setFixedHeight(30)
                 self._trigger_check_report_status(data)
             else:
                 self._unfound_dep_names = []
                 self.btn_report_author.setVisible(False)
+
+            # Section 4: Identified Comments (False Positives)
+            if comments:
+                add_section_header(tr("dependencies.comment_header", count=len(comments)), "#94a3b8")
+                comm_note = QLabel(tr("dependencies.comment_info"))
+                comm_note.setStyleSheet("font-size: 11px; color: #64748b; margin-bottom: 2px;")
+                comm_note.setWordWrap(True)
+                self.deps_layout.addWidget(comm_note)
+
+                for dep in comments:
+                    t = dep.get("title") or f"Mod #{dep.get('remote_id')}"
+
+                    btn_mod = QPushButton(tr("dependencies.btn_mark_mod"))
+                    btn_mod.setCursor(Qt.CursorShape.PointingHandCursor)
+                    btn_mod.setStyleSheet("""
+                        QPushButton {
+                            background-color: #1e253b;
+                            color: #93c5fd;
+                            border: 1px solid #2563eb;
+                            border-radius: 4px;
+                            padding: 2px 6px;
+                            font-size: 10px;
+                            font-weight: 600;
+                        }
+                        QPushButton:hover {
+                            background-color: #1d4ed8;
+                            color: #ffffff;
+                        }
+                    """)
+                    btn_mod.clicked.connect(lambda _, d=dep: self._toggle_req_comment(d, to_comment=False))
+
+                    card = create_dep_card(t, tr("dependencies.comment_badge"), "#1e293b", "#94a3b8", "#475569", prefix="💬", action_btn=btn_mod)
+                    self.deps_layout.addWidget(card)
 
             # Update install button
             if not self.is_installed:
@@ -855,13 +937,14 @@ class ModDetailView(QWidget):
                     QFrame {
                         background-color: #101424;
                         border: 1px solid #232d45;
-                        border-radius: 12px;
-                        padding: 14px 18px;
+                        border-radius: 8px;
+                        padding: 10px 14px;
                     }
                 """)
                 self.req_title.setText("ℹ️ Notes de prérequis :")
-                self.req_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #cbd5e1;")
+                self.req_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #cbd5e1;")
                 self.req_desc.setText(req_text)
+                self.req_desc.setStyleSheet("font-size: 11px; color: #94a3b8;")
             else:
                 self.req_frame.setVisible(False)
 
@@ -963,6 +1046,31 @@ class ModDetailView(QWidget):
             self.btn_report_author.setEnabled(True)
             self.btn_report_author.setToolTip(tr("dependencies.report_author_tooltip"))
 
+    def _toggle_req_comment(self, dep: dict, to_comment: bool):
+        title = dep.get("title") or ""
+        if "requirements_overrides" not in self.mod_data or not isinstance(self.mod_data["requirements_overrides"], dict):
+            self.mod_data["requirements_overrides"] = {}
+        self.mod_data["requirements_overrides"][title] = "COMMENT" if to_comment else "MOD"
+        dep["is_comment"] = to_comment
+
+        # Persist override asynchronously to API / DB
+        cat_id = self.mod_data.get("id") or self.mod_data.get("catalog_mod_id")
+        if cat_id:
+            import threading
+            def _async_save():
+                try:
+                    client = get_api_client()
+                    client.save_requirements_override({
+                        "catalog_mod_id": cat_id,
+                        "overrides": {title: "COMMENT" if to_comment else "MOD"},
+                    })
+                except Exception as e:
+                    logger.debug(f"Erreur enregistrement override dans ModDetailView: {e}")
+            threading.Thread(target=_async_save, daemon=True).start()
+
+        # Re-render requirements view with updated categorization
+        self._render_requirements(self.mod_data)
+
     def _on_report_author_clicked(self):
         if not self._report_status_result:
             return
@@ -991,6 +1099,7 @@ class ModDetailView(QWidget):
             remote_id=str(self.mod_data.get("remote_id", "")),
             catalog_mod_id=cat_id,
             initial_message=formatted_msg,
+            unnecessary_modules=[c.get("title") or "" for c in getattr(self, "_comment_deps", [])],
             parent=self,
         )
         dlg.report_sent.connect(self._on_report_sent_success)

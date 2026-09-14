@@ -80,6 +80,7 @@ def resolve_mod_dependencies(
     installed_by_title: Dict[str, Any],
     is_syncing: Optional[bool] = None,
     catalog_remote_ids: Optional[set] = None,
+    requirements_overrides: Optional[Dict[str, str]] = None,
 ) -> List[DependencyItem]:
     """
     Resolves dependency items against database catalog, installed mods, and official game DLCs.
@@ -89,6 +90,7 @@ def resolve_mod_dependencies(
     - NOT_DETECTED_SCANNING (if sync is currently running)
     - NOT_DETECTED_FINISHED (if sync is finished)
     - GAME_DLC (official The Sims 4 expansion / pack)
+    - COMMENT_NOISE (classified as comment / not a mod by user override)
     """
     if is_syncing is None:
         from src.services.catalog_sync_service import SyncTracker
@@ -102,10 +104,6 @@ def resolve_mod_dependencies(
         title = dep.get("title", "")
         url = dep.get("url", "")
 
-        # 0. Check if this is an official Game DLC / Pack (multilingual support)
-        is_dlc = dep.get("is_game_dlc", False) or dep.get("status") == "GAME_DLC"
-        dlc_name = dep.get("dlc_name")
-        dlc_code = dep.get("dlc_code")
         clean_t = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", title or "").strip()
         clean_t = re.sub(
             r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
@@ -113,7 +111,54 @@ def resolve_mod_dependencies(
             clean_t,
         ).strip().strip("'\"`[](){}")
 
+        # Check user override (Mod vs Comment)
+        is_comment = False
+        if requirements_overrides:
+            t_fp = ModMatcher.canonical_fingerprint(title)
+            c_fp = ModMatcher.canonical_fingerprint(clean_t)
+            for ov_key, ov_val in requirements_overrides.items():
+                ov_fp = ModMatcher.canonical_fingerprint(ov_key)
+                if (title == ov_key or clean_t == ov_key or (ov_fp and (ov_fp == t_fp or ov_fp == c_fp))) and ov_val == "COMMENT":
+                    is_comment = True
+                    break
+
+        if is_comment:
+            items.append(
+                DependencyItem(
+                    source=source,
+                    remote_id=r_id,
+                    title=title,
+                    url=url,
+                    is_installed=False,
+                    status="COMMENT_NOISE",
+                    is_game_dlc=False,
+                    dlc_name=None,
+                    dlc_code=None,
+                    is_comment=True,
+                )
+            )
+            continue
+
+        # 0. Check if this is an official Game DLC / Pack (multilingual support)
+        is_dlc = dep.get("is_game_dlc", False) or dep.get("status") == "GAME_DLC"
+        dlc_name = dep.get("dlc_name")
+        dlc_code = dep.get("dlc_code")
+
         if GameDlcMatcher.is_base_game_only(clean_t):
+            items.append(
+                DependencyItem(
+                    source="game_dlc",
+                    remote_id="BASE_GAME",
+                    title="The Sims 4 (Jeu de base)",
+                    url="",
+                    is_installed=True,
+                    status="GAME_DLC",
+                    is_game_dlc=True,
+                    dlc_name="Jeu de base",
+                    dlc_code="BASE_GAME",
+                    is_comment=False,
+                )
+            )
             continue
 
         starts_with_sims4 = bool(SIMS4_PREFIX_REGEX.match(clean_t))
@@ -145,6 +190,7 @@ def resolve_mod_dependencies(
                     is_game_dlc=True,
                     dlc_name=dlc_name or title,
                     dlc_code=dlc_code,
+                    is_comment=False,
                 )
             )
             continue
@@ -185,11 +231,17 @@ def resolve_mod_dependencies(
         elif title.lower() in installed_by_title:
             is_installed = True
         else:
-            # Score check against all installed mods
+            # Canonical fingerprint check against installed mods
             installed_list = list(installed_by_remote.values()) + list(installed_by_title.values())
-            im_match = ModMatcher.find_best_installed_match(title, installed_list, min_threshold=0.85)
-            if im_match:
-                is_installed = True
+            t_fp = ModMatcher.canonical_fingerprint(title)
+            for im in installed_list:
+                if im.title and ModMatcher.canonical_fingerprint(im.title) == t_fp:
+                    is_installed = True
+                    break
+            if not is_installed:
+                im_match = ModMatcher.find_best_installed_match(title, installed_list, min_threshold=0.85)
+                if im_match:
+                    is_installed = True
 
         # 3. Determine status among the states
         if is_installed:

@@ -450,16 +450,22 @@ def check_catalog_dependencies(
         installed_by_remote = {(im.source, im.remote_id): im for im in all_inst if im.remote_id}
         installed_by_title = {im.title.lower(): im for im in all_inst if im.title}
 
+        overrides = cat_mod.get_requirements_overrides() if cat_mod else {}
         dep_items = resolve_mod_dependencies(
             req_mods,
             session,
             installed_by_remote,
             installed_by_title,
             is_syncing=SyncTracker.is_running,
+            requirements_overrides=overrides,
         )
 
         game_dlcs = [d for d in dep_items if d.is_game_dlc or d.status == "GAME_DLC"]
-        mod_deps = [d for d in dep_items if not (d.is_game_dlc or d.status == "GAME_DLC")]
+        comment_deps = [d for d in dep_items if d.is_comment or d.status == "COMMENT_NOISE"]
+        mod_deps = [
+            d for d in dep_items
+            if not (d.is_game_dlc or d.status == "GAME_DLC" or d.is_comment or d.status == "COMMENT_NOISE")
+        ]
 
         already_installed = [d for d in mod_deps if d.is_installed or d.status == "INSTALLED"]
         missing = [d for d in mod_deps if not d.is_installed and d.status != "INSTALLED"]
@@ -494,6 +500,7 @@ def check_catalog_dependencies(
                 already_installed_dependencies=already_installed,
                 missing_dependencies=found_missing,
                 game_dlc_dependencies=game_dlcs,
+                comment_dependencies=comment_deps,
             )
         elif not_detected_scanning:
             names = ", ".join(f"'{d.title}'" for d in not_detected_scanning)
@@ -508,6 +515,7 @@ def check_catalog_dependencies(
                 already_installed_dependencies=already_installed,
                 missing_dependencies=found_missing,
                 game_dlc_dependencies=game_dlcs,
+                comment_dependencies=comment_deps,
             )
         else:
             final_status = "RESOLVED" if (req_mods or game_dlcs) else (req_status or "NONE")
@@ -522,4 +530,5 @@ def check_catalog_dependencies(
                 already_installed_dependencies=already_installed,
                 missing_dependencies=missing,
                 game_dlc_dependencies=game_dlcs,
+                comment_dependencies=comment_deps,
             )

@@ -42,6 +42,7 @@ class CatalogMod(Base):
     requirements_text = Column(Text, nullable=True)
     requirements_status = Column(String(50), default="NONE")  # NONE, RESOLVED, PENDING_VERIFICATION
     requirements_mods_json = Column(JSON, default=list)  # JSON list of resolved LoversLab dependencies
+    requirements_overrides_json = Column(JSON, default=dict)  # JSON dict of user classification {title: "MOD"|"COMMENT"}
     last_scraped_at = Column(DateTime, default=datetime.now)
 
     __table_args__ = (
@@ -93,6 +94,17 @@ class CatalogMod(Base):
 
     def set_requirements_mods_list(self, reqs: List[Dict[str, Any]]) -> None:
         self.requirements_mods_json = list(reqs) if reqs is not None else []
+
+    def get_requirements_overrides(self) -> Dict[str, str]:
+        if isinstance(self.requirements_overrides_json, dict):
+            return self.requirements_overrides_json
+        try:
+            return json.loads(self.requirements_overrides_json or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def set_requirements_overrides(self, overrides: Dict[str, str]) -> None:
+        self.requirements_overrides_json = dict(overrides) if overrides is not None else {}
 
 
 class InstalledMod(Base):

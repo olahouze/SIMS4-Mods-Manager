@@ -9,10 +9,11 @@ class DependencyItem(BaseModel):
     title: str
     url: str = ""
     is_installed: bool = False
-    status: str = "DETECTED_NOT_INSTALLED"  # "INSTALLED", "DETECTED_NOT_INSTALLED", "NOT_DETECTED_SCANNING", "NOT_DETECTED_FINISHED", "GAME_DLC"
+    status: str = "DETECTED_NOT_INSTALLED"  # "INSTALLED", "DETECTED_NOT_INSTALLED", "NOT_DETECTED_SCANNING", "NOT_DETECTED_FINISHED", "GAME_DLC", "COMMENT_NOISE"
     is_game_dlc: bool = False
     dlc_name: Optional[str] = None
     dlc_code: Optional[str] = None
+    is_comment: bool = False
 
 
 class DependenciesCheckResponse(BaseModel):
@@ -26,6 +27,14 @@ class DependenciesCheckResponse(BaseModel):
     already_installed_dependencies: List[DependencyItem] = []
     missing_dependencies: List[DependencyItem] = []
     game_dlc_dependencies: List[DependencyItem] = []
+    comment_dependencies: List[DependencyItem] = []
+
+
+class RequirementsOverrideRequest(BaseModel):
+    catalog_mod_id: Optional[int] = None
+    source: Optional[str] = "loverslab"
+    remote_id: Optional[str] = None
+    overrides: Dict[str, str] = {}  # { "raw_title": "MOD" | "COMMENT" }
 
 
 

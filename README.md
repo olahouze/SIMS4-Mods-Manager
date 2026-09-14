@@ -1,5 +1,7 @@
 # SIMS 4 Mods Manager 💎
 
+@ TODO : ameliorer la detection des mods dependants avec supression de nombreux elements en dur dans le code de detection et centralisation dans map centrale
+
 Gestionnaire de mods moderne, performant et automatisé pour **Les Sims 4**, conçu avec une **architecture 100% API REST (FastAPI)** et une **interface de bureau réactive (PySide6)**.
 
 L'application centralise la recherche, le contournement des protections anti-bot (Cloudflare Turnstile), la résolution automatique des dépendances en cascade, le téléchargement, l'organisation intelligente des fichiers (`.package` et `.ts4script`), l'activation/désactivation en un clic et le suivi des mises à jour.
@@ -23,13 +25,16 @@ L'application centralise la recherche, le contournement des protections anti-bot
 ## 🚀 Démarrage Rapide
 
 ### 1. Prérequis
+
 - **Python** 3.11 à 3.13
 - **uv** (Gestionnaire de paquets ultra-rapide) :
+
   ```powershell
   scoop install uv
   ```
 
 ### 2. Installation
+
 ```powershell
 # Installation des dépendances du projet
 uv sync
@@ -39,6 +44,7 @@ uv run playwright install chromium
 ```
 
 ### 3. Lancement
+
 ```powershell
 # Mode Interface Graphique (GUI par défaut)
 uv run python run.py
@@ -46,10 +52,12 @@ uv run python run.py
 # Ou Mode Serveur API Autonome (sans GUI)
 uv run python run.py --server --port 8000
 ```
+
 - **Interface Swagger** : [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Interface ReDoc** : [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
 ### 4. Tests & Vérification
+
 ```powershell
 # Exécution de la suite complète par module (151 tests - 100% vert, 0 warning)
 uv run pytest tests/core -v
@@ -79,4 +87,5 @@ Pour explorer l'architecture détaillée, les spécifications techniques et les 
 ---
 
 ## 📄 Licence
+
 Ce projet est distribué sous licence GNU GPL v3. Voir le fichier [LICENSE](./LICENSE) pour plus d'informations.
