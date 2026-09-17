@@ -25,6 +25,27 @@ class SyncTriggerWorker(QThread):
             self.finished_signal.emit(False, str(e))
 
 
+class CatalogFetchWorker(QThread):
+    """Fetches catalog page and accounts asynchronously to keep the UI thread 100% fluid."""
+    data_ready = Signal(dict, list, int)  # res, accounts, fetch_id
+    error_signal = Signal(str, int)
+
+    def __init__(self, api_client, params: dict, fetch_id: int = 0):
+        super().__init__()
+        self.api_client = api_client
+        self.params = params
+        self.fetch_id = fetch_id
+
+    def run(self):
+        try:
+            accounts = self.api_client.get_accounts()
+            res = self.api_client.get_catalog(**self.params)
+            self.data_ready.emit(res, accounts, self.fetch_id)
+        except Exception as e:
+            logger.error(f"CatalogFetchWorker error: {e}")
+            self.error_signal.emit(str(e), self.fetch_id)
+
+
 class InstallWorker(QThread):
     progress = Signal(int, str, str)  # percent, status, details
     finished = Signal(bool, str)

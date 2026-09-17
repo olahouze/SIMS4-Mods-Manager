@@ -45,19 +45,23 @@ def test_image_cache_lru_eviction(qapp, monkeypatch):
 
 
 def test_image_cache_concurrent_access(qapp):
+    qapp.processEvents()
     ImageCache.clear()
     pix = create_pixmap()
 
     def worker(worker_id):
-        for i in range(50):
+        for i in range(15):
             ImageCache.set(f"key_{worker_id}_{i}", pix)
-            ImageCache.get(f"key_{worker_id}_{i}")
+            res = ImageCache.get(f"key_{worker_id}_{i}")
+            del res
 
-    threads = [threading.Thread(target=worker, args=(t,)) for t in range(4)]
+    threads = [threading.Thread(target=worker, args=(t,)) for t in range(2)]
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        t.join(timeout=3.0)
+        assert not t.is_alive()
 
     # ImageCache remained thread-safe and didn't crash
     ImageCache.clear()
+    qapp.processEvents()

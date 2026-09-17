@@ -1,10 +1,26 @@
+import concurrent.futures
 import os
 import pytest
 from fastapi.testclient import TestClient
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 from src.api.app import app
-from src.database import DatabaseManager
+from src.core.session_manager import SessionManager
 from src.core.shutdown_manager import ShutdownManager
+from src.database import DatabaseManager
+
+_tracked_executors = []
+_orig_tpe_init = concurrent.futures.ThreadPoolExecutor.__init__
+
+
+def _tracked_init(self, *args, **kwargs):
+    _tracked_executors.append(self)
+    _orig_tpe_init(self, *args, **kwargs)
+
+
+concurrent.futures.ThreadPoolExecutor.__init__ = _tracked_init
+
 
 
 @pytest.fixture(autouse=True)
@@ -58,11 +74,49 @@ def db_session(tmp_path):
         yield session
 
 
+
+
 @pytest.fixture(scope="session")
 def qapp():
     """QApplication session fixture for UI tests."""
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance()
     if not app:
-        app = QApplication([])
+        app = QApplication(["pytest", "-platform", "offscreen"])
     return app
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Cleanly closes any pooled HTTP sessions, shuts down active ThreadPoolExecutors,
+    and terminates any lingering Qt thread pool tasks to ensure clean process termination.
+    """
+    # 1. Close curl_cffi HTTP sessions
+    try:
+        SessionManager.close_all_http_sessions()
+    except Exception:
+        pass
+
+    # 2. Shutdown any tracked ThreadPoolExecutors
+    for ex in _tracked_executors:
+        try:
+            ex.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+
+    # 3. Clean up Qt threadpool and quit QApplication
+    try:
+        from PySide6.QtCore import QThreadPool
+        from PySide6.QtWidgets import QApplication
+        QThreadPool.globalInstance().waitForDone(50)
+        app = QApplication.instance()
+        if app:
+            app.quit()
+    except Exception:
+        pass
+
+
+
+
+
+

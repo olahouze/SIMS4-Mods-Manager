@@ -20,7 +20,7 @@ from src.ui.components.responsive_card_grid import ResponsiveCardGrid
 from src.ui.components.dependencies_dialog import DependenciesDialog
 from src.ui.components.progress_dialog import ProgressDialog
 from src.ui.components.provider_drawer import ProviderDrawer
-from src.ui.workers.catalog_workers import SyncTriggerWorker, InstallWorker
+from src.ui.workers.catalog_workers import SyncTriggerWorker, InstallWorker, CatalogFetchWorker
 from src.i18n import tr
 from src.utils.logger import logger
 
@@ -45,9 +45,11 @@ class CatalogView(QWidget):
 
         self._page1_displayed = False
         self._last_pages_completed = 0
+        self._fetch_worker = None
+        self._fetch_id = 0
 
         self.IDLE_MONITOR_INTERVAL_MS = 4000
-        self.ACTIVE_MONITOR_INTERVAL_MS = 600
+        self.ACTIVE_MONITOR_INTERVAL_MS = 1200
 
         # Background sync monitoring timer with adaptive back-off
         self.monitor_timer = QTimer(self)
@@ -266,75 +268,94 @@ class CatalogView(QWidget):
         elif "Mises à jour" in stat_text:
             status_param = "updates_available"
 
-        try:
-            # Query auth status for badges
-            accounts = self.api_client.get_accounts()
-            is_patreon_auth = any(a.get("provider_name") == "patreon" and a.get("is_member") for a in accounts)
-            is_loverslab_auth = any(a.get("provider_name") == "loverslab" and a.get("is_member") for a in accounts)
+        params = {
+            "search": filter_state["search"] or None,
+            "source": source_param,
+            "access": access_param,
+            "status": status_param,
+            "mod_type": type_param,
+            "sort": sort_param,
+            "page": self.current_page,
+            "limit": self.page_size,
+        }
 
-            # Query catalog from API with pagination
-            res = self.api_client.get_catalog(
-                search=filter_state["search"] or None,
-                source=source_param,
-                access=access_param,
-                status=status_param,
-                mod_type=type_param,
-                sort=sort_param,
-                page=self.current_page,
-                limit=self.page_size,
+        # Cancel previous background fetch if active
+        if self._fetch_worker and self._fetch_worker.isRunning():
+            try:
+                self._fetch_worker.data_ready.disconnect()
+                self._fetch_worker.error_signal.disconnect()
+            except Exception:
+                pass
+            self._fetch_worker.terminate()
+            self._fetch_worker = None
+
+        self._fetch_id += 1
+        self._fetch_worker = CatalogFetchWorker(self.api_client, params, fetch_id=self._fetch_id)
+        self._fetch_worker.data_ready.connect(self._on_catalog_data_ready)
+        self._fetch_worker.error_signal.connect(self._on_catalog_fetch_error)
+        self._fetch_worker.start()
+
+    def _on_catalog_data_ready(self, res: dict, accounts: list, fetch_id: int):
+        if fetch_id != self._fetch_id:
+            return
+
+        is_patreon_auth = any(a.get("provider_name") == "patreon" and a.get("is_member") for a in accounts)
+        is_loverslab_auth = any(a.get("provider_name") == "loverslab" and a.get("is_member") for a in accounts)
+
+        items = res.get("items", [])
+        self.total_items = res.get("total", 0)
+        self.total_pages = max(1, math.ceil(self.total_items / self.page_size))
+
+        # Update pagination controls
+        self.btn_prev.setEnabled(self.current_page > 1)
+        self.btn_next.setEnabled(self.current_page < self.total_pages)
+        self.lbl_page_info.setText(
+            tr("catalog.page_info", current=self.current_page, total=self.total_pages, total_items=self.total_items)
+        )
+
+        if not items:
+            self.card_grid.set_empty_message(tr("catalog.empty_desc"))
+            return
+
+        new_cards = []
+        for m in items:
+            mod_dict = {
+                "id": m["id"],
+                "source": m["source"],
+                "remote_id": m["remote_id"],
+                "title": m["title"],
+                "author": m["author"],
+                "page_url": m["page_url"],
+                "thumbnail_url": m["thumbnail_url"],
+                "updated_date": m["updated_date"],
+                "patreon_status": m["patreon_status"],
+                "patreon_tier": m["patreon_tier"],
+                "requirements_text": m.get("requirements_text"),
+                "requirements_status": m.get("requirements_status", "NONE"),
+                "dependencies": m.get("dependencies", []),
+                "external_links": [],
+                "download_urls": [],
+            }
+
+            card = ModCard(
+                mod_dict,
+                is_installed=m.get("is_installed", False),
+                has_update=m.get("has_update", False),
+                is_patreon_auth=is_patreon_auth,
+                is_loverslab_auth=is_loverslab_auth,
             )
-            items = res.get("items", [])
-            self.total_items = res.get("total", 0)
-            self.total_pages = max(1, math.ceil(self.total_items / self.page_size))
-
-            # Update pagination controls
-            self.btn_prev.setEnabled(self.current_page > 1)
-            self.btn_next.setEnabled(self.current_page < self.total_pages)
-            self.lbl_page_info.setText(
-                tr("catalog.page_info", current=self.current_page, total=self.total_pages, total_items=self.total_items)
+            card.install_requested.connect(self.install_mod)
+            card.details_requested.connect(
+                lambda d, inst=m.get("is_installed", False): self._show_mod_details(d, inst)
             )
+            new_cards.append(card)
 
-            if not items:
-                self.card_grid.set_empty_message(tr("catalog.empty_desc"))
-                return
+        self.card_grid.set_cards(new_cards)
 
-            new_cards = []
-            for m in items:
-                mod_dict = {
-                    "id": m["id"],
-                    "source": m["source"],
-                    "remote_id": m["remote_id"],
-                    "title": m["title"],
-                    "author": m["author"],
-                    "page_url": m["page_url"],
-                    "thumbnail_url": m["thumbnail_url"],
-                    "updated_date": m["updated_date"],
-                    "patreon_status": m["patreon_status"],
-                    "patreon_tier": m["patreon_tier"],
-                    "requirements_text": m.get("requirements_text"),
-                    "requirements_status": m.get("requirements_status", "NONE"),
-                    "dependencies": m.get("dependencies", []),
-                    "external_links": [],
-                    "download_urls": [],
-                }
-
-                card = ModCard(
-                    mod_dict,
-                    is_installed=m.get("is_installed", False),
-                    has_update=m.get("has_update", False),
-                    is_patreon_auth=is_patreon_auth,
-                    is_loverslab_auth=is_loverslab_auth,
-                )
-                card.install_requested.connect(self.install_mod)
-                card.details_requested.connect(
-                    lambda d, inst=m.get("is_installed", False): self._show_mod_details(d, inst)
-                )
-                new_cards.append(card)
-
-            self.card_grid.set_cards(new_cards)
-
-        except Exception as e:
-            logger.error(f"Erreur API lors du rafraîchissement du catalogue: {e}")
+    def _on_catalog_fetch_error(self, error_msg: str, fetch_id: int):
+        if fetch_id != self._fetch_id:
+            return
+        logger.error(f"Erreur API lors du rafraîchissement du catalogue: {error_msg}")
 
     def _on_pause_sync(self, provider: str = "loverslab"):
         try:
@@ -413,7 +434,6 @@ class CatalogView(QWidget):
                     self.refresh_catalog()
                 elif pages_done > self._last_pages_completed:
                     self._last_pages_completed = pages_done
-                    self.refresh_catalog()
             elif has_error:
                 if self.monitor_timer.interval() != self.IDLE_MONITOR_INTERVAL_MS:
                     self.monitor_timer.setInterval(self.IDLE_MONITOR_INTERVAL_MS)

@@ -17,6 +17,19 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+def _get_json_data(val: Any, default_type: type):
+    if isinstance(val, default_type):
+        return val
+    try:
+        return json.loads(val or ("[]" if default_type is list else "{}"))
+    except (json.JSONDecodeError, TypeError):
+        return default_type()
+
+
+def _set_json_data(val: Any, default_type: type):
+    return default_type(val) if val is not None else default_type()
+
+
 class CatalogMod(Base):
     """Représente un mod répertorié dans le catalogue distant (LoversLab, Patreon...)."""
 
@@ -52,59 +65,34 @@ class CatalogMod(Base):
     )
 
     def get_tags_list(self) -> List[str]:
-        if isinstance(self.tags, list):
-            return self.tags
-        try:
-            return json.loads(self.tags or "[]")
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _get_json_data(self.tags, list)
 
     def set_tags_list(self, tags_list: List[str]) -> None:
-        self.tags = list(tags_list) if tags_list is not None else []
+        self.tags = _set_json_data(tags_list, list)
 
     def get_download_urls_list(self) -> List[Dict[str, Any]]:
-        if isinstance(self.download_urls, list):
-            return self.download_urls
-        try:
-            return json.loads(self.download_urls or "[]")
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _get_json_data(self.download_urls, list)
 
     def set_download_urls_list(self, urls: List[Dict[str, Any]]) -> None:
-        self.download_urls = list(urls) if urls is not None else []
+        self.download_urls = _set_json_data(urls, list)
 
     def get_external_links_list(self) -> List[str]:
-        if isinstance(self.external_links, list):
-            return self.external_links
-        try:
-            return json.loads(self.external_links or "[]")
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _get_json_data(self.external_links, list)
 
     def set_external_links_list(self, links: List[str]) -> None:
-        self.external_links = list(links) if links is not None else []
+        self.external_links = _set_json_data(links, list)
 
     def get_requirements_mods_list(self) -> List[Dict[str, Any]]:
-        if isinstance(self.requirements_mods_json, list):
-            return self.requirements_mods_json
-        try:
-            return json.loads(self.requirements_mods_json or "[]")
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _get_json_data(self.requirements_mods_json, list)
 
     def set_requirements_mods_list(self, reqs: List[Dict[str, Any]]) -> None:
-        self.requirements_mods_json = list(reqs) if reqs is not None else []
+        self.requirements_mods_json = _set_json_data(reqs, list)
 
     def get_requirements_overrides(self) -> Dict[str, str]:
-        if isinstance(self.requirements_overrides_json, dict):
-            return self.requirements_overrides_json
-        try:
-            return json.loads(self.requirements_overrides_json or "{}")
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return _get_json_data(self.requirements_overrides_json, dict)
 
     def set_requirements_overrides(self, overrides: Dict[str, str]) -> None:
-        self.requirements_overrides_json = dict(overrides) if overrides is not None else {}
+        self.requirements_overrides_json = _set_json_data(overrides, dict)
 
 
 class InstalledMod(Base):
@@ -128,15 +116,10 @@ class InstalledMod(Base):
     catalog_mod = relationship("CatalogMod", backref="installed_mod", uselist=False)
 
     def get_installed_files_list(self) -> List[str]:
-        if isinstance(self.installed_files, list):
-            return self.installed_files
-        try:
-            return json.loads(self.installed_files or "[]")
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _get_json_data(self.installed_files, list)
 
     def set_installed_files_list(self, files: List[str]) -> None:
-        self.installed_files = list(files) if files is not None else []
+        self.installed_files = _set_json_data(files, list)
 
 
 class AccountSession(Base):
@@ -152,12 +135,7 @@ class AccountSession(Base):
     last_verified = Column(DateTime, default=datetime.now)
 
     def get_cookies_dict(self) -> Dict[str, str]:
-        if isinstance(self.cookies_data, dict):
-            return self.cookies_data
-        try:
-            return json.loads(self.cookies_data or "{}")
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return _get_json_data(self.cookies_data, dict)
 
     def set_cookies_dict(self, cookies: Dict[str, str]) -> None:
-        self.cookies_data = dict(cookies) if cookies is not None else {}
+        self.cookies_data = _set_json_data(cookies, dict)

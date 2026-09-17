@@ -40,6 +40,8 @@ class SyncTracker:
     last_completed_at: Optional[str] = None
     categories: Dict[str, Dict[str, Any]] = {}
     providers_status: Dict[str, str] = {"loverslab": "OK", "patreon": "OK"}
+    _cached_db_count: int = 0
+    _last_count_time: float = 0.0
 
     @classmethod
     def start(cls, max_pages: int, categories_list: Optional[List[Dict[str, Any]]] = None) -> None:
@@ -59,6 +61,11 @@ class SyncTracker:
             cls.error_message = None
             cls.page1_ready = False
             cls.providers_status["loverslab"] = "RUNNING"
+            try:
+                cls._cached_db_count = DatabaseManager.get_instance().get_catalog_mods_count()
+                cls._last_count_time = time.time()
+            except Exception:
+                pass
             if categories_list:
                 cls.categories = {
                     c["id"]: {
@@ -164,6 +171,11 @@ class SyncTracker:
             cls.is_paused = False
             cls.is_stopped = False
             cls.providers_status["loverslab"] = "OK"
+            try:
+                cls._cached_db_count = DatabaseManager.get_instance().get_catalog_mods_count()
+                cls._last_count_time = time.time()
+            except Exception:
+                pass
             for cat_info in cls.categories.values():
                 if cat_info.get("status") in ["IN_PROGRESS", "PENDING"]:
                     cat_info["status"] = "COMPLETED"
@@ -207,7 +219,14 @@ class SyncTracker:
     @classmethod
     def to_response(cls) -> CatalogSyncStatusResponse:
         with cls._lock:
-            db_count = DatabaseManager.get_instance().get_catalog_mods_count()
+            now = time.time()
+            if not cls.is_running or (now - cls._last_count_time) > 10.0 or cls._cached_db_count == 0:
+                try:
+                    cls._cached_db_count = DatabaseManager.get_instance().get_catalog_mods_count()
+                    cls._last_count_time = now
+                except Exception:
+                    pass
+            db_count = cls._cached_db_count
             cat_items = [
                 SubCategoryProgress(
                     id=c["id"],

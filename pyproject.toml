@@ -47,6 +47,7 @@ ignore = ["E501", "B008", "B904"]
 "run.py" = ["E402"]
 
 [tool.pytest.ini_options]
+addopts = "--capture=sys"
 filterwarnings = [
     "ignore:.*StarletteDeprecationWarning.*",
     "ignore:.*httpx2.*",
@@ -55,3 +56,4 @@ filterwarnings = [
     "ignore::Warning:fastapi.*",
     "ignore::Warning:starlette.*",
 ]
+

@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QRadioButton,
     QButtonGroup,
+    QScrollArea,
+    QWidget,
 )
 from PySide6.QtCore import Qt, Signal, QThread
 
@@ -50,6 +52,7 @@ class ReportPreviewDialog(QDialog):
     """
 
     report_sent = Signal(str)  # emitted with reported_at string on success
+    override_changed = Signal(str, str)  # emitted with (module_title, "COMMENT" | "MOD")
 
     def __init__(
         self,
@@ -57,6 +60,7 @@ class ReportPreviewDialog(QDialog):
         author: str,
         missing_modules: List[str],
         unnecessary_modules: Optional[List[str]] = None,
+        requirements_overrides: Optional[Dict[str, str]] = None,
         source: str = "loverslab",
         page_url: str = "",
         remote_id: str = "",
@@ -69,6 +73,7 @@ class ReportPreviewDialog(QDialog):
         self.author = author or "Author"
         self.missing_modules = list(missing_modules or [])
         self.unnecessary_modules = list(unnecessary_modules or [])
+        self.requirements_overrides = dict(requirements_overrides or {})
         self.source = source
         self.page_url = page_url
         self.remote_id = remote_id
@@ -84,8 +89,8 @@ class ReportPreviewDialog(QDialog):
             )
 
         self.setWindowTitle(tr("report_dialog.title"))
-        self.setMinimumWidth(620)
-        self.setMinimumHeight(520)
+        self.resize(660, 680)
+        self.setMinimumSize(580, 520)
         self._init_ui()
 
     def _init_ui(self):
@@ -108,7 +113,7 @@ class ReportPreviewDialog(QDialog):
         # Subtitle info
         author_display = self.author if self.author.startswith("@") else f"@{self.author}"
         info_lbl = QLabel(
-            tr("report_dialog.info", author=author_display, count=len(self.missing_modules))
+            tr("report_dialog.info", author=author_display, count=len(self.missing_modules) or len(self.unnecessary_modules))
         )
         info_lbl.setStyleSheet("font-size: 12px; color: #94a3b8; line-height: 1.4;")
         info_lbl.setWordWrap(True)
@@ -120,11 +125,11 @@ class ReportPreviewDialog(QDialog):
             background-color: #1e1b4b;
             border: 1px solid #4f46e5;
             border-radius: 8px;
-            padding: 10px 12px;
+            padding: 8px 10px;
         """)
         s_layout = QVBoxLayout(summary_frame)
-        s_layout.setContentsMargins(8, 8, 8, 8)
-        s_layout.setSpacing(8)
+        s_layout.setContentsMargins(6, 6, 6, 6)
+        s_layout.setSpacing(6)
 
         s_title = QLabel(f"📦 {tr('report_dialog.unfound_list_title')}")
         s_title.setStyleSheet("font-size: 12px; font-weight: 700; color: #c7d2fe;")
@@ -138,11 +143,24 @@ class ReportPreviewDialog(QDialog):
         self.module_checkboxes = []
 
         all_modules = []
+        seen = set()
         for m in self.missing_modules:
-            all_modules.append((m, True))
+            if m and m not in seen:
+                seen.add(m)
+                is_missing = self.requirements_overrides.get(m) != "COMMENT"
+                all_modules.append((m, is_missing))
         for u in self.unnecessary_modules:
-            if u not in self.missing_modules:
-                all_modules.append((u, False))
+            if u and u not in seen:
+                seen.add(u)
+                is_missing = self.requirements_overrides.get(u) == "MOD"
+                all_modules.append((u, is_missing))
+
+        # Scrollable container for module items to guarantee visibility of text edit and send button
+        rows_container = QWidget()
+        rows_container.setStyleSheet("background: transparent;")
+        rows_layout = QVBoxLayout(rows_container)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(6)
 
         for mod_name, is_missing_default in all_modules:
             row_frame = QFrame()
@@ -243,7 +261,7 @@ class ReportPreviewDialog(QDialog):
             choice_layout.addStretch()
             r_layout.addLayout(choice_layout)
 
-            # Connect toggle handlers
+            # Connect toggle handlers with bidirectional override propagation
             def _make_toggled_handler(c=cb, m=rb_missing, u=rb_unnecessary):
                 def _handler():
                     m.setEnabled(c.isChecked())
@@ -252,10 +270,19 @@ class ReportPreviewDialog(QDialog):
                 return _handler
 
             cb.stateChanged.connect(_make_toggled_handler())
-            rb_missing.toggled.connect(self._on_module_selection_changed)
-            rb_unnecessary.toggled.connect(self._on_module_selection_changed)
 
-            s_layout.addWidget(row_frame)
+            def _make_rb_handler(target_name=mod_name, is_mod=True):
+                def _rb_toggled(checked: bool):
+                    if checked:
+                        self.requirements_overrides[target_name] = "MOD" if is_mod else "COMMENT"
+                        self.override_changed.emit(target_name, "MOD" if is_mod else "COMMENT")
+                    self._on_module_selection_changed()
+                return _rb_toggled
+
+            rb_missing.toggled.connect(_make_rb_handler(mod_name, True))
+            rb_unnecessary.toggled.connect(_make_rb_handler(mod_name, False))
+
+            rows_layout.addWidget(row_frame)
             self.module_checkboxes.append(cb)
             self.module_items.append({
                 "name": mod_name,
@@ -263,6 +290,15 @@ class ReportPreviewDialog(QDialog):
                 "rb_missing": rb_missing,
                 "rb_unnecessary": rb_unnecessary,
             })
+
+        modules_scroll = QScrollArea()
+        modules_scroll.setWidgetResizable(True)
+        modules_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        modules_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        modules_scroll.setMaximumHeight(190)
+        modules_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        modules_scroll.setWidget(rows_container)
+        s_layout.addWidget(modules_scroll)
 
         layout.addWidget(summary_frame)
 
@@ -273,6 +309,7 @@ class ReportPreviewDialog(QDialog):
 
         self.text_edit = QTextEdit()
         self.text_edit.setPlainText(self.initial_message)
+        self.text_edit.setMinimumHeight(150)
         self.text_edit.setStyleSheet("""
             QTextEdit {
                 background-color: #0b0e1a;

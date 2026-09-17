@@ -47,11 +47,13 @@ class ImageCache:
     @classmethod
     def set(cls, key: str, pixmap: QPixmap) -> None:
         """Stores a pixmap into the LRU cache with byte-budget eviction."""
-        if not key or pixmap.isNull():
+        if not key:
             return
 
-        size = cls._estimate_pixmap_size(pixmap)
         with cls._lock:
+            if pixmap.isNull():
+                return
+            size = cls._estimate_pixmap_size(pixmap)
             if key in cls._cache:
                 cls._current_bytes -= cls._byte_sizes.get(key, 0)
 
@@ -102,9 +104,18 @@ class ImageCache:
         return None
 
     @classmethod
+    def pop(cls, key: str) -> None:
+        """Removes a single key from cache."""
+        with cls._lock:
+            if key in cls._cache:
+                cls._cache.pop(key, None)
+                cls._current_bytes -= cls._byte_sizes.pop(key, 0)
+
+    @classmethod
     def clear(cls) -> None:
         """Clears all in-memory pixmaps."""
         with cls._lock:
             cls._cache.clear()
             cls._byte_sizes.clear()
             cls._current_bytes = 0
+

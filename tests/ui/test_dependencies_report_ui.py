@@ -302,3 +302,86 @@ def test_mod_detail_view_categorized_dependencies_rendering(qapp):
         assert "UnknownFramework" in view._unfound_dep_names
 
 
+def test_interpellate_button_preserved_when_all_deps_are_comments(qapp):
+    """Verifies that btn_report_author remains visible even when 100% of dependencies are classified as comments."""
+    from src.ui.views.mod_detail_view import ModDetailView
+
+    view = ModDetailView()
+    data = {
+        "id": 101,
+        "title": "Mod With Comments Only",
+        "author": "CreatorSims",
+        "source": "loverslab",
+        "remote_id": "9988",
+        "requirements_overrides": {
+            "Note About Installation": "COMMENT",
+            "Please Read Description": "COMMENT",
+        },
+        "dependencies": [
+            {
+                "remote_id": "",
+                "title": "Note About Installation",
+                "is_game_dlc": False,
+                "is_installed": False,
+                "status": "NOT_DETECTED_FINISHED",
+            },
+            {
+                "remote_id": "",
+                "title": "Please Read Description",
+                "is_game_dlc": False,
+                "is_installed": False,
+                "status": "NOT_DETECTED_FINISHED",
+            },
+        ],
+    }
+
+    with patch.object(view, "_trigger_check_report_status") as mock_check:
+        view.mod_data = data
+        view._render_requirements(data)
+
+        # The report author button must remain visible!
+        assert not view.btn_report_author.isHidden()
+        assert len(view._unfound_dep_names) == 0
+        assert len(view._comment_deps) == 2
+        mock_check.assert_called_once()
+
+
+def test_report_preview_dialog_scroll_and_bidirectional_sync(qapp):
+    """Verifies ReportPreviewDialog contains a QScrollArea and emits override_changed when toggling choices."""
+    from PySide6.QtWidgets import QScrollArea
+    from src.ui.components.report_preview_dialog import ReportPreviewDialog
+
+    dlg = ReportPreviewDialog(
+        mod_title="Custom Animation Pack",
+        author="AnimAuthor",
+        missing_modules=[],
+        unnecessary_modules=["Note 1", "Note 2"],
+        requirements_overrides={"Note 1": "COMMENT", "Note 2": "COMMENT"},
+        source="loverslab",
+    )
+
+    # 1. Must contain a QScrollArea for module choices
+    scroll_areas = dlg.findChildren(QScrollArea)
+    assert len(scroll_areas) >= 1
+
+    # 2. Message generated must specifically target comments (not missing files)
+    message_text = dlg.text_edit.toPlainText()
+    assert "Note 1" in message_text
+    assert "comments" in message_text.lower() or "text notes" in message_text.lower()
+    assert "could not be identified" not in message_text
+
+    # 3. Bidirectional override change signal
+    received_overrides = []
+    dlg.override_changed.connect(lambda name, o_type: received_overrides.append((name, o_type)))
+
+    # Toggle Note 1 to "MOD" (missing module)
+    note1_item = next(item for item in dlg.module_items if item["name"] == "Note 1")
+    note1_item["rb_missing"].setChecked(True)
+
+    assert ("Note 1", "MOD") in received_overrides
+    assert dlg.requirements_overrides["Note 1"] == "MOD"
+    # The message should now contain the missing modules section
+    new_message = dlg.text_edit.toPlainText()
+    assert "could not be identified" in new_message.lower()
+
+

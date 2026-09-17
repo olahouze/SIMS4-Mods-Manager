@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from src.api.schemas.catalog import (
     CatalogListResponse,
@@ -160,7 +160,12 @@ def get_catalog(
         query = query.order_by(CatalogMod.updated_date.desc().nullslast())
 
     total = query.count()
-    paginated_mods = query.offset((page - 1) * limit).limit(limit).all()
+    paginated_mods = (
+        query.options(defer(CatalogMod.description), defer(CatalogMod.requirements_text))
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
 
     page_remote_ids = [m.remote_id for m in paginated_mods if m.remote_id]
     page_cat_ids = [m.id for m in paginated_mods if m.id]

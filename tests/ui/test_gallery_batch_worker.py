@@ -41,7 +41,8 @@ def test_gallery_batch_worker_disk_and_memory_cache(qapp, tmp_path):
     idx, pix = received_pixmaps[0]
     assert idx == 0
     assert not pix.isNull()
-    assert test_url in GalleryBatchWorker._PIXMAP_CACHE
+    from src.ui.components.image_cache import ImageCache
+    assert ImageCache.get(test_url) is not None
 
     # Second run: hits in-memory cache directly
     received_pixmaps.clear()
@@ -72,12 +73,15 @@ def test_gallery_batch_worker_parallel_network_fetch(qapp, tmp_path, monkeypatch
     monkeypatch.setattr(SessionManager, "get_http_session", lambda name: mock_session)
 
     # Clear memory cache for these urls
+    from src.ui.components.image_cache import ImageCache
     for u in urls:
-        GalleryBatchWorker._PIXMAP_CACHE.pop(u, None)
+        ImageCache.pop(u)
 
     received = []
+
     worker = GalleryBatchWorker(urls, cache_dir, load_id=1)
     worker.thumb_ready.connect(lambda idx, pix: received.append((idx, pix)))
+
     worker.run()
 
     assert len(received) == 2
@@ -102,8 +106,10 @@ def test_gallery_batch_worker_cancellation(qapp, tmp_path):
 
 def test_mod_detail_view_immediate_reset_and_race_guard(qapp, monkeypatch):
     """Verifies that ModDetailView immediately resets the UI state on load_mod and protects against race conditions."""
-    from src.ui.workers import FetchDetailsWorker
+    from src.ui.workers import FetchDetailsWorker, DescriptionImageLoaderWorker, GalleryBatchWorker
     monkeypatch.setattr(FetchDetailsWorker, "start", lambda self: None)
+    monkeypatch.setattr(DescriptionImageLoaderWorker, "start", lambda self: None)
+    monkeypatch.setattr(GalleryBatchWorker, "start", lambda self: None)
 
     view = ModDetailView()
 
@@ -160,5 +166,6 @@ def test_mod_detail_view_immediate_reset_and_race_guard(qapp, monkeypatch):
         assert "Fresh Description for Mod 2" in view.desc_browser.toHtml()
 
     finally:
+        view.cleanup()
         view.deleteLater()
         qapp.processEvents()

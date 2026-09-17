@@ -8,7 +8,7 @@ Workers d'arrière-plan (QThread) pour la vue détaillée d'un mod :
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
-from typing import Optional, List, Dict
+from typing import Optional, List
 
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtGui import QPixmap
@@ -27,10 +27,10 @@ class FetchDetailsWorker(QThread):
 
     def __init__(
         self,
-        mod_id: Optional[int],
-        page_url: Optional[str],
-        source: str,
-        remote_id: str,
+        mod_id: Optional[int] = None,
+        page_url: Optional[str] = None,
+        source: str = "loverslab",
+        remote_id: str = "",
         load_id: int = 0,
     ):
         super().__init__()
@@ -95,9 +95,6 @@ class GalleryBatchWorker(QThread):
     """
     thumb_ready = Signal(int, QPixmap)
 
-    _PIXMAP_CACHE: Dict[str, QPixmap] = {}
-    _MAX_CACHE_SIZE: int = 200
-
     def __init__(self, urls: List[str], cache_dir: Path, load_id: int = 0):
         super().__init__()
         self.urls = urls
@@ -121,10 +118,11 @@ class GalleryBatchWorker(QThread):
             if self._is_cancelled:
                 return
 
-            cached_pix = ImageCache.get(url) or self._PIXMAP_CACHE.get(url)
+            cached_pix = ImageCache.get(url)
             if cached_pix:
                 self.thumb_ready.emit(idx, cached_pix)
                 continue
+
 
             cached_path = self.cache_dir / f"thumb_{hash_url(url)}{infer_extension(url)}"
 
@@ -183,9 +181,7 @@ class GalleryBatchWorker(QThread):
     @classmethod
     def _store_pixmap(cls, url: str, pix: QPixmap):
         ImageCache.set(url, pix)
-        if len(cls._PIXMAP_CACHE) >= cls._MAX_CACHE_SIZE:
-            cls._PIXMAP_CACHE.pop(next(iter(cls._PIXMAP_CACHE)))
-        cls._PIXMAP_CACHE[url] = pix
+
 
 
 class GalleryThumbWorker(QThread):
