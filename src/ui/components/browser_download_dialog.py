@@ -10,15 +10,16 @@ from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, Signal
 
 from src.services.browser_updater_service import BrowserUpdaterService
 from src.i18n import tr
 from src.utils.logger import logger
+from src.utils.thread_utils import BaseWorker, safe_stop_thread
 
 
-class BrowserInstallWorker(QThread):
-    """Worker thread running the Playwright Chromium installation stream."""
+class BrowserInstallWorker(BaseWorker):
+    """Worker task running the Playwright Chromium installation stream."""
 
     progress_updated = Signal(int, str)
     install_finished = Signal(bool, str)
@@ -28,17 +29,24 @@ class BrowserInstallWorker(QThread):
         self._cancel_event = threading.Event()
 
     def cancel(self):
+        super().cancel()
         self._cancel_event.set()
 
     def run(self):
-        def _on_progress(pct: int, msg: str):
-            self.progress_updated.emit(pct, msg)
+        self._is_running = True
+        try:
+            def _on_progress(pct: int, msg: str):
+                if not self._is_cancelled:
+                    self.progress_updated.emit(pct, msg)
 
-        success, msg = BrowserUpdaterService.install_chromium_stream(
-            progress_callback=_on_progress,
-            cancel_event=self._cancel_event,
-        )
-        self.install_finished.emit(success, msg)
+            success, msg = BrowserUpdaterService.install_chromium_stream(
+                progress_callback=_on_progress,
+                cancel_event=self._cancel_event,
+            )
+            if not self._is_cancelled:
+                self.install_finished.emit(success, msg)
+        finally:
+            self._is_running = False
 
 
 class BrowserDownloadDialog(QDialog):
@@ -171,9 +179,9 @@ class BrowserDownloadDialog(QDialog):
             self.reject()
 
     def closeEvent(self, event):
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(1000)
+        if self.worker:
+            safe_stop_thread(self.worker)
+            self.worker = None
         super().closeEvent(event)
 
     @classmethod

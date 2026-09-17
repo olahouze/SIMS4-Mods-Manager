@@ -1,5 +1,5 @@
 """
-Workers d'arrière-plan (QThread) pour la vue détaillée d'un mod :
+Workers d'arrière-plan (BaseWorker / QThreadPool) pour la vue détaillée d'un mod :
 - Récupération asynchrone des métadonnées et prérequis (FetchDetailsWorker)
 - Téléchargement et mise en cache parallèle des miniatures de la galerie (GalleryBatchWorker)
 - Rétrocompatibilité unitaire (GalleryThumbWorker)
@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 from typing import Optional, List
 
-from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QPixmap
 
 from src.api.client import get_api_client
@@ -19,9 +19,10 @@ from src.core.session_manager import SessionManager
 from src.ui.components.image_cache import ImageCache
 from src.utils.cache_utils import hash_url, infer_extension
 from src.utils.logger import logger
+from src.utils.thread_utils import BaseWorker
 
 
-class FetchDetailsWorker(QThread):
+class FetchDetailsWorker(BaseWorker):
     finished = Signal(dict)
     failed = Signal(str)
 
@@ -42,6 +43,9 @@ class FetchDetailsWorker(QThread):
 
     def run(self):
         try:
+            self._is_running = True
+            if self._is_cancelled:
+                return
             api_client = get_api_client()
             if self.mod_id:
                 data = api_client.get_catalog_mod_details(self.mod_id)
@@ -57,6 +61,9 @@ class FetchDetailsWorker(QThread):
                                 break
                 except Exception as e:
                     logger.debug(f"Could not find catalog id for installed mod #{self.remote_id}: {e}")
+
+                if self._is_cancelled:
+                    return
 
                 if found_id:
                     data = api_client.get_catalog_mod_details(found_id)
@@ -80,12 +87,17 @@ class FetchDetailsWorker(QThread):
                         "description": "",
                         "screenshots": [],
                     }
-            self.finished.emit(data)
+
+            if not self._is_cancelled:
+                self.finished.emit(data)
         except Exception as e:
-            self.failed.emit(str(e))
+            if not self._is_cancelled:
+                self.failed.emit(str(e))
+        finally:
+            self._is_running = False
 
 
-class GalleryBatchWorker(QThread):
+class GalleryBatchWorker(BaseWorker):
     """
     Worker d'arrière-plan optimisé pour charger l'ensemble des images de la galerie en parallèle :
     1. Vérification immédiate du cache mémoire (0 ms)
@@ -100,73 +112,29 @@ class GalleryBatchWorker(QThread):
         self.urls = urls
         self.cache_dir = cache_dir
         self.load_id = load_id
-        self._is_cancelled = False
-
-    def cancel(self):
-        """Signal d'annulation coopérative pour interrompre les téléchargements en attente."""
-        self._is_cancelled = True
 
     def run(self):
         if not self.urls:
             return
 
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        to_download = []
+        self._is_running = True
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            to_download = []
 
-        # Phase 1 : Rendu immédiat depuis le cache mémoire ou le cache disque local
-        for idx, url in enumerate(self.urls):
-            if self._is_cancelled:
-                return
+            # Phase 1 : Rendu immédiat depuis le cache mémoire ou le cache disque local
+            for idx, url in enumerate(self.urls):
+                if self._is_cancelled:
+                    return
 
-            cached_pix = ImageCache.get(url)
-            if cached_pix:
-                self.thumb_ready.emit(idx, cached_pix)
-                continue
-
-
-            cached_path = self.cache_dir / f"thumb_{hash_url(url)}{infer_extension(url)}"
-
-            if cached_path.exists() and cached_path.stat().st_size > 0:
-                pix = QPixmap(str(cached_path))
-                if not pix.isNull():
-                    scaled = pix.scaled(
-                        170,
-                        110,
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    self._store_pixmap(url, scaled)
-                    self.thumb_ready.emit(idx, scaled)
+                cached_pix = ImageCache.get(url)
+                if cached_pix:
+                    self.thumb_ready.emit(idx, cached_pix)
                     continue
 
-            to_download.append((idx, url, cached_path))
+                cached_path = self.cache_dir / f"thumb_{hash_url(url)}{infer_extension(url)}"
 
-        if not to_download or self._is_cancelled:
-            return
-
-        # Phase 2 : Téléchargement parallèle avec session HTTP mutualisée
-        session = SessionManager.get_http_session("loverslab")
-
-        def _fetch_one(item):
-            if self._is_cancelled:
-                return None
-            idx, url, cached_path = item
-            try:
-                resp = session.get(url, timeout=15)
-                if resp.status_code == 200 and len(resp.content) > 0:
-                    with open(cached_path, "wb") as f:
-                        f.write(resp.content)
-                    return idx, url, cached_path
-            except Exception as e:
-                logger.debug(f"Erreur téléchargement miniature galerie {url}: {e}")
-            return None
-
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            for result in executor.map(_fetch_one, to_download):
-                if self._is_cancelled:
-                    break
-                if result:
-                    idx, url, cached_path = result
+                if cached_path.exists() and cached_path.stat().st_size > 0:
                     pix = QPixmap(str(cached_path))
                     if not pix.isNull():
                         scaled = pix.scaled(
@@ -177,14 +145,56 @@ class GalleryBatchWorker(QThread):
                         )
                         self._store_pixmap(url, scaled)
                         self.thumb_ready.emit(idx, scaled)
+                        continue
+
+                to_download.append((idx, url, cached_path))
+
+            if not to_download or self._is_cancelled:
+                return
+
+            # Phase 2 : Téléchargement parallèle avec session HTTP mutualisée
+            session = SessionManager.get_http_session("loverslab")
+
+            def _fetch_one(item):
+                if self._is_cancelled:
+                    return None
+                idx, url, cached_path = item
+                try:
+                    resp = session.get(url, timeout=15)
+                    if resp.status_code == 200 and len(resp.content) > 0:
+                        with open(cached_path, "wb") as f:
+                            f.write(resp.content)
+                        return idx, url, cached_path
+                except Exception as e:
+                    logger.debug(f"Erreur téléchargement miniature galerie {url}: {e}")
+                return None
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                for result in executor.map(_fetch_one, to_download):
+                    if self._is_cancelled:
+                        break
+                    if result:
+                        idx, url, cached_path = result
+                        pix = QPixmap(str(cached_path))
+                        if not pix.isNull():
+                            scaled = pix.scaled(
+                                170,
+                                110,
+                                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            self._store_pixmap(url, scaled)
+                            if not self._is_cancelled:
+                                self.thumb_ready.emit(idx, scaled)
+        finally:
+            self._is_running = False
 
     @classmethod
     def _store_pixmap(cls, url: str, pix: QPixmap):
         ImageCache.set(url, pix)
 
 
-
-class GalleryThumbWorker(QThread):
+class GalleryThumbWorker(BaseWorker):
     """Worker unitaire (rétrocompatibilité pour tests ou téléchargement ponctuel)."""
     thumb_ready = Signal(int, QPixmap)
 
@@ -195,7 +205,10 @@ class GalleryThumbWorker(QThread):
         self.cache_dir = cache_dir
 
     def run(self):
+        self._is_running = True
         try:
+            if self._is_cancelled:
+                return
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cached = self.cache_dir / f"thumb_{hash_url(self.url)}{infer_extension(self.url)}"
 
@@ -206,7 +219,7 @@ class GalleryThumbWorker(QThread):
                     with open(cached, "wb") as f:
                         f.write(resp.content)
 
-            if cached.exists() and cached.stat().st_size > 0:
+            if cached.exists() and cached.stat().st_size > 0 and not self._is_cancelled:
                 pix = QPixmap(str(cached))
                 if not pix.isNull():
                     scaled = pix.scaled(
@@ -218,71 +231,75 @@ class GalleryThumbWorker(QThread):
                     self.thumb_ready.emit(self.index, scaled)
         except Exception as e:
             logger.debug(f"Error loading gallery thumb {self.url}: {e}")
+        finally:
+            self._is_running = False
 
 
-class DescriptionImageLoaderWorker(QThread):
+class DescriptionImageLoaderWorker(BaseWorker):
     images_updated = Signal(str)
 
     def __init__(self, raw_html: str):
         super().__init__()
         self.raw_html = raw_html
         self.cache_dir = AppConfig.get_images_cache_dir()
-        self._is_cancelled = False
-
-    def cancel(self):
-        self._is_cancelled = True
 
     def run(self):
         if not self.raw_html:
             return
 
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        img_urls = list(set(re.findall(r'<img[^>]+src=["\'](https?://[^"\']+)["\']', self.raw_html)))
-        if not img_urls:
-            return
-
-        url_to_local = {}
-        to_fetch = []
-        for u in img_urls:
-            cached = self.cache_dir / f"img_{hash_url(u)}{infer_extension(u)}"
-            if cached.exists() and cached.stat().st_size > 0:
-                url_to_local[u] = cached.as_uri()
-            else:
-                to_fetch.append((u, cached))
-
-        # First update with already cached images immediately
-        if url_to_local:
-            html = self.raw_html
-            for remote_u, local_uri in url_to_local.items():
-                html = html.replace(remote_u, local_uri)
-            self.images_updated.emit(html)
-
-        if not to_fetch or self._is_cancelled:
-            return
-
-        session = SessionManager.get_http_session("loverslab")
-
-        def _fetch_one(item):
+        self._is_running = True
+        try:
             if self._is_cancelled:
+                return
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            img_urls = list(set(re.findall(r'<img[^>]+src=["\'](https?://[^"\']+)["\']', self.raw_html)))
+            if not img_urls:
+                return
+
+            url_to_local = {}
+            to_fetch = []
+            for u in img_urls:
+                cached = self.cache_dir / f"img_{hash_url(u)}{infer_extension(u)}"
+                if cached.exists() and cached.stat().st_size > 0:
+                    url_to_local[u] = cached.as_uri()
+                else:
+                    to_fetch.append((u, cached))
+
+            # First update with already cached images immediately
+            if url_to_local and not self._is_cancelled:
+                html = self.raw_html
+                for remote_u, local_uri in url_to_local.items():
+                    html = html.replace(remote_u, local_uri)
+                self.images_updated.emit(html)
+
+            if not to_fetch or self._is_cancelled:
+                return
+
+            session = SessionManager.get_http_session("loverslab")
+
+            def _fetch_one(item):
+                if self._is_cancelled:
+                    return None
+                remote_url, dest_path = item
+                try:
+                    resp = session.get(remote_url, timeout=15)
+                    if resp.status_code == 200 and len(resp.content) > 0:
+                        with open(dest_path, "wb") as f:
+                            f.write(resp.content)
+                        return remote_url, dest_path.as_uri()
+                except Exception as e:
+                    logger.debug(f"Failed to fetch inline image {remote_url}: {e}")
                 return None
-            remote_url, dest_path = item
-            try:
-                resp = session.get(remote_url, timeout=15)
-                if resp.status_code == 200 and len(resp.content) > 0:
-                    with open(dest_path, "wb") as f:
-                        f.write(resp.content)
-                    return remote_url, dest_path.as_uri()
-            except Exception as e:
-                logger.debug(f"Failed to fetch inline image {remote_url}: {e}")
-            return None
 
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            for result in executor.map(_fetch_one, to_fetch):
-                if result:
-                    url_to_local[result[0]] = result[1]
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                for result in executor.map(_fetch_one, to_fetch):
+                    if result:
+                        url_to_local[result[0]] = result[1]
 
-        if not self._is_cancelled and url_to_local:
-            html = self.raw_html
-            for remote_u, local_uri in url_to_local.items():
-                html = html.replace(remote_u, local_uri)
-            self.images_updated.emit(html)
+            if not self._is_cancelled and url_to_local:
+                html = self.raw_html
+                for remote_u, local_uri in url_to_local.items():
+                    html = html.replace(remote_u, local_uri)
+                self.images_updated.emit(html)
+        finally:
+            self._is_running = False

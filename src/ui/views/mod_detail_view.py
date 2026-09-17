@@ -24,6 +24,7 @@ from src.ui.views.mod_detail import (
 )
 from src.i18n import tr
 from src.utils.logger import logger
+from src.utils.thread_utils import safe_stop_thread
 
 
 class ModDetailView(QWidget, ModDetailCompatMixin):
@@ -123,14 +124,9 @@ class ModDetailView(QWidget, ModDetailCompatMixin):
         else:
             self._set_requirements_loading()
 
-        # Stop previous background detail fetcher
+        # Stop previous background detail fetcher cleanly
         if self.worker:
-            try:
-                if self.worker.isRunning():
-                    self.worker.terminate()
-                    self.worker.wait(300)
-            except Exception:
-                pass
+            safe_stop_thread(self.worker)
             self.worker = None
 
         self.loading_bar.setVisible(True)
@@ -258,12 +254,7 @@ class ModDetailView(QWidget, ModDetailCompatMixin):
 
     def cleanup(self):
         if self.worker:
-            try:
-                if self.worker.isRunning():
-                    self.worker.terminate()
-                    self.worker.wait(300)
-            except Exception:
-                pass
+            safe_stop_thread(self.worker)
             self.worker = None
         self.gallery_widget.cleanup()
         self.desc_widget.stop_worker()

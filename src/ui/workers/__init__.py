@@ -1,4 +1,4 @@
-from src.ui.workers.catalog_workers import SyncTriggerWorker, InstallWorker
+from src.ui.workers.catalog_workers import SyncTriggerWorker, InstallWorker, CatalogFetchWorker
 from src.ui.workers.detail_workers import (
     DescriptionImageLoaderWorker,
     FetchDetailsWorker,
@@ -11,6 +11,7 @@ from src.ui.workers.report_workers import SubmitReportWorker, CheckReportStatusW
 __all__ = [
     "SyncTriggerWorker",
     "InstallWorker",
+    "CatalogFetchWorker",
     "FetchDetailsWorker",
     "GalleryBatchWorker",
     "GalleryThumbWorker",

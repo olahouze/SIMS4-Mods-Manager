@@ -104,3 +104,8 @@ class CatalogPaginationBar(QWidget):
         self.lbl_page_info.setText(
             tr("catalog.page_info", current=current_page, total=total_pages, total_items=total_items)
         )
+
+    def retranslate_ui(self):
+        self.btn_prev.setText(tr("catalog.pagination_prev"))
+        self.btn_next.setText(tr("catalog.pagination_next"))
+

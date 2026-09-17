@@ -173,3 +173,75 @@ def test_updates_view(qapp, monkeypatch):
     finally:
         view.deleteLater()
         qapp.processEvents()
+
+
+def test_catalog_pagination_and_live_sync(qapp, monkeypatch):
+    from src.ui.views.catalog_view import CatalogView
+
+    mock_api = MagicMock()
+    mock_api.get_accounts.return_value = []
+    mock_api.get_catalog.return_value = {
+        "items": [
+            {
+                "id": 1,
+                "source": "loverslab",
+                "remote_id": "101",
+                "title": "Test Mod",
+                "author": "Author",
+                "page_url": "https://loverslab.com/101",
+                "thumbnail_url": "",
+                "updated_date": None,
+                "patreon_status": "NONE",
+                "patreon_tier": "",
+                "requirements_text": None,
+                "requirements_status": "NONE",
+                "dependencies": [],
+                "is_installed": False,
+                "has_update": False,
+            }
+        ],
+        "total": 50,
+        "page": 1,
+        "limit": 24,
+    }
+    mock_api.get_catalog_sync_status.return_value = {
+        "is_running": True,
+        "is_paused": False,
+        "progress_percent": 25,
+        "pages_completed": 2,
+        "total_pages": 8,
+        "current_category": "Clothing",
+        "has_error": False,
+        "page1_ready": True,
+        "categories_progress": [],
+    }
+    monkeypatch.setattr("src.ui.views.catalog_view.get_api_client", lambda: mock_api)
+
+    view = CatalogView()
+    try:
+        # Check pagination buttons are properly translated and don't display raw keys
+        assert "Précédent" in view.btn_prev.text() or "Previous" in view.btn_prev.text()
+        assert "Suivant" in view.btn_next.text() or "Next" in view.btn_next.text()
+        assert "catalog.pagination" not in view.btn_prev.text()
+        assert "catalog.pagination" not in view.btn_next.text()
+
+        # Execute refresh and wait for events
+        view.refresh_catalog()
+        qapp.processEvents()
+
+        # Simulate live sync tick that updates pages_done
+        view._check_sync_status()
+        qapp.processEvents()
+
+        # Successive refresh to ensure no Shiboken deleted object error
+        view.refresh_catalog()
+        qapp.processEvents()
+
+        # Test retranslate_ui
+        view.retranslate_ui()
+        assert "catalog.pagination" not in view.btn_prev.text()
+    finally:
+        view.monitor_timer.stop()
+        view.deleteLater()
+        qapp.processEvents()
+

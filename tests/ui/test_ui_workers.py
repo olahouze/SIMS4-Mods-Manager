@@ -4,6 +4,7 @@ from src.ui.workers import (
     SyncTriggerWorker,
     InstallWorker,
     FetchDetailsWorker,
+    CatalogFetchWorker,
     GalleryThumbWorker,
     DescriptionImageLoaderWorker,
 )
@@ -108,3 +109,30 @@ def test_description_image_loader_worker_cancel(qapp):
     assert worker._is_cancelled is True
     # run should not throw and return early
     worker.run()
+
+
+def test_fetch_details_worker_cancel(qapp, monkeypatch):
+    mock_api = MagicMock()
+    monkeypatch.setattr("src.ui.workers.detail_workers.get_api_client", lambda: mock_api)
+    worker = FetchDetailsWorker(mod_id=10, page_url=None, source="loverslab", remote_id="100")
+    worker.cancel()
+    assert worker._is_cancelled is True
+
+    results = []
+    worker.finished.connect(lambda data: results.append(data))
+    worker.run()
+    assert len(results) == 0
+    mock_api.get_catalog_mod_details.assert_not_called()
+
+
+def test_catalog_fetch_worker_cancel(qapp):
+    mock_api = MagicMock()
+    worker = CatalogFetchWorker(mock_api, params={}, fetch_id=1)
+    worker.cancel()
+    assert worker._is_cancelled is True
+
+    ready_results = []
+    worker.data_ready.connect(lambda res, accs, fid: ready_results.append(fid))
+    worker.run()
+    assert len(ready_results) == 0
+    mock_api.get_catalog.assert_not_called()

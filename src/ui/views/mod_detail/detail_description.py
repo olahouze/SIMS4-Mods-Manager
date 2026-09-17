@@ -1,6 +1,7 @@
 from typing import Optional
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextBrowser
 from src.ui.workers import DescriptionImageLoaderWorker
+from src.utils.thread_utils import safe_stop_thread
 
 
 class DetailDescriptionWidget(QWidget):
@@ -69,11 +70,5 @@ class DetailDescriptionWidget(QWidget):
 
     def stop_worker(self) -> None:
         if self.desc_img_worker:
-            try:
-                self.desc_img_worker.cancel()
-                if self.desc_img_worker.isRunning():
-                    self.desc_img_worker.terminate()
-                    self.desc_img_worker.wait(300)
-            except Exception:
-                pass
+            safe_stop_thread(self.desc_img_worker)
             self.desc_img_worker = None

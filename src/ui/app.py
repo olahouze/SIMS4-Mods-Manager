@@ -23,6 +23,7 @@ from src.ui.views.mod_detail_view import ModDetailView
 from src.ui.views.settings_view import SettingsView
 from src.ui.views.updates_view import UpdatesView
 from src.utils.logger import logger
+from src.utils.thread_utils import cleanup_all_threads
 
 
 class StatusCheckSignals(QObject):
@@ -346,4 +347,5 @@ class MainWindow(QMainWindow):
                 self.catalog_view.monitor_timer.stop()
             except Exception:
                 pass
+        cleanup_all_threads(500)
         super().closeEvent(event)

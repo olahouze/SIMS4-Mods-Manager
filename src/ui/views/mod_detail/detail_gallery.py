@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from src.core.config import AppConfig
 from src.ui.views.mod_detail.gallery_item import GalleryItemWidget
 from src.ui.workers.detail_workers import GalleryBatchWorker
+from src.utils.thread_utils import safe_stop_thread
 from src.i18n import tr
 
 
@@ -89,14 +90,7 @@ class DetailGalleryWidget(QWidget):
 
     def cleanup(self):
         if self._batch_worker:
-            try:
-                self._batch_worker.cancel()
-                if self._batch_worker.isRunning():
-                    self._batch_worker.terminate()
-                    self._batch_worker.wait(300)
-                self._batch_worker.thumb_ready.disconnect()
-            except Exception:
-                pass
+            safe_stop_thread(self._batch_worker)
             self._batch_worker = None
 
         while self.strip_layout.count():

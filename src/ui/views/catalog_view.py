@@ -22,6 +22,7 @@ from src.ui.views.catalog.filter_adapter import build_catalog_api_params
 from src.ui.views.catalog.catalog_widgets import CatalogSyncBannerWidget, CatalogPaginationBar
 from src.i18n import tr
 from src.utils.logger import logger
+from src.utils.thread_utils import safe_stop_thread
 
 
 class CatalogView(QWidget):
@@ -154,13 +155,8 @@ class CatalogView(QWidget):
         filter_state = self.filter_bar.get_filter_state()
         params = build_catalog_api_params(filter_state, self.current_page, self.page_size)
 
-        if self._fetch_worker and self._fetch_worker.isRunning():
-            try:
-                self._fetch_worker.data_ready.disconnect()
-                self._fetch_worker.error_signal.disconnect()
-            except Exception:
-                pass
-            self._fetch_worker.terminate()
+        if self._fetch_worker is not None:
+            safe_stop_thread(self._fetch_worker)
             self._fetch_worker = None
 
         self._fetch_id += 1
@@ -172,6 +168,7 @@ class CatalogView(QWidget):
     def _on_catalog_data_ready(self, res: dict, accounts: list, fetch_id: int):
         if fetch_id != self._fetch_id:
             return
+        self._fetch_worker = None
 
         is_patreon_auth = any(a.get("provider_name") == "patreon" and a.get("is_member") for a in accounts)
         is_loverslab_auth = any(a.get("provider_name") == "loverslab" and a.get("is_member") for a in accounts)
@@ -223,6 +220,7 @@ class CatalogView(QWidget):
     def _on_catalog_fetch_error(self, error_msg: str, fetch_id: int):
         if fetch_id != self._fetch_id:
             return
+        self._fetch_worker = None
         logger.error(f"Erreur API lors du rafraîchissement du catalogue: {error_msg}")
 
     def _on_pause_sync(self, provider: str = "loverslab"):
@@ -291,6 +289,8 @@ class CatalogView(QWidget):
                     self.refresh_catalog()
                 elif pages_done > self._last_pages_completed:
                     self._last_pages_completed = pages_done
+                    if self.current_page == 1 and not is_paused:
+                        self.refresh_catalog()
             elif has_error:
                 if self.monitor_timer.interval() != self.IDLE_MONITOR_INTERVAL_MS:
                     self.monitor_timer.setInterval(self.IDLE_MONITOR_INTERVAL_MS)
@@ -299,8 +299,9 @@ class CatalogView(QWidget):
                 if self.monitor_timer.interval() != self.IDLE_MONITOR_INTERVAL_MS:
                     self.monitor_timer.setInterval(self.IDLE_MONITOR_INTERVAL_MS)
                 self.sync_banner_widget.set_idle()
-                if self._last_pages_completed > 0:
+                if self._last_pages_completed > 0 or not self._page1_displayed:
                     self._last_pages_completed = 0
+                    self._page1_displayed = True
                     self.refresh_catalog()
 
         except Exception as e:
@@ -357,5 +358,6 @@ class CatalogView(QWidget):
         self.title_lbl.setText(tr("catalog.title"))
         self.filter_bar.retranslate_ui()
         self.provider_drawer.retranslate_ui()
+        self.pagination_bar.retranslate_ui()
         self.pagination_bar.update_pagination(self.current_page, self.total_pages, self.total_items)
         self.refresh_catalog()

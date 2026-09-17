@@ -4,16 +4,17 @@ asynchronous status checking, dynamic styling, and opening ReportPreviewDialog.
 Shared between ModDetailView and DependenciesDialog.
 """
 from typing import Optional, List
-from PySide6.QtCore import Signal, QThread
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMessageBox
 
 from src.api.client import get_api_client
 from src.ui.components.report_preview_dialog import ReportPreviewDialog
 from src.i18n import tr
 from src.utils.logger import logger
+from src.utils.thread_utils import safe_stop_thread, BaseWorker
 
 
-class CheckReportStatusWorker(QThread):
+class CheckReportStatusWorker(BaseWorker):
     status_ready = Signal(dict)
 
     def __init__(self, payload: dict, parent=None):
@@ -21,19 +22,26 @@ class CheckReportStatusWorker(QThread):
         self.payload = payload
 
     def run(self):
+        self._is_running = True
         try:
+            if self._is_cancelled:
+                return
             client = get_api_client()
             res = client.check_missing_report(self.payload)
-            self.status_ready.emit(res)
+            if not self._is_cancelled:
+                self.status_ready.emit(res)
         except Exception as e:
             logger.debug(f"CheckReportStatusWorker error: {e}")
-            self.status_ready.emit({
-                "can_report": True,
-                "already_reported": False,
-                "formatted_message": "",
-                "author": self.payload.get("author", ""),
-                "is_authenticated": True,
-            })
+            if not self._is_cancelled:
+                self.status_ready.emit({
+                    "can_report": True,
+                    "already_reported": False,
+                    "formatted_message": "",
+                    "author": self.payload.get("author", ""),
+                    "is_authenticated": True,
+                })
+        finally:
+            self._is_running = False
 
 
 class AuthorInterpellateWidget(QWidget):
@@ -72,12 +80,8 @@ class AuthorInterpellateWidget(QWidget):
         self._missing_modules = list(missing_modules or [])
         self._unnecessary_modules = list(unnecessary_modules or [])
 
-        if self._check_worker and self._check_worker.isRunning():
-            try:
-                self._check_worker.status_ready.disconnect()
-            except Exception:
-                pass
-            self._check_worker.terminate()
+        if self._check_worker:
+            safe_stop_thread(self._check_worker)
             self._check_worker = None
 
         cat_id = mod_data.get("id") or mod_data.get("catalog_mod_id")
@@ -107,7 +111,8 @@ class AuthorInterpellateWidget(QWidget):
             "missing_modules": self._missing_modules,
             "unnecessary_modules": self._unnecessary_modules,
         }
-        self._check_worker = CheckReportStatusWorker(payload, parent=self)
+        # Worker has no QWidget parent to prevent C++ premature destruction
+        self._check_worker = CheckReportStatusWorker(payload)
         self._check_worker.status_ready.connect(self._on_status_ready)
         self._check_worker.start()
 
@@ -213,6 +218,6 @@ class AuthorInterpellateWidget(QWidget):
         """)
 
     def cleanup(self):
-        if self._check_worker and self._check_worker.isRunning():
-            self._check_worker.quit()
-            self._check_worker.wait(200)
+        if self._check_worker:
+            safe_stop_thread(self._check_worker)
+            self._check_worker = None

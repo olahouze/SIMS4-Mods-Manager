@@ -1,32 +1,40 @@
 """
-Workers d'arrière-plan (QThread) pour les opérations du catalogue :
+Workers d'arrière-plan (BaseWorker / QThreadPool) pour les opérations du catalogue :
 - Déclenchement de la synchronisation (SyncTriggerWorker)
+- Récupération asynchrone du catalogue (CatalogFetchWorker)
 - Streaming de l'installation de mods (InstallWorker)
 """
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 
 from src.api.client import get_api_client
 from src.utils.logger import logger
+from src.utils.thread_utils import BaseWorker
 
 
-class SyncTriggerWorker(QThread):
+class SyncTriggerWorker(BaseWorker):
     finished_signal = Signal(bool, str)
 
     def __init__(self, api_client, max_pages: int = 0):
         super().__init__()
         self.api_client = api_client
         self.max_pages = max_pages
-        self.finished.connect(self.deleteLater)
 
     def run(self):
         try:
+            self._is_running = True
+            if self._is_cancelled:
+                return
             self.api_client.start_catalog_sync(max_pages=self.max_pages)
-            self.finished_signal.emit(True, "OK")
+            if not self._is_cancelled:
+                self.finished_signal.emit(True, "OK")
         except Exception as e:
-            self.finished_signal.emit(False, str(e))
+            if not self._is_cancelled:
+                self.finished_signal.emit(False, str(e))
+        finally:
+            self._is_running = False
 
 
-class CatalogFetchWorker(QThread):
+class CatalogFetchWorker(BaseWorker):
     """Fetches catalog page and accounts asynchronously to keep the UI thread 100% fluid."""
     data_ready = Signal(dict, list, int)  # res, accounts, fetch_id
     error_signal = Signal(str, int)
@@ -36,30 +44,38 @@ class CatalogFetchWorker(QThread):
         self.api_client = api_client
         self.params = params
         self.fetch_id = fetch_id
-        self.finished.connect(self.deleteLater)
 
     def run(self):
         try:
+            self._is_running = True
+            if self._is_cancelled:
+                return
             accounts = self.api_client.get_accounts()
+            if self._is_cancelled:
+                return
             res = self.api_client.get_catalog(**self.params)
-            self.data_ready.emit(res, accounts, self.fetch_id)
+            if not self._is_cancelled:
+                self.data_ready.emit(res, accounts, self.fetch_id)
         except Exception as e:
-            logger.error(f"CatalogFetchWorker error: {e}")
-            self.error_signal.emit(str(e), self.fetch_id)
+            if not self._is_cancelled:
+                logger.error(f"CatalogFetchWorker error: {e}")
+                self.error_signal.emit(str(e), self.fetch_id)
+        finally:
+            self._is_running = False
 
 
-class InstallWorker(QThread):
+class InstallWorker(BaseWorker):
     progress = Signal(int, str, str)  # percent, status, details
     finished = Signal(bool, str)
 
     def __init__(self, mod_data: dict):
         super().__init__()
         self.mod_data = mod_data
-        self.finished.connect(lambda *args: self.deleteLater())
 
     def run(self):
         client = get_api_client()
         try:
+            self._is_running = True
             self.progress.emit(2, "Initialisation de l'installation...", "Préparation de la requête...")
             u_date = self.mod_data.get("updated_date")
             u_date_str = u_date.isoformat() if hasattr(u_date, "isoformat") else (str(u_date) if u_date else None)
@@ -75,6 +91,8 @@ class InstallWorker(QThread):
             }
 
             for event in client.install_mod_stream(payload):
+                if self._is_cancelled:
+                    return
                 evt_type = event.get("type")
                 if evt_type == "progress":
                     pct = event.get("percent", 0)
@@ -94,5 +112,8 @@ class InstallWorker(QThread):
 
             self.finished.emit(True, "Installation terminée.")
         except Exception as e:
-            logger.error(f"Erreur API lors de l'installation du mod '{self.mod_data.get('title')}': {e}", exc_info=True)
-            self.finished.emit(False, f"Erreur API lors de l'installation: {e}")
+            if not self._is_cancelled:
+                logger.error(f"Erreur API lors de l'installation du mod '{self.mod_data.get('title')}': {e}", exc_info=True)
+                self.finished.emit(False, f"Erreur API lors de l'installation: {e}")
+        finally:
+            self._is_running = False

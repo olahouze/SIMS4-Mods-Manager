@@ -1,14 +1,15 @@
 """
-Update-related asynchronous background worker threads for Qt UI.
+Update-related asynchronous background workers for Qt UI.
 """
 from typing import Optional, List
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 
 from src.api.client import get_api_client
 from src.utils.logger import logger
+from src.utils.thread_utils import BaseWorker
 
 
-class UpdateWorker(QThread):
+class UpdateWorker(BaseWorker):
     """Asynchronous worker for updating a single mod, a batch of selected mods, or all mods."""
 
     finished = Signal(bool, str)
@@ -24,19 +25,25 @@ class UpdateWorker(QThread):
         self.mode = mode
         self.installed_id = installed_id
         self.installed_ids = installed_ids or []
-        # Connect deleteLater to automatically clean up C++ Qt handles upon completion
-        self.finished.connect(self.deleteLater)
 
     def run(self):
+        self._is_running = True
         client = get_api_client()
         try:
+            if self._is_cancelled:
+                return
             if self.mode == "single" and self.installed_id:
                 res = client.update_mod(self.installed_id)
             elif self.mode == "batch" and self.installed_ids:
                 res = client.update_selected_mods(self.installed_ids)
             else:
                 res = client.update_all_mods()
-            self.finished.emit(res.get("success", False), res.get("message", ""))
+
+            if not self._is_cancelled:
+                self.finished.emit(res.get("success", False), res.get("message", ""))
         except Exception as e:
-            logger.error(f"UpdateWorker error: {e}")
-            self.finished.emit(False, f"Erreur API lors de la mise à jour: {e}")
+            if not self._is_cancelled:
+                logger.error(f"UpdateWorker error: {e}")
+                self.finished.emit(False, f"Erreur API lors de la mise à jour: {e}")
+        finally:
+            self._is_running = False

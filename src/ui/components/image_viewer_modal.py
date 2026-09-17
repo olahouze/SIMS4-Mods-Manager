@@ -8,16 +8,17 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFrame,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QKeyEvent
 
 from src.core.config import AppConfig
 from src.core.session_manager import SessionManager
 from src.utils.cache_utils import hash_url, infer_extension
+from src.utils.thread_utils import safe_stop_thread, BaseWorker
 from src.i18n import tr
 
 
-class FullImageFetchWorker(QThread):
+class FullImageFetchWorker(BaseWorker):
     loaded = Signal(str, str)  # url, local_path
     failed = Signal(str, str)
 
@@ -27,24 +28,35 @@ class FullImageFetchWorker(QThread):
         self.cache_dir = cache_dir
 
     def run(self):
+        self._is_running = True
         try:
+            if self._is_cancelled:
+                return
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cached_file = self.cache_dir / f"full_{hash_url(self.image_url)}{infer_extension(self.image_url)}"
 
             if cached_file.exists() and cached_file.stat().st_size > 0:
-                self.loaded.emit(self.image_url, str(cached_file))
+                if not self._is_cancelled:
+                    self.loaded.emit(self.image_url, str(cached_file))
                 return
 
             session = SessionManager.get_http_session("loverslab")
             resp = session.get(self.image_url, timeout=20)
+            if self._is_cancelled:
+                return
             if resp.status_code == 200 and len(resp.content) > 0:
                 with open(cached_file, "wb") as f:
                     f.write(resp.content)
-                self.loaded.emit(self.image_url, str(cached_file))
+                if not self._is_cancelled:
+                    self.loaded.emit(self.image_url, str(cached_file))
             else:
-                self.failed.emit(self.image_url, f"Code HTTP {resp.status_code}")
+                if not self._is_cancelled:
+                    self.failed.emit(self.image_url, f"Code HTTP {resp.status_code}")
         except Exception as e:
-            self.failed.emit(self.image_url, str(e))
+            if not self._is_cancelled:
+                self.failed.emit(self.image_url, str(e))
+        finally:
+            self._is_running = False
 
 
 class ImageViewerModal(QDialog):
@@ -203,8 +215,9 @@ class ImageViewerModal(QDialog):
 
         # Fetch in background
         self.image_lbl.setText("⏳ Chargement de l'image haute définition...")
-        if self.fetch_worker and self.fetch_worker.isRunning():
-            self.fetch_worker.terminate()
+        if self.fetch_worker:
+            safe_stop_thread(self.fetch_worker)
+            self.fetch_worker = None
 
         self.fetch_worker = FullImageFetchWorker(url, self.cache_dir)
         self.fetch_worker.loaded.connect(self._on_image_loaded)
@@ -260,19 +273,19 @@ class ImageViewerModal(QDialog):
         self._load_current_image()
 
     def closeEvent(self, event):
-        if self.fetch_worker and self.fetch_worker.isRunning():
-            self.fetch_worker.terminate()
-            self.fetch_worker.wait(500)
+        if self.fetch_worker:
+            safe_stop_thread(self.fetch_worker)
+            self.fetch_worker = None
         super().closeEvent(event)
 
     def reject(self):
-        if self.fetch_worker and self.fetch_worker.isRunning():
-            self.fetch_worker.terminate()
-            self.fetch_worker.wait(500)
+        if self.fetch_worker:
+            safe_stop_thread(self.fetch_worker)
+            self.fetch_worker = None
         super().reject()
 
     def accept(self):
-        if self.fetch_worker and self.fetch_worker.isRunning():
-            self.fetch_worker.terminate()
-            self.fetch_worker.wait(500)
+        if self.fetch_worker:
+            safe_stop_thread(self.fetch_worker)
+            self.fetch_worker = None
         super().accept()

@@ -100,6 +100,8 @@
     "empty_desc": "Try adjusting your search criteria or sync the catalog.",
     "dependencies_required": "This mod requires {count} dependency/dependencies.",
     "page_info": "Page {current} of {total} ({total_items} mods)",
+    "pagination_prev": "◀ Previous",
+    "pagination_next": "Next ▶",
     "install_success_title": "Installation Successful",
     "install_error_title": "Installation Error",
     "install_blocked_title": "Installation Blocked",

@@ -10,13 +10,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
 )
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 
 from src.api.client import get_api_client
 from src.i18n import tr
+from src.utils.thread_utils import BaseWorker
 
 
-class LoginWorker(QThread):
+class LoginWorker(BaseWorker):
     finished = Signal(bool, str)
 
     def __init__(self, provider_name: str):
@@ -24,12 +25,19 @@ class LoginWorker(QThread):
         self.provider_name = provider_name
 
     def run(self):
+        self._is_running = True
         try:
+            if self._is_cancelled:
+                return
             client = get_api_client()
             res = client.login_account(self.provider_name, timeout_seconds=300)
-            self.finished.emit(res.get("success", False), res.get("message", ""))
+            if not self._is_cancelled:
+                self.finished.emit(res.get("success", False), res.get("message", ""))
         except Exception as e:
-            self.finished.emit(False, f"Erreur lors de l'appel API login: {e}")
+            if not self._is_cancelled:
+                self.finished.emit(False, f"Erreur lors de l'appel API login: {e}")
+        finally:
+            self._is_running = False
 
 
 class AccountCardWidget(QFrame):

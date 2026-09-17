@@ -100,6 +100,8 @@
     "empty_desc": "Essayez de modifier vos critères de recherche ou synchronisez le catalogue.",
     "dependencies_required": "Ce mod requiert {count} dépendance(s).",
     "page_info": "Page {current} sur {total} ({total_items} mods)",
+    "pagination_prev": "◀ Précédent",
+    "pagination_next": "Suivant ▶",
     "install_success_title": "Installation Réussie",
     "install_error_title": "Erreur d'Installation",
     "install_blocked_title": "Installation Bloquée",
