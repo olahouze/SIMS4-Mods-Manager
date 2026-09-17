@@ -5,8 +5,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QStackedWidget,
-    QPushButton,
-    QLabel,
     QFrame,
     QMessageBox,
 )
@@ -16,6 +14,7 @@ from src.core.config import AppConfig
 from src.core.shutdown_manager import ShutdownManager
 from src.i18n import I18nManager, tr
 from src.ui.theme import DARK_THEME_QSS
+from src.ui.components.sidebar_nav import SidebarNavWidget
 from src.ui.views.accounts_view import AccountsView
 from src.ui.views.catalog_view import CatalogView
 from src.ui.views.installed_view import InstalledView
@@ -64,7 +63,6 @@ class MainWindow(QMainWindow):
         self.status_signals.health_checked.connect(self._on_health_checked)
         self.status_signals.updates_checked.connect(self._on_updates_checked)
 
-        # Initialize language from saved configuration
         initial_lang = AppConfig.load().language
         self.i18n.set_language(initial_lang)
 
@@ -78,7 +76,6 @@ class MainWindow(QMainWindow):
         self.refresh_game_status()
         self.update_nav_badge()
 
-        # Automatically check and trigger background sync once connection/API is ready
         QTimer.singleShot(1500, self.auto_start_background_sync)
 
     def init_ui(self):
@@ -90,72 +87,10 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # 1. Left Sidebar
-        sidebar = QFrame()
-        sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(240)
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(16, 20, 16, 20)
-        sidebar_layout.setSpacing(8)
-
-        # Brand / Logo Header
-        brand_layout = QVBoxLayout()
-        brand_layout.setSpacing(2)
-
-        app_title = QLabel("SIMS 4")
-        app_title.setObjectName("AppTitle")
-        brand_layout.addWidget(app_title)
-
-        app_subtitle = QLabel("MODS MANAGER")
-        app_subtitle.setObjectName("AppSubtitle")
-        brand_layout.addWidget(app_subtitle)
-
-        sidebar_layout.addLayout(brand_layout)
-        sidebar_layout.addSpacing(20)
-
-        # Navigation Buttons
-        self.nav_buttons = []
-
-        self.btn_accounts = self._create_nav_button(tr("nav.accounts"), 0)
-        self.btn_catalog = self._create_nav_button(tr("nav.catalog"), 1)
-        self.btn_installed = self._create_nav_button(tr("nav.installed"), 2)
-        self.btn_updates = self._create_nav_button(tr("nav.updates"), 3)
-        self.btn_logs = self._create_nav_button(tr("nav.logs"), 4)
-        self.btn_settings = self._create_nav_button(tr("nav.settings"), 5)
-
-        sidebar_layout.addWidget(self.btn_accounts)
-        sidebar_layout.addWidget(self.btn_catalog)
-        sidebar_layout.addWidget(self.btn_installed)
-        sidebar_layout.addWidget(self.btn_updates)
-        sidebar_layout.addWidget(self.btn_logs)
-        sidebar_layout.addWidget(self.btn_settings)
-
-        sidebar_layout.addStretch()
-
-        # Quick Launch Game in Sidebar Footer
-        footer_layout = QVBoxLayout()
-        footer_layout.setSpacing(6)
-
-        self.game_status = QLabel(tr("nav.game_checking"))
-        self.game_status.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: 600; padding: 4px 0;")
-        footer_layout.addWidget(self.game_status)
-
-        self.play_btn = QPushButton(tr("nav.launch_game"))
-        self.play_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #10b981;
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 10px;
-                font-weight: 700;
-                font-size: 13px;
-            }
-            QPushButton:hover { background-color: #059669; }
-        """)
-        self.play_btn.clicked.connect(self._launch_game)
-        footer_layout.addWidget(self.play_btn)
-
-        sidebar_layout.addLayout(footer_layout)
-        main_layout.addWidget(sidebar)
+        self.sidebar = SidebarNavWidget(self)
+        self.sidebar.page_requested.connect(self.switch_page)
+        self.sidebar.launch_game_requested.connect(self._launch_game)
+        main_layout.addWidget(self.sidebar)
 
         # 2. Right Content Stacked Pages
         content_area = QFrame()
@@ -165,7 +100,6 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
 
-        # Views
         self.accounts_view = AccountsView()
         self.catalog_view = CatalogView()
         self.installed_view = InstalledView()
@@ -174,21 +108,18 @@ class MainWindow(QMainWindow):
         self.settings_view = SettingsView()
         self.mod_detail_view = ModDetailView()
 
-        self.stacked_widget.addWidget(self.accounts_view)  # Index 0 (Comptes)
-        self.stacked_widget.addWidget(self.catalog_view)  # Index 1 (Catalogue)
-        self.stacked_widget.addWidget(self.installed_view)  # Index 2 (Installés)
-        self.stacked_widget.addWidget(self.updates_view)  # Index 3 (Mises à jour)
-        self.stacked_widget.addWidget(self.logs_view)  # Index 4 (Logs)
-        self.stacked_widget.addWidget(self.settings_view)  # Index 5 (Paramètres)
-        self.stacked_widget.addWidget(self.mod_detail_view)  # Index 6 (Détails Plein Écran)
+        self.stacked_widget.addWidget(self.accounts_view)  # Index 0
+        self.stacked_widget.addWidget(self.catalog_view)  # Index 1
+        self.stacked_widget.addWidget(self.installed_view)  # Index 2
+        self.stacked_widget.addWidget(self.updates_view)  # Index 3
+        self.stacked_widget.addWidget(self.logs_view)  # Index 4
+        self.stacked_widget.addWidget(self.settings_view)  # Index 5
+        self.stacked_widget.addWidget(self.mod_detail_view)  # Index 6
 
         content_layout.addWidget(self.stacked_widget)
         main_layout.addWidget(content_area)
 
-        # Connect login signal to switch to catalog
         self.accounts_view.login_successful.connect(self._on_login_success)
-
-        # Connect detail view signals for full-page mod view (from Catalog and from Installed)
         self.catalog_view.details_requested.connect(
             lambda d: self.show_mod_details(d, origin_name="Catalogue", origin_index=1)
         )
@@ -199,31 +130,54 @@ class MainWindow(QMainWindow):
         self.mod_detail_view.install_requested.connect(self._on_detail_install_requested)
         self.mod_detail_view.open_folder_requested.connect(self.installed_view.open_mod_folder)
 
-        # Cross-view synchronization when mods are installed, uninstalled, or updated
         self.catalog_view.install_finished.connect(self._on_mods_state_changed)
         self.installed_view.mods_changed.connect(self._on_mods_state_changed)
         self.updates_view.updates_applied.connect(self._on_mods_state_changed)
 
-        # Store navigation history for back button
         self.current_origin_index = 1
-
-        # Set default page to Accounts (Index 0)
         self.switch_page(0)
 
-    def _create_nav_button(self, text: str, page_index: int) -> QPushButton:
-        btn = QPushButton(text)
-        btn.setProperty("class", "NavButton")
-        btn.setCheckable(True)
-        btn.clicked.connect(lambda: self.switch_page(page_index))
-        self.nav_buttons.append(btn)
-        return btn
+    # Backward compatible sidebar property accessors
+    @property
+    def nav_buttons(self):
+        return self.sidebar.nav_buttons
+
+    @property
+    def btn_accounts(self):
+        return self.sidebar.btn_accounts
+
+    @property
+    def btn_catalog(self):
+        return self.sidebar.btn_catalog
+
+    @property
+    def btn_installed(self):
+        return self.sidebar.btn_installed
+
+    @property
+    def btn_updates(self):
+        return self.sidebar.btn_updates
+
+    @property
+    def btn_logs(self):
+        return self.sidebar.btn_logs
+
+    @property
+    def btn_settings(self):
+        return self.sidebar.btn_settings
+
+    @property
+    def game_status(self):
+        return self.sidebar.game_status
+
+    @property
+    def play_btn(self):
+        return self.sidebar.play_btn
 
     def switch_page(self, index: int):
         self.stacked_widget.setCurrentIndex(index)
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == index)
+        self.sidebar.set_active_page(index)
 
-        # Refresh page contents via API when switched
         if index == 0:
             self.accounts_view.refresh_statuses()
         elif index == 1:
@@ -241,7 +195,6 @@ class MainWindow(QMainWindow):
         self.update_nav_badge()
 
     def show_mod_details(self, mod_data: dict, origin_name: str = "Catalogue", origin_index: int = 1):
-        """Displays full-screen dedicated ModDetailView taking 100% of application area."""
         self.current_origin_index = origin_index
         for btn in self.nav_buttons:
             btn.setChecked(False)
@@ -249,18 +202,12 @@ class MainWindow(QMainWindow):
         self.mod_detail_view.load_mod(mod_data, origin_name=origin_name, origin_index=origin_index)
 
     def _on_detail_back(self):
-        """Returns to previous view (Catalog or Installed Mods)."""
         self.switch_page(self.current_origin_index)
 
     def _on_detail_install_requested(self, mod_data: dict):
-        """
-        Installs mod from ModDetailView by delegating directly to CatalogView.
-        CatalogView handles single dependency verification and confirmation dialog.
-        """
         self.catalog_view.install_mod(mod_data)
 
     def _on_mods_state_changed(self, *args):
-        """Refreshes all views and navigation badges whenever mods are added, removed, or updated."""
         self.installed_view.refresh_mods()
         self.updates_view.refresh_updates()
         self.catalog_view.refresh_catalog()
@@ -269,7 +216,6 @@ class MainWindow(QMainWindow):
             self._refresh_current_mod_detail()
 
     def _refresh_current_mod_detail(self):
-        """Updates current mod in ModDetailView to reflect its new installation status."""
         try:
             curr_mod = getattr(self.mod_detail_view, "mod_data", None)
             if not curr_mod:
@@ -301,25 +247,16 @@ class MainWindow(QMainWindow):
             logger.debug(f"Erreur actualisation mod_detail_view: {e}")
 
     def _on_login_success(self, provider_name: str):
-        """Switches to catalog and triggers progressive loading monitoring."""
         self.switch_page(1)
         if hasattr(self.catalog_view, "start_sync_monitoring"):
             self.catalog_view.start_sync_monitoring()
 
     def retranslate_ui(self):
-        """Retranslates all navigation elements, titles and propagates to child views."""
         self.setWindowTitle(tr("app.window_title"))
-        self.btn_accounts.setText(tr("nav.accounts"))
-        self.btn_catalog.setText(tr("nav.catalog"))
-        self.btn_installed.setText(tr("nav.installed"))
-        self.btn_updates.setText(tr("nav.updates"))
-        self.btn_logs.setText(tr("nav.logs"))
-        self.btn_settings.setText(tr("nav.settings"))
-        self.play_btn.setText(tr("nav.launch_game"))
+        self.sidebar.retranslate_ui()
         self.refresh_game_status()
         self.update_nav_badge()
 
-        # Propagate to sub-views if they implement retranslate_ui
         for view in [
             self.accounts_view,
             self.catalog_view,
@@ -342,37 +279,19 @@ class MainWindow(QMainWindow):
                 logger.debug(f"Erreur retranslate_ui sur provider_drawer: {e}")
 
     def refresh_game_status(self):
-        """Asynchronously checks game status and updates through background worker."""
         worker = BackgroundStatusWorker(self.api_client, self.status_signals)
         QThreadPool.globalInstance().start(worker)
 
     def _on_health_checked(self, success: bool, mods_detected: bool):
-        """Callback received on Qt GUI thread when health check completes."""
-        if success:
-            if mods_detected:
-                self.game_status.setText(tr("nav.game_detected"))
-                self.game_status.setStyleSheet("font-size: 11px; color: #34d399; font-weight: 600; padding: 4px 0;")
-            else:
-                self.game_status.setText(tr("nav.game_not_detected"))
-                self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
-        else:
-            self.game_status.setText(tr("nav.game_api_error"))
-            self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
+        self.sidebar.update_game_status(success, mods_detected)
 
     def update_nav_badge(self):
-        """Triggers asynchronous update count check."""
-        # The BackgroundStatusWorker checks both health and updates in a single light task
         self.refresh_game_status()
 
     def _on_updates_checked(self, count: int):
-        """Callback received on Qt GUI thread when updates check completes."""
-        if count > 0:
-            self.btn_updates.setText(tr("nav.updates_with_count", count=count))
-        else:
-            self.btn_updates.setText(tr("nav.updates"))
+        self.sidebar.update_badge_count(count)
 
     def _launch_game(self):
-        """Launches The Sims 4 via API /api/game/launch."""
         try:
             res = self.api_client.launch_game()
             QMessageBox.information(
@@ -384,19 +303,13 @@ class MainWindow(QMainWindow):
             )
 
     def auto_start_background_sync(self):
-        """
-        Automatically launches background catalog synchronization if the connection is OK.
-        Checks if an active session or reachable provider exists, and starts sync without blocking.
-        """
         try:
-            # 1. Check if sync is already running
             status = self.api_client.get_catalog_sync_status()
             if status.get("is_running", False):
                 if hasattr(self.catalog_view, "start_sync_monitoring"):
                     self.catalog_view.start_sync_monitoring()
                 return
 
-            # 2. Check accounts connection status
             acc_data = self.api_client.get_accounts()
             accounts = acc_data if isinstance(acc_data, list) else acc_data.get("accounts", [])
             is_connection_ok = False
@@ -405,7 +318,6 @@ class MainWindow(QMainWindow):
                     is_connection_ok = True
                     break
 
-            # 3. If no saved session, check network connectivity to LoversLab
             if not is_connection_ok:
                 try:
                     test_res = self.api_client.test_account("loverslab")
@@ -427,7 +339,6 @@ class MainWindow(QMainWindow):
             logger.debug(f"Vérification automatique de synchronisation au démarrage: {e}")
 
     def closeEvent(self, event):
-        """Clean and graceful shutdown handling."""
         logger.info("Fermeture de l'application demandée par l'utilisateur...")
         ShutdownManager.trigger_shutdown()
         if hasattr(self, "catalog_view") and hasattr(self.catalog_view, "monitor_timer"):
@@ -436,4 +347,3 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         super().closeEvent(event)
-

@@ -5,6 +5,8 @@ from src.ui.workers.detail_workers import (
     GalleryBatchWorker,
     GalleryThumbWorker,
 )
+from src.ui.workers.update_workers import UpdateWorker
+from src.ui.workers.report_workers import SubmitReportWorker, CheckReportStatusWorker
 
 __all__ = [
     "SyncTriggerWorker",
@@ -13,4 +15,7 @@ __all__ = [
     "GalleryBatchWorker",
     "GalleryThumbWorker",
     "DescriptionImageLoaderWorker",
+    "UpdateWorker",
+    "SubmitReportWorker",
+    "CheckReportStatusWorker",
 ]

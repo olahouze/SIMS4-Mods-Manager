@@ -16,6 +16,7 @@ class SyncTriggerWorker(QThread):
         super().__init__()
         self.api_client = api_client
         self.max_pages = max_pages
+        self.finished.connect(self.deleteLater)
 
     def run(self):
         try:
@@ -35,6 +36,7 @@ class CatalogFetchWorker(QThread):
         self.api_client = api_client
         self.params = params
         self.fetch_id = fetch_id
+        self.finished.connect(self.deleteLater)
 
     def run(self):
         try:
@@ -53,6 +55,7 @@ class InstallWorker(QThread):
     def __init__(self, mod_data: dict):
         super().__init__()
         self.mod_data = mod_data
+        self.finished.connect(lambda *args: self.deleteLater())
 
     def run(self):
         client = get_api_client()

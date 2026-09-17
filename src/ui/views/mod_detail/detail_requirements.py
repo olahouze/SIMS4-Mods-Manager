@@ -2,7 +2,6 @@
 DetailRequirementsWidget: Collapsible requirements, DLCs, and dependencies section
 with integrated author interpellation for ModDetailView.
 """
-import re
 from typing import Dict, List, Any, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -14,10 +13,10 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 
+from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
 from src.ui.components.dependency_card import DependencyCardWidget
 from src.ui.components.author_interpellate_widget import AuthorInterpellateWidget
 from src.ui.theme import Theme
-from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
 
 
 class DetailRequirementsWidget(QWidget):
@@ -161,14 +160,10 @@ class DetailRequirementsWidget(QWidget):
 
         for d in raw_deps:
             t = (d.get("title") or "").strip()
-            clean_t = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", t).strip()
-            clean_t = re.sub(
-                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
-                "",
-                clean_t,
-            ).strip().strip("'\"`[](){}")
+            clean_t = clean_dependency_title(t)
+            is_base, is_dlc_detected, dlc_name, _ = detect_game_dlc_or_base_game(clean_t)
 
-            if GameDlcMatcher.is_base_game_only(clean_t):
+            if is_base:
                 d["is_game_dlc"] = True
                 d["status"] = "GAME_DLC"
                 d["is_installed"] = True
@@ -178,9 +173,9 @@ class DetailRequirementsWidget(QWidget):
                 game_dlcs.append(d)
                 continue
 
-            starts_with_sims4 = bool(SIMS4_PREFIX_REGEX.match(clean_t))
-            is_dlc_matched, _, _ = GameDlcMatcher.match_dlc(clean_t)
-            is_dlc = d.get("is_game_dlc", False) or d.get("status") == "GAME_DLC" or starts_with_sims4 or is_dlc_matched
+            is_dlc = d.get("is_game_dlc", False) or d.get("status") == "GAME_DLC" or is_dlc_detected
+            if is_dlc and dlc_name:
+                d["dlc_name"] = dlc_name
             is_inst = d.get("is_installed", False) or d.get("status") == "INSTALLED"
             st = d.get("status", "DETECTED_NOT_INSTALLED")
 
@@ -197,14 +192,8 @@ class DetailRequirementsWidget(QWidget):
                 unfound.append(d)
 
         if (req_status in ["PENDING_VERIFICATION", "PARTIAL"] or (req_text and not raw_deps)) and not unfound and not comments and req_text and req_text.strip():
-            clean_req_text = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", req_text).strip()
-            clean_req_text = re.sub(
-                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
-                "",
-                clean_req_text,
-            ).strip().strip("'\"`[](){}")
-            is_bg = GameDlcMatcher.is_base_game_only(clean_req_text)
-            is_dlc_text = bool(SIMS4_PREFIX_REGEX.match(clean_req_text)) or GameDlcMatcher.match_dlc(clean_req_text)[0]
+            clean_req_text = clean_dependency_title(req_text)
+            is_bg, is_dlc_text, _, _ = detect_game_dlc_or_base_game(clean_req_text)
             if not is_bg and not is_dlc_text:
                 synth_entry = {
                     "title": req_text.strip(),

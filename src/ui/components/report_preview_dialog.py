@@ -9,39 +9,17 @@ from PySide6.QtWidgets import (
     QFrame,
     QMessageBox,
     QCheckBox,
-    QRadioButton,
-    QButtonGroup,
     QScrollArea,
     QWidget,
 )
-from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtCore import Qt, Signal
 
 from src.api.client import get_api_client
 from src.services.requirement_reporter_service import RequirementReporterService
+from src.ui.workers.report_workers import SubmitReportWorker
+from src.ui.components.report_module_row import ReportModuleRowWidget
 from src.i18n import tr
 from src.utils.logger import logger
-
-
-class SubmitReportWorker(QThread):
-    """Asynchronous worker to submit the forum report via API."""
-
-    finished_result = Signal(bool, str, str)  # success, message, reported_at
-
-    def __init__(self, payload: dict, parent=None):
-        super().__init__(parent)
-        self.payload = payload
-
-    def run(self):
-        client = get_api_client()
-        try:
-            res = client.report_missing_requirements(self.payload)
-            success = res.get("success", False)
-            msg = res.get("message", "")
-            reported_at = res.get("reported_at", "à l'instant")
-            self.finished_result.emit(success, msg, reported_at)
-        except Exception as e:
-            logger.error(f"SubmitReportWorker error: {e}")
-            self.finished_result.emit(False, str(e), "")
 
 
 class ReportPreviewDialog(QDialog):
@@ -163,132 +141,24 @@ class ReportPreviewDialog(QDialog):
         rows_layout.setSpacing(6)
 
         for mod_name, is_missing_default in all_modules:
-            row_frame = QFrame()
-            row_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #121829;
-                    border: 1px solid #2e3856;
-                    border-radius: 6px;
-                    padding: 4px 8px;
-                }
-            """)
-            r_layout = QVBoxLayout(row_frame)
-            r_layout.setContentsMargins(6, 6, 6, 6)
-            r_layout.setSpacing(4)
+            row_widget = ReportModuleRowWidget(mod_name, is_missing_default=is_missing_default, parent=rows_container)
+            row_widget.selection_changed.connect(self._on_module_selection_changed)
 
-            top_row = QHBoxLayout()
-            cb = QCheckBox(mod_name)
-            cb.setChecked(True)
-            cb.setCursor(Qt.CursorShape.PointingHandCursor)
-            cb.setStyleSheet("""
-                QCheckBox {
-                    color: #f1f5f9;
-                    font-size: 12px;
-                    font-weight: 700;
-                    spacing: 8px;
-                }
-                QCheckBox::indicator {
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 4px;
-                    border: 1px solid #6366f1;
-                    background-color: #0b0e1a;
-                }
-                QCheckBox::indicator:hover { border-color: #818cf8; }
-                QCheckBox::indicator:checked { background-color: #4f46e5; border-color: #6366f1; }
-            """)
-            top_row.addWidget(cb)
-            top_row.addStretch()
-            r_layout.addLayout(top_row)
-
-            # Radios for choice: Missing Mod vs Unnecessary / Not a mod
-            choice_layout = QHBoxLayout()
-            choice_layout.setContentsMargins(24, 0, 0, 2)
-            choice_layout.setSpacing(16)
-
-            btn_group = QButtonGroup(self)
-            rb_missing = QRadioButton(tr("report_dialog.choice_missing_mod"))
-            rb_missing.setChecked(is_missing_default)
-            rb_missing.setCursor(Qt.CursorShape.PointingHandCursor)
-            rb_missing.setStyleSheet("""
-                QRadioButton {
-                    color: #93c5fd;
-                    font-size: 11px;
-                    font-weight: 600;
-                    spacing: 6px;
-                }
-                QRadioButton::indicator {
-                    width: 14px;
-                    height: 14px;
-                    border-radius: 7px;
-                    border: 1px solid #60a5fa;
-                    background-color: #0f172a;
-                }
-                QRadioButton::indicator:checked {
-                    background-color: #3b82f6;
-                    border: 3px solid #0f172a;
-                }
-            """)
-
-            rb_unnecessary = QRadioButton(tr("report_dialog.choice_not_a_mod"))
-            rb_unnecessary.setChecked(not is_missing_default)
-            rb_unnecessary.setCursor(Qt.CursorShape.PointingHandCursor)
-            rb_unnecessary.setStyleSheet("""
-                QRadioButton {
-                    color: #fda4af;
-                    font-size: 11px;
-                    font-weight: 600;
-                    spacing: 6px;
-                }
-                QRadioButton::indicator {
-                    width: 14px;
-                    height: 14px;
-                    border-radius: 7px;
-                    border: 1px solid #f43f5e;
-                    background-color: #0f172a;
-                }
-                QRadioButton::indicator:checked {
-                    background-color: #f43f5e;
-                    border: 3px solid #0f172a;
-                }
-            """)
-
-            btn_group.addButton(rb_missing, 0)
-            btn_group.addButton(rb_unnecessary, 1)
-
-            choice_layout.addWidget(rb_missing)
-            choice_layout.addWidget(rb_unnecessary)
-            choice_layout.addStretch()
-            r_layout.addLayout(choice_layout)
-
-            # Connect toggle handlers with bidirectional override propagation
-            def _make_toggled_handler(c=cb, m=rb_missing, u=rb_unnecessary):
-                def _handler():
-                    m.setEnabled(c.isChecked())
-                    u.setEnabled(c.isChecked())
-                    self._on_module_selection_changed()
+            def _make_override_handler(target_name=mod_name):
+                def _handler(name, override_val):
+                    self.requirements_overrides[name] = override_val
+                    self.override_changed.emit(name, override_val)
                 return _handler
 
-            cb.stateChanged.connect(_make_toggled_handler())
+            row_widget.override_changed.connect(_make_override_handler(mod_name))
 
-            def _make_rb_handler(target_name=mod_name, is_mod=True):
-                def _rb_toggled(checked: bool):
-                    if checked:
-                        self.requirements_overrides[target_name] = "MOD" if is_mod else "COMMENT"
-                        self.override_changed.emit(target_name, "MOD" if is_mod else "COMMENT")
-                    self._on_module_selection_changed()
-                return _rb_toggled
-
-            rb_missing.toggled.connect(_make_rb_handler(mod_name, True))
-            rb_unnecessary.toggled.connect(_make_rb_handler(mod_name, False))
-
-            rows_layout.addWidget(row_frame)
-            self.module_checkboxes.append(cb)
+            rows_layout.addWidget(row_widget)
+            self.module_checkboxes.append(row_widget.cb)
             self.module_items.append({
                 "name": mod_name,
-                "cb": cb,
-                "rb_missing": rb_missing,
-                "rb_unnecessary": rb_unnecessary,
+                "cb": row_widget.cb,
+                "rb_missing": row_widget.rb_missing,
+                "rb_unnecessary": row_widget.rb_unnecessary,
             })
 
         modules_scroll = QScrollArea()

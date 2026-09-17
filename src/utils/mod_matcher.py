@@ -1,263 +1,20 @@
-import re
+"""
+Utility for scoring similarity between mod dependency requirements and catalog / installed mods.
+Uses TitleNormalizer for regex stripping, tokenization, and accent removal.
+"""
 import difflib
-import unicodedata
+import re
 from typing import Optional, List, Tuple, Any
+
 from src.utils.logger import logger
+from src.utils.title_normalizer import TitleNormalizer
 
 
-class ModMatcher:
+class ModMatcher(TitleNormalizer):
     """
-    Utility for normalizing mod titles, stripping prefixes (creators, tags) and suffixes
-    (versions, dates, updates), and scoring similarity between parent mod dependency requirements
-    and catalog / installed mods.
+    Scoring and similarity engine for matching parent mod requirements
+    against catalog and locally installed mods.
     """
-
-    # Common tags and prefixes in brackets/parentheses to strip
-    BRACKETED_TAGS_PATTERN = re.compile(
-        r"\[(?:ts4|the\s*sims\s*4|sims\s*4|mod|wip|beta|public|release|updated?|patreon|nsfw|v\d+[^\]]*|\d{4}[^\]]*)\]",
-        re.IGNORECASE,
-    )
-
-    # General bracket/parentheses matcher (for authors, versions, or tags)
-    ANY_BRACKETS_PATTERN = re.compile(r"\[[^\]]*\]|\([^\)]*\)|\{[^\}]*\}")
-
-    # Version patterns (e.g. v1.2.3, ver 4, version 2.0, 7.18.150, build 123)
-    VERSION_PATTERN = re.compile(
-        r"(?i)\b(?:v(?:er(?:sion)?)?\.?\s*\d+(?:\.\d+)*[a-z]?|\b\d+\.\d+(?:\.\d+)*[a-z]?\b|\bbuild\s*\d+\b|\brelease\s*\d+\b)",
-    )
-
-    # Date patterns (e.g. July 2024, 2024-05, 05/2024, 10 July 2024)
-    DATE_PATTERN = re.compile(
-        r"(?i)\b(?:\d{1,2}\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\b|\b\d{4}[-/]\d{2}(?:[-/]\d{2})?\b",
-    )
-
-    # Creator patterns (e.g. "by AuthorName", "par Author", "Author's ...", "Author - ...")
-    CREATOR_SUFFIX_PATTERN = re.compile(
-        r"(?i)\b(?:by|par|de)\s+[a-zA-Z0-9_\-]+(?:\s*['’]s)?$",
-    )
-    CREATOR_PREFIX_PATTERN = re.compile(
-        r"(?i)^[a-zA-Z0-9_\-]+['’]s\s+",
-    )
-    CREATOR_DASH_PREFIX_PATTERN = re.compile(
-        r"^[a-zA-Z0-9_\-]{2,20}\s*[-–:]\s+",
-    )
-
-    # Noise words to discard
-    NOISE_WORDS_PATTERN = re.compile(
-        r"(?i)\b(?:the\s+sims\s+4|sims\s+4|the\s+sims|sims|ts4|cc|custom\s+content|package|addon|add-on)\b",
-    )
-
-    # Generic header / noise words that must never be considered valid mod titles
-    GENERIC_EXCLUDED_WORDS = {
-        "requirements",
-        "requirement",
-        "prerequisites",
-        "prerequisite",
-        "download",
-        "downloads",
-        "dependencies",
-        "dependency",
-        "optional",
-        "optionnel",
-        "requis",
-        "prérequis",
-        "prerequis",
-        "links",
-        "link",
-        "lien",
-        "liens",
-        "none",
-        "aucun",
-        "aucune",
-        "n/a",
-        "na",
-        "install",
-        "installation",
-        "info",
-        "notes",
-        "note",
-        "objects",
-        "object",
-        "tuning",
-        "tunings",
-        "strings",
-        "string",
-        "cas assets",
-        "assets",
-        "asset",
-        "xml resources",
-        "resources",
-        "resource",
-        "framework",
-        "library",
-        "libraries",
-        "third-party",
-        "third party",
-        "party library",
-        "no third",
-        "package",
-        "packages",
-        "script",
-        "scripts",
-        "script-only",
-    }
-
-    # Common English & French grammatical stop words to ignore during token prioritization
-    STOP_WORDS = {
-        "the", "a", "an", "and", "or", "of", "for", "with", "in", "on", "at", "by", "from", "to",
-        "le", "la", "les", "un", "une", "des", "du", "de", "d", "et", "ou", "pour", "avec", "dans", "par",
-    }
-
-    @classmethod
-    def get_dynamic_threshold(cls, query: str, base_threshold: float = 0.70) -> float:
-        """
-        Dynamically adjusts the minimum matching threshold based on the number
-        of significant tokens in the query to prevent false positives on short/generic terms.
-        - <= 1 token: strict threshold 0.95 (almost exact match required)
-        - 2 tokens: threshold 0.85
-        - >= 3 tokens: base_threshold (default 0.70)
-        """
-        if not query:
-            return base_threshold
-        q_clean = cls.clean_mod_title(query)
-        tokens = cls.get_significant_tokens(q_clean)
-        informative = [t for t in tokens if t.lower() not in cls.STOP_WORDS]
-        count = len(informative) if informative else len(tokens)
-        if count <= 1:
-            return max(base_threshold, 0.95)
-        elif count == 2:
-            return max(base_threshold, 0.85)
-        return base_threshold
-
-    @classmethod
-    def split_camel_case(cls, text: str) -> str:
-        """
-        Splits PascalCase/camelCase into separated words while preserving acronyms.
-        Example: 'XMLInjector' -> 'XML Injector', 'WickedWhims' -> 'Wicked Whims'
-        """
-        if not text:
-            return ""
-        s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", text)
-        s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
-        return s
-
-    @classmethod
-    def canonical_fingerprint(cls, text: str) -> str:
-        """
-        Generates a normalized alphanumeric fingerprint for comparison:
-        - Accents stripped
-        - Lowercased
-        - All non-alphanumerics (spaces, hyphens, underscores, punctuation) stripped
-        Example: 'Wicked_Whims' -> 'wickedwhims', 'xml-injector' -> 'xmlinjector'
-        """
-        if not text:
-            return ""
-        s = cls.strip_accents(text).lower()
-        return re.sub(r"[^a-z0-9]", "", s)
-
-    @classmethod
-    def strip_accents(cls, text: str) -> str:
-        """Removes diacritical marks/accents from text."""
-        nfkd = unicodedata.normalize("NFKD", text)
-        return "".join(c for c in nfkd if not unicodedata.combining(c))
-
-    @classmethod
-    def extract_author_and_version(cls, title: str) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Attempts to extract creator name and version from bracketed or prefixed patterns.
-        Example: '[Scumbumbo] XML Injector v4' -> ('Scumbumbo', 'v4')
-        """
-        if not title:
-            return None, None
-
-        author = None
-        version = None
-
-        # Check for bracketed author [Author] at start
-        m_author = re.match(r"^\s*\[([a-zA-Z0-9_\-\s]{2,30})\]", title)
-        if m_author:
-            candidate = m_author.group(1).strip()
-            if not re.match(r"(?i)^(?:ts4|sims\s*4|mod|wip|public|v\d+)", candidate):
-                author = candidate
-        else:
-            # Check for 'by Author'
-            m_by = cls.CREATOR_SUFFIX_PATTERN.search(title)
-            if m_by:
-                by_text = m_by.group(0).strip()
-                parts = by_text.split()
-                if len(parts) >= 2:
-                    author = parts[-1]
-            else:
-                # Check for 'Author - ...'
-                m_dash = cls.CREATOR_DASH_PREFIX_PATTERN.match(title)
-                if m_dash:
-                    author = re.sub(r"\s*[-–:]\s*$", "", m_dash.group(0)).strip()
-
-        # Check for version
-        m_ver = cls.VERSION_PATTERN.search(title)
-        if m_ver:
-            version = m_ver.group(0).strip()
-
-        return author, version
-
-    @classmethod
-    def clean_mod_title(cls, title: str) -> str:
-        """
-        Extracts the essential core name of a mod by stripping creator tags,
-        version identifiers, dates, and noise words, with space/dash/underscore unification.
-        Example: '[Scumbumbo] XML_Injector v4.2 [Updated]' -> 'xml injector'
-        """
-        if not title:
-            return ""
-
-        # Remove bracketed tags like [TS4], [v1.2], [Scumbumbo], (Updated)
-        cleaned = cls.ANY_BRACKETS_PATTERN.sub(" ", title)
-
-        # Unify underscores and internal hyphens into spaces (preserves creator prefix dashes like 'Author - ...')
-        cleaned = cleaned.replace("_", " ")
-        cleaned = re.sub(r"(?<=\w)-(?=\w)", " ", cleaned)
-
-        # Remove dates
-        cleaned = cls.DATE_PATTERN.sub(" ", cleaned)
-
-        # Remove version numbers
-        cleaned = cls.VERSION_PATTERN.sub(" ", cleaned)
-
-        # Remove creator suffix: '... by Author'
-        cleaned = cls.CREATOR_SUFFIX_PATTERN.sub(" ", cleaned)
-
-        # Remove creator prefix: "Scumbumbo's ..."
-        cleaned = cls.CREATOR_PREFIX_PATTERN.sub(" ", cleaned)
-
-        # Remove creator prefix with dash: "Kuttoe - Mini Mods"
-        cleaned = cls.CREATOR_DASH_PREFIX_PATTERN.sub(" ", cleaned)
-
-        # Remove noise words (sims 4, mod, etc.)
-        cleaned = cls.NOISE_WORDS_PATTERN.sub(" ", cleaned)
-
-        # Strip accents & special punctuation
-        cleaned = cls.strip_accents(cleaned)
-        cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", cleaned)
-
-        # Collapse whitespace and lowercase
-        cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
-
-        # Strip trailing singular 'mod' if preceded by something else (e.g. 'xxx mod' -> 'xxx')
-        if len(cleaned.split()) > 1:
-            cleaned = re.sub(r"\s+\bmod\b$", "", cleaned).strip()
-
-        # If stripping everything resulted in empty string, fall back to basic alphanumeric lower of original
-        if not cleaned:
-            fallback = re.sub(r"[^a-zA-Z0-9\s]", " ", cls.strip_accents(title))
-            cleaned = re.sub(r"\s+", " ", fallback).strip().lower()
-
-        return cleaned
-
-    @classmethod
-    def get_significant_tokens(cls, cleaned_text: str) -> List[str]:
-        """Returns sorted non-trivial words (length >= 2) from cleaned text."""
-        tokens = [w for w in cleaned_text.split() if len(w) >= 2]
-        return tokens
 
     @classmethod
     def match_score(
@@ -383,8 +140,6 @@ class ModMatcher:
         """
         Searches the CatalogMod database table for the best matching mod according to regex cleaning
         and similarity score.
-        Uses dynamic thresholding based on token count and prioritizes specific keywords for SQL pre-filtering.
-        Returns (catalog_mod, score) or None if no candidate exceeds the dynamic threshold.
         """
         from src.database.models import CatalogMod
 
@@ -445,11 +200,6 @@ class ModMatcher:
     ) -> Optional[Tuple[Any, float]]:
         """
         Searches a list of InstalledMod objects for the best match for query.
-        Matches against:
-        1. im.title
-        2. im.folder_name
-        3. package and script filenames in im.installed_files
-        Returns (installed_mod, score) or None.
         """
         if not query or not installed_mods:
             return None

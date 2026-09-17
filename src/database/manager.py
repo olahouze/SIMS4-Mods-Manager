@@ -115,20 +115,26 @@ class DatabaseManager:
                 # 3. Disconnect or repair mismatched catalog_mod_id foreign keys in InstalledMod
                 installed_mods = session.query(InstalledMod).filter(InstalledMod.catalog_mod_id.isnot(None)).all()
                 repaired_links = 0
-                for im in installed_mods:
-                    cm = session.query(CatalogMod).filter_by(id=im.catalog_mod_id).first()
-                    if not cm:
-                        # Stale pointer to deleted catalog mod
-                        im.catalog_mod_id = None
-                        repaired_links += 1
-                    elif im.remote_id and (cm.remote_id != im.remote_id or cm.source != im.source):
-                        logger.warning(
-                            f"Réparation clé étrangère erronée : mod installé '{im.title}' (remote_id={im.remote_id}) "
-                            f"était faussement lié au mod catalogue #{cm.id} '{cm.title}' (remote_id={cm.remote_id}). Dissociation."
-                        )
-                        true_match = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
-                        im.catalog_mod_id = true_match.id if true_match else None
-                        repaired_links += 1
+                if installed_mods:
+                    cat_ids = {im.catalog_mod_id for im in installed_mods if im.catalog_mod_id}
+                    catalog_map = {
+                        cm.id: cm
+                        for cm in session.query(CatalogMod).filter(CatalogMod.id.in_(cat_ids)).all()
+                    }
+                    for im in installed_mods:
+                        cm = catalog_map.get(im.catalog_mod_id)
+                        if not cm:
+                            # Stale pointer to deleted catalog mod
+                            im.catalog_mod_id = None
+                            repaired_links += 1
+                        elif im.remote_id and (cm.remote_id != im.remote_id or cm.source != im.source):
+                            logger.warning(
+                                f"Réparation clé étrangère erronée : mod installé '{im.title}' (remote_id={im.remote_id}) "
+                                f"était faussement lié au mod catalogue #{cm.id} '{cm.title}' (remote_id={cm.remote_id}). Dissociation."
+                            )
+                            true_match = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
+                            im.catalog_mod_id = true_match.id if true_match else None
+                            repaired_links += 1
 
                 if ghosts or repaired_count or repaired_links:
                     session.commit()

@@ -115,6 +115,12 @@ class InstalledMod(Base):
 
     catalog_mod = relationship("CatalogMod", backref="installed_mod", uselist=False)
 
+    __table_args__ = (
+        Index("idx_installed_source_remote", "source", "remote_id"),
+        Index("idx_installed_catalog_id", "catalog_mod_id"),
+        Index("idx_installed_folder", "folder_name"),
+    )
+
     def get_installed_files_list(self) -> List[str]:
         return _get_json_data(self.installed_files, list)
 

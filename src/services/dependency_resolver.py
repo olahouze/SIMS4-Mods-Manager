@@ -1,76 +1,23 @@
-import re
 from typing import List, Dict, Any, Tuple, Optional
 from src.api.schemas.catalog import DependencyItem
 from src.database.models import CatalogMod
 from src.utils.mod_matcher import ModMatcher
-from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
+from src.utils.game_dlc_matcher import GameDlcMatcher
+from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
+from src.services.dependency_special_cases import (
+    SPECIAL_DEPENDENCY_CASES,
+    SPECIAL_DEPENDENCY_REMOTE_IDS,
+    find_special_dependency_case,
+)
 
-
-# Table de correspondance pour les cas spécifiques de dépendances.
-# Actuellement, seul WickedWhims est un cas spécifique avec URL en dur et liste d'alias.
-SPECIAL_DEPENDENCY_CASES: List[Dict[str, Any]] = [
-    {
-        "title": "WickedWhims",
-        "remote_id": "3169",
-        "url": "https://www.loverslab.com/files/file/3169-wickedwhims/",
-        "source": "loverslab",
-        "aliases": [
-            "WW",
-            "ww",
-            "WickedWhims",
-            "wickedwhims",
-            "Wicked-Whims",
-            "wicked-whims",
-            "Wicked_Whims",
-            "wicked_whims",
-            "Wicked Whims",
-            "wicked whims",
-            "WickedWhim",
-            "wickedwhim",
-            "Wicked-Whim",
-            "wicked-whim",
-            "Wicked_Whim",
-            "wicked_whim",
-            "Wicked Whim",
-            "wicked whim",
-        ],
-    },
+__all__ = [
+    "SPECIAL_DEPENDENCY_CASES",
+    "SPECIAL_DEPENDENCY_REMOTE_IDS",
+    "find_special_dependency_case",
+    "resolve_mod_dependencies",
+    "clean_dependency_title",
+    "detect_game_dlc_or_base_game",
 ]
-
-SPECIAL_DEPENDENCY_REMOTE_IDS = {
-    case["remote_id"] for case in SPECIAL_DEPENDENCY_CASES if "remote_id" in case
-}
-
-
-def find_special_dependency_case(name: str) -> Optional[Dict[str, Any]]:
-    """
-    Recherche si un nom de mod correspond à l'un des cas spécifiques définis
-    dans la table de correspondance (insensible à la casse, tolérant aux tirets '-',
-    underscores '_', espaces et versions).
-    """
-    if not name:
-        return None
-
-    cleaned_name = name.strip()
-    # Supprime les délimiteurs entourant le nom si présent (ex: [WW] ou (WW))
-    stripped_name = re.sub(r"^[\(\[\{]+|[\)\]\}]+$", "", cleaned_name).strip()
-    raw_lower = stripped_name.lower()
-    compressed = re.sub(r"[\s\-_.]+", "", raw_lower)
-
-    for case in SPECIAL_DEPENDENCY_CASES:
-        for alias in case.get("aliases", []):
-            alias_lower = alias.strip().lower()
-            alias_compressed = re.sub(r"[\s\-_.]+", "", alias_lower)
-
-            # Correspondance directe ou après compression des séparateurs (- / _ / espace)
-            if raw_lower == alias_lower or compressed == alias_compressed:
-                return case
-
-            # Tolérance pour variations suffixées de version (ex: "WickedWhims v175", "XML Injector v4")
-            if len(alias_compressed) >= 5 and alias_compressed in compressed:
-                return case
-
-    return None
 
 
 def resolve_mod_dependencies(
@@ -104,12 +51,7 @@ def resolve_mod_dependencies(
         title = dep.get("title", "")
         url = dep.get("url", "")
 
-        clean_t = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", title or "").strip()
-        clean_t = re.sub(
-            r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
-            "",
-            clean_t,
-        ).strip().strip("'\"`[](){}")
+        clean_t = clean_dependency_title(title or "")
 
         # Check user override (Mod vs Comment)
         is_comment = False
@@ -144,7 +86,8 @@ def resolve_mod_dependencies(
         dlc_name = dep.get("dlc_name")
         dlc_code = dep.get("dlc_code")
 
-        if GameDlcMatcher.is_base_game_only(clean_t):
+        is_base, is_detected_dlc, det_dlc_name, det_dlc_code = detect_game_dlc_or_base_game(clean_t)
+        if is_base:
             items.append(
                 DependencyItem(
                     source="game_dlc",
@@ -161,20 +104,10 @@ def resolve_mod_dependencies(
             )
             continue
 
-        starts_with_sims4 = bool(SIMS4_PREFIX_REGEX.match(clean_t))
-        matched, matched_name, matched_code = GameDlcMatcher.match_dlc(clean_t)
-
-        if not is_dlc and clean_t:
-            if matched or starts_with_sims4:
-                is_dlc = True
-                clean_extracted_name = re.sub(
-                    r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\s*[:\-–—]?\s*",
-                    "",
-                    clean_t,
-                    flags=re.IGNORECASE,
-                ).strip()
-                dlc_name = matched_name or dlc_name or clean_extracted_name or title
-                dlc_code = matched_code or dlc_code
+        if not is_dlc and clean_t and is_detected_dlc:
+            is_dlc = True
+            dlc_name = det_dlc_name or dlc_name or title
+            dlc_code = det_dlc_code or dlc_code
 
         if is_dlc:
             in_game = GameDlcMatcher.is_dlc_installed_in_game(dlc_code)

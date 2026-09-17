@@ -2,7 +2,6 @@
 DependenciesDialog: Modal dialog displaying the dependency tree for a mod before installation.
 Uses DependencyCardWidget and AuthorInterpellateWidget for a DRY, unified UI.
 """
-import re
 import threading
 from typing import List, Optional
 from PySide6.QtWidgets import (
@@ -19,19 +18,13 @@ from PySide6.QtCore import Qt
 from src.api.client import get_api_client
 from src.ui.components.dependency_card import DependencyCardWidget
 from src.ui.components.author_interpellate_widget import AuthorInterpellateWidget
-from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX
+from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
+from src.ui.workers.report_workers import CheckReportStatusWorker as _BaseCheckReportStatusWorker
 from src.i18n import tr
 from src.utils.logger import logger
 
-from PySide6.QtCore import QThread, Signal
 
-class CheckReportStatusWorker(QThread):
-    status_ready = Signal(dict)
-
-    def __init__(self, payload: dict, parent=None):
-        super().__init__(parent)
-        self.payload = payload
-
+class CheckReportStatusWorker(_BaseCheckReportStatusWorker):
     def run(self):
         try:
             client = get_api_client()
@@ -78,14 +71,10 @@ class DependenciesDialog(QDialog):
         clean_missing = []
         for d in raw_missing:
             t = (d.get("title") or "").strip()
-            clean_t = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", t).strip()
-            clean_t = re.sub(
-                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
-                "",
-                clean_t,
-            ).strip().strip("'\"`[](){}")
+            clean_t = clean_dependency_title(t)
+            is_base, is_dlc, dlc_name, dlc_code = detect_game_dlc_or_base_game(clean_t)
 
-            if GameDlcMatcher.is_base_game_only(clean_t):
+            if is_base:
                 d["is_game_dlc"] = True
                 d["status"] = "GAME_DLC"
                 d["is_installed"] = True
@@ -94,10 +83,12 @@ class DependenciesDialog(QDialog):
                     d["title"] = "The Sims 4 (Jeu de base)"
                 raw_dlcs.append(d)
                 continue
-            is_dlc = d.get("is_game_dlc") or d.get("status") == "GAME_DLC" or bool(SIMS4_PREFIX_REGEX.match(clean_t)) or GameDlcMatcher.match_dlc(clean_t)[0]
-            if is_dlc:
+
+            if is_dlc or d.get("is_game_dlc") or d.get("status") == "GAME_DLC":
                 d["is_game_dlc"] = True
                 d["status"] = "GAME_DLC"
+                if dlc_name:
+                    d["dlc_name"] = dlc_name
                 raw_dlcs.append(d)
             else:
                 clean_missing.append(d)
