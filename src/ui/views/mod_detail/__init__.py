@@ -3,6 +3,7 @@ from src.ui.views.mod_detail.detail_header import DetailHeaderWidget
 from src.ui.views.mod_detail.detail_requirements import DetailRequirementsWidget
 from src.ui.views.mod_detail.detail_gallery import DetailGalleryWidget
 from src.ui.views.mod_detail.detail_description import DetailDescriptionWidget
+from src.ui.views.mod_detail.detail_compat import ModDetailCompatMixin
 
 __all__ = [
     "GalleryItemWidget",
@@ -10,4 +11,5 @@ __all__ = [
     "DetailRequirementsWidget",
     "DetailGalleryWidget",
     "DetailDescriptionWidget",
+    "ModDetailCompatMixin",
 ]

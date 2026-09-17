@@ -57,6 +57,9 @@ SIMS4-Mods-Manager/
 │   │   └── routes/                    # Routeurs FastAPI modulaires
 │   │       ├── accounts_router.py     # Endpoints /api/accounts
 │   │       ├── catalog_router.py      # Endpoints /api/catalog
+│   │       ├── catalog_queries.py     # Constructeur de requêtes SQL & filtres avancés catalogue
+│   │       ├── catalog_reports_router.py # Signalements et interpellations forum
+│   │       ├── catalog_install_router.py # Pipeline d'installation unitaire & dépendances
 │   │       ├── installed_mods_router.py # Endpoints /api/installed
 │   │       ├── mod_updates_router.py  # Endpoints /api/updates
 │   │       ├── settings_router.py     # Endpoints /api/settings
@@ -68,7 +71,9 @@ SIMS4-Mods-Manager/
 │   │   ├── mod_update_service.py      # Comparaison version/date, mise à jour unitaire & en lot
 │   │   ├── mod_toggle_service.py      # Activation / désactivation propre avec extension .disabled
 │   │   ├── dependency_resolver.py     # Résolution des 4 statuts de dépendances de mods
-│   │   └── game_service.py            # Détection Sims 4 multilingue, registre & Resource.cfg
+│   │   ├── game_detector.py           # Détection Sims 4 multilingue (Documents, OneDrive) & Resource.cfg
+│   │   ├── game_launcher.py           # Détection exécutables (registre, Steam) & lancement de processus
+│   │   └── game_service.py            # Façade unifiée pour la détection et le lancement
 │   ├── database/                      # Couche Persistance (SQLAlchemy + SQLite)
 │   │   ├── connection.py              # Engine SQLite, session factory, création du schéma
 │   │   ├── models.py                  # Entités ORM (CatalogMod, InstalledMod, AccountSession, AppSettings)
@@ -95,11 +100,15 @@ SIMS4-Mods-Manager/
 │   │   ├── components/                # Éléments réutilisables (ModCard, FilterBar, ImageViewerModal, ImageCache...)
 │   │   │   ├── responsive_card_grid.py # Grille de cartes réactive s'adaptant à la largeur d'écran
 │   │   │   ├── dependencies_summary_widget.py # Widget partagé de prérequis pour ModCard et InstalledCard
+│   │   │   ├── dependency_card.py     # Carte unifiée de dépendance
+│   │   │   ├── dependency_section_builder.py # Constructeur de sections de prérequis & DLCs
+│   │   │   ├── account_card.py        # Carte réutilisable de statut et d'actions de compte
 │   │   │   ├── dialog_helper.py       # Standardisation des dialogues modaux (thème sombre & i18n)
 │   │   │   ├── filter_bar.py          # Barre de recherche et filtrage multi-critères
 │   │   │   ├── mod_card.py            # Tuile de catalogue
 │   │   │   ├── installed_card.py      # Tuile de mod installé
-│   │   │   └── image_viewer_modal.py  # Visionneuse de galerie de screenshots plein écran
+│   │   │   ├── image_viewer_modal.py  # Visionneuse de galerie de screenshots plein écran
+│   │   │   └── provider_drawer/       # Tiroir satellite rétractable (loverslab_card, patreon_card)
 │   │   ├── views/                     # Vues pleines pages (Catalogue, Détails, Mes Mods, Mises à jour, Logs, Paramètres, Comptes)
 │   │   └── workers/                   # Threads d'arrière-plan PySide6 (QThread)
 │   │       ├── catalog_workers.py     # SyncTriggerWorker, InstallWorker
@@ -114,7 +123,7 @@ SIMS4-Mods-Manager/
 │       ├── network.py                 # Allocation dynamique de port libre et stream_download
 │       ├── resource_cfg.py            # Modèle de configuration Resource.cfg
 │       └── version_utils.py           # Analyse flexible de dates multiformats et normalisation de versions
-└── tests/                             # Suite de tests automatisée (151 tests unitaires & intégration - 100% vert)
+└── tests/                             # Suite de tests automatisée (186 tests unitaires & intégration - 100% vert)
     ├── conftest.py                    # Fixtures pytest (FastAPI TestClient, SQLite temporaire, QApplication)
     ├── core/                          # Tests des constantes, exceptions et DTOs
     ├── api/                           # Tests des routes REST et de l'ApiClient

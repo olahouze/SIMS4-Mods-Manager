@@ -16,8 +16,14 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from src.api.client import get_api_client
-from src.ui.components.dependency_card import DependencyCardWidget
 from src.ui.components.author_interpellate_widget import AuthorInterpellateWidget
+from src.ui.components.dependency_section_builder import (
+    build_dlcs_section,
+    build_unfound_section,
+    build_comments_section,
+    build_installed_section,
+    build_missing_section,
+)
 from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
 from src.ui.workers.report_workers import CheckReportStatusWorker as _BaseCheckReportStatusWorker
 from src.i18n import tr
@@ -234,60 +240,13 @@ class DependenciesDialog(QDialog):
         self._clear_layout(self.c_layout)
 
         # 0. Official Sims 4 Game DLCs section
-        if self.game_dlcs:
-            dlc_header = QLabel(tr("dependencies.dlc_header", count=len(self.game_dlcs)))
-            dlc_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #a78bfa;")
-            self.c_layout.addWidget(dlc_header)
-
-            dlc_notice = QLabel(tr("dependencies.dlc_notice"))
-            dlc_notice.setStyleSheet("font-size: 11px; color: #c4b5fd; margin-bottom: 2px;")
-            dlc_notice.setWordWrap(True)
-            self.c_layout.addWidget(dlc_notice)
-
-            for dlc in self.game_dlcs:
-                dlc_title = dlc.get("title") or dlc.get("dlc_name") or "DLC Sims 4"
-                is_inst = dlc.get("is_installed", False)
-                badge_t = tr("dependencies.dlc_detected") if is_inst else tr("dependencies.dlc_check")
-                card = DependencyCardWidget(dlc_title, badge_t, badge_variant="success" if is_inst else "warning", prefix="🎮")
-                self.c_layout.addWidget(card)
+        build_dlcs_section(self.c_layout, self.game_dlcs)
 
         # 1. Unfound dependencies section
-        if self.unfound:
-            unf_header = QLabel(tr("dependencies.unfound_header", count=len(self.unfound)))
-            unf_header.setStyleSheet("font-size: 13px; font-weight: 800; color: #f87171;")
-            self.c_layout.addWidget(unf_header)
-
-            for dep in self.unfound:
-                dep_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                btn_comment = QPushButton(tr("dependencies.btn_mark_comment"))
-                btn_comment.clicked.connect(lambda _, d=dep: self._toggle_comment(d, to_comment=True))
-                card = DependencyCardWidget(
-                    dep_title,
-                    tr("dependencies.badge_unfound"),
-                    badge_variant="danger",
-                    prefix="⚠️",
-                    action_btn=btn_comment,
-                )
-                self.c_layout.addWidget(card)
+        build_unfound_section(self.c_layout, self.unfound, self._toggle_comment)
 
         # 2. Comments / Text Notes section
-        if self.comments:
-            com_header = QLabel(tr("dependencies.comments_header", count=len(self.comments)))
-            com_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #38bdf8; margin-top: 4px;")
-            self.c_layout.addWidget(com_header)
-
-            for dep in self.comments:
-                dep_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                btn_uncomment = QPushButton(tr("dependencies.btn_mark_mod"))
-                btn_uncomment.clicked.connect(lambda _, d=dep: self._toggle_comment(d, to_comment=False))
-                card = DependencyCardWidget(
-                    dep_title,
-                    tr("dependencies.badge_comment"),
-                    badge_variant="info",
-                    prefix="💬",
-                    action_btn=btn_uncomment,
-                )
-                self.c_layout.addWidget(card)
+        build_comments_section(self.c_layout, self.comments, self._toggle_comment)
 
         # Author Interpellation Button
         if self.unfound or self.comments:
@@ -295,26 +254,10 @@ class DependenciesDialog(QDialog):
             self._start_live_status_check()
 
         # 3. Already installed section
-        if self.already_installed:
-            ok_header = QLabel(tr("dependencies.already_header", count=len(self.already_installed)))
-            ok_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #34d399; margin-top: 6px;")
-            self.c_layout.addWidget(ok_header)
-
-            for dep in self.already_installed:
-                dep_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                card = DependencyCardWidget(dep_title, tr("dependencies.badge_installed"), badge_variant="success", prefix="✓")
-                self.c_layout.addWidget(card)
+        build_installed_section(self.c_layout, self.already_installed)
 
         # 4. Missing dependencies to install
-        if self.missing:
-            miss_header = QLabel(tr("dependencies.missing_header", count=len(self.missing)))
-            miss_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #60a5fa; margin-top: 6px;")
-            self.c_layout.addWidget(miss_header)
-
-            for dep in self.missing:
-                dep_title = dep.get("title") or f"Mod #{dep.get('remote_id')}"
-                card = DependencyCardWidget(dep_title, tr("dependencies.badge_to_install"), badge_variant="info", prefix="⬇")
-                self.c_layout.addWidget(card)
+        build_missing_section(self.c_layout, self.missing)
 
         self.c_layout.addStretch()
 

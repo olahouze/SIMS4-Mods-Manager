@@ -6,14 +6,10 @@ from typing import List, Dict, Any, Optional
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
     QTableWidget,
     QHeaderView,
     QMessageBox,
     QCheckBox,
-    QLineEdit,
 )
 from PySide6.QtCore import Signal
 
@@ -22,6 +18,7 @@ from src.ui.theme import Theme
 from src.ui.workers.update_workers import UpdateWorker
 from src.ui.views.updates.updates_row_builder import UpdatesRowBuilder
 from src.ui.views.updates.updates_controller import UpdatesActionController
+from src.ui.views.updates.updates_toolbar import build_updates_header, build_updates_toolbar
 from src.i18n import tr
 from src.utils.logger import logger
 
@@ -61,147 +58,10 @@ class UpdatesView(QWidget):
         layout.setSpacing(16)
 
         # 1. Header Bar: Stats & Main Actions
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
-
-        header_title_layout = QVBoxLayout()
-        header_title_layout.setSpacing(4)
-
-        self.main_title = QLabel(tr("updates.title"))
-        self.main_title.setStyleSheet("font-size: 20px; font-weight: 800; color: #f8fafc;")
-        header_title_layout.addWidget(self.main_title)
-
-        self.counter_label = QLabel(tr("updates.searching"))
-        self.counter_label.setStyleSheet("font-size: 13px; font-weight: 500; color: #94a3b8;")
-        header_title_layout.addWidget(self.counter_label)
-
-        header_layout.addLayout(header_title_layout)
-        header_layout.addStretch()
-
-        self.refresh_btn = QPushButton(tr("updates.refresh_btn"))
-        self.refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1e2238;
-                color: #e2e8f0;
-                border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-                font-size: 13px;
-                min-height: 22px;
-            }
-            QPushButton:hover { background-color: #2a2f4c; border-color: #6366f1; }
-        """)
-        self.refresh_btn.clicked.connect(self.refresh_updates)
-        header_layout.addWidget(self.refresh_btn)
-
-        self.update_selected_btn = QPushButton(tr("updates.update_selected_btn", count=0))
-        self.update_selected_btn.setEnabled(False)
-        self.update_selected_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4f46e5;
-                color: #ffffff;
-                border-radius: 6px;
-                padding: 8px 18px;
-                font-weight: 700;
-                font-size: 13px;
-                min-height: 22px;
-            }
-            QPushButton:hover { background-color: #6366f1; }
-            QPushButton:disabled {
-                background-color: #1e2238;
-                color: #475569;
-                border: 1px solid #282e44;
-            }
-        """)
-        self.update_selected_btn.clicked.connect(self.update_selected_mods)
-        header_layout.addWidget(self.update_selected_btn)
-
-        self.update_all_btn = QPushButton(tr("updates.update_all_btn"))
-        self.update_all_btn.setEnabled(False)
-        self.update_all_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #eab308;
-                color: #000000;
-                border-radius: 6px;
-                padding: 8px 18px;
-                font-weight: 700;
-                font-size: 13px;
-                min-height: 22px;
-            }
-            QPushButton:hover { background-color: #facc15; }
-            QPushButton:disabled {
-                background-color: #1e2238;
-                color: #475569;
-                border: 1px solid #282e44;
-            }
-        """)
-        self.update_all_btn.clicked.connect(self.update_all_mods)
-        header_layout.addWidget(self.update_all_btn)
-
-        layout.addLayout(header_layout)
+        layout.addLayout(build_updates_header(self))
 
         # 2. Controls & Search Toolbar
-        toolbar_layout = QHBoxLayout()
-        toolbar_layout.setSpacing(10)
-
-        self.select_updates_btn = QPushButton(tr("updates.select_updates_btn"))
-        self.select_updates_btn.setToolTip(tr("updates.select_updates_tip"))
-        self.select_updates_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1e2238;
-                color: #38bdf8;
-                border: 1px solid #0284c7;
-                border-radius: 6px;
-                padding: 6px 14px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QPushButton:hover { background-color: #0369a1; color: #ffffff; }
-        """)
-        self.select_updates_btn.clicked.connect(self.select_updates_only)
-        toolbar_layout.addWidget(self.select_updates_btn)
-
-        self.select_all_btn = QPushButton(tr("updates.select_all_btn"))
-        self.select_all_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1e2238;
-                color: #cbd5e1;
-                border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 12px;
-            }
-            QPushButton:hover { background-color: #2a2f4c; color: #ffffff; }
-        """)
-        self.select_all_btn.clicked.connect(self.select_all)
-        toolbar_layout.addWidget(self.select_all_btn)
-
-        self.deselect_all_btn = QPushButton(tr("updates.deselect_all_btn"))
-        self.deselect_all_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1e2238;
-                color: #cbd5e1;
-                border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 12px;
-            }
-            QPushButton:hover { background-color: #2a2f4c; color: #ffffff; }
-        """)
-        self.deselect_all_btn.clicked.connect(self.deselect_all)
-        toolbar_layout.addWidget(self.deselect_all_btn)
-
-        toolbar_layout.addStretch()
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText(tr("updates.search_placeholder"))
-        self.search_input.setFixedWidth(280)
-        self.search_input.setStyleSheet(Theme.input_style())
-        self.search_input.textChanged.connect(self._apply_filter)
-        toolbar_layout.addWidget(self.search_input)
-
-        layout.addLayout(toolbar_layout)
+        layout.addLayout(build_updates_toolbar(self))
 
         # 3. Mods Table
         self.table = QTableWidget()
