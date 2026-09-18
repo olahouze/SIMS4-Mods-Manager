@@ -18,6 +18,7 @@ from src.ui.components.sidebar_nav import SidebarNavWidget
 from src.ui.views.accounts_view import AccountsView
 from src.ui.views.catalog_view import CatalogView
 from src.ui.views.installed_view import InstalledView
+from src.ui.views.downloads_view import DownloadsView
 from src.ui.views.logs_view import LogsView
 from src.ui.views.mod_detail_view import ModDetailView
 from src.ui.views.settings_view import SettingsView
@@ -104,18 +105,20 @@ class MainWindow(QMainWindow):
         self.accounts_view = AccountsView()
         self.catalog_view = CatalogView()
         self.installed_view = InstalledView()
+        self.downloads_view = DownloadsView()
         self.updates_view = UpdatesView()
         self.logs_view = LogsView()
         self.settings_view = SettingsView()
         self.mod_detail_view = ModDetailView()
 
-        self.stacked_widget.addWidget(self.accounts_view)  # Index 0
-        self.stacked_widget.addWidget(self.catalog_view)  # Index 1
-        self.stacked_widget.addWidget(self.installed_view)  # Index 2
-        self.stacked_widget.addWidget(self.updates_view)  # Index 3
-        self.stacked_widget.addWidget(self.logs_view)  # Index 4
-        self.stacked_widget.addWidget(self.settings_view)  # Index 5
-        self.stacked_widget.addWidget(self.mod_detail_view)  # Index 6
+        self.stacked_widget.addWidget(self.accounts_view)    # Index 0
+        self.stacked_widget.addWidget(self.catalog_view)     # Index 1
+        self.stacked_widget.addWidget(self.installed_view)   # Index 2
+        self.stacked_widget.addWidget(self.downloads_view)   # Index 3
+        self.stacked_widget.addWidget(self.updates_view)     # Index 4
+        self.stacked_widget.addWidget(self.logs_view)        # Index 5
+        self.stacked_widget.addWidget(self.settings_view)    # Index 6
+        self.stacked_widget.addWidget(self.mod_detail_view)  # Index 7
 
         content_layout.addWidget(self.stacked_widget)
         main_layout.addWidget(content_area)
@@ -127,11 +130,21 @@ class MainWindow(QMainWindow):
         self.installed_view.details_requested.connect(
             lambda d: self.show_mod_details(d, origin_name="Mes Mods", origin_index=2)
         )
+        self.downloads_view.details_requested.connect(
+            lambda d: self.show_mod_details(d, origin_name="Téléchargements", origin_index=3)
+        )
+        self.downloads_view.open_folder_requested.connect(self.installed_view.open_mod_folder)
+        self.downloads_view.active_count_changed.connect(self.sidebar.update_downloads_badge)
+
+        self.catalog_view.download_requested.connect(self.downloads_view.start_download)
+        self.catalog_view.view_downloads_requested.connect(lambda: self.switch_page(3))
+
         self.mod_detail_view.back_requested.connect(self._on_detail_back)
         self.mod_detail_view.install_requested.connect(self._on_detail_install_requested)
         self.mod_detail_view.open_folder_requested.connect(self.installed_view.open_mod_folder)
 
         self.catalog_view.install_finished.connect(self._on_mods_state_changed)
+        self.downloads_view.install_finished.connect(self._on_mods_state_changed)
         self.installed_view.mods_changed.connect(self._on_mods_state_changed)
         self.updates_view.updates_applied.connect(self._on_mods_state_changed)
 
@@ -154,6 +167,10 @@ class MainWindow(QMainWindow):
     @property
     def btn_installed(self):
         return self.sidebar.btn_installed
+
+    @property
+    def btn_downloads(self):
+        return self.sidebar.btn_downloads
 
     @property
     def btn_updates(self):
@@ -186,10 +203,12 @@ class MainWindow(QMainWindow):
         elif index == 2:
             self.installed_view.refresh_mods()
         elif index == 3:
-            self.updates_view.refresh_updates()
+            self.downloads_view.refresh_downloads()
         elif index == 4:
-            self.logs_view.load_initial_history()
+            self.updates_view.refresh_updates()
         elif index == 5:
+            self.logs_view.load_initial_history()
+        elif index == 6:
             self.settings_view.load_settings()
 
         self.refresh_game_status()
@@ -199,7 +218,7 @@ class MainWindow(QMainWindow):
         self.current_origin_index = origin_index
         for btn in self.nav_buttons:
             btn.setChecked(False)
-        self.stacked_widget.setCurrentIndex(6)
+        self.stacked_widget.setCurrentIndex(self.stacked_widget.indexOf(self.mod_detail_view))
         self.mod_detail_view.load_mod(mod_data, origin_name=origin_name, origin_index=origin_index)
 
     def _on_detail_back(self):
@@ -262,6 +281,7 @@ class MainWindow(QMainWindow):
             self.accounts_view,
             self.catalog_view,
             self.installed_view,
+            self.downloads_view,
             self.updates_view,
             self.logs_view,
             self.settings_view,

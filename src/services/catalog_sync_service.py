@@ -50,7 +50,8 @@ def run_catalog_sync(max_pages: int) -> None:
             cat_id = cat["id"]
             cat_name = cat["name"]
             default_p = cat.get("default_pages", 1)
-            target_cat_pages = default_p if max_pages <= 0 else min(max_pages, default_p)
+            baseline_p = default_p if max_pages <= 0 else min(max_pages, default_p)
+            target_cat_pages = baseline_p
 
             SyncTracker.update_category(cat_id, 0, target_cat_pages, 0, "IN_PROGRESS")
             cat_mods_count = 0
@@ -79,8 +80,9 @@ def run_catalog_sync(max_pages: int) -> None:
                             else:
                                 target_cat_pages = min(max_pages, detected_pages)
                             with SyncTracker._lock:
-                                diff = target_cat_pages - default_p
+                                diff = target_cat_pages - baseline_p
                                 SyncTracker.total_pages = max(1, SyncTracker.total_pages + diff)
+                            SyncTracker.update_category(cat_id, 0, target_cat_pages, cat_mods_count, "IN_PROGRESS")
                         break
                     except Exception as e:
                         if attempt < max_retries - 1:

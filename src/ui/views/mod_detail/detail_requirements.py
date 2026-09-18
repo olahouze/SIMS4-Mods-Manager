@@ -139,7 +139,6 @@ class DetailRequirementsWidget(QWidget):
         """Displays requirements status, dependencies list categorized by type, and forum interpellation."""
         self._mod_data = data
         req_text = data.get("requirements_text")
-        req_status = data.get("requirements_status", "NONE")
         raw_deps = data.get("dependencies", [])
 
         while self.deps_layout.count():
@@ -191,7 +190,7 @@ class DetailRequirementsWidget(QWidget):
             else:
                 unfound.append(d)
 
-        if (req_status in ["PENDING_VERIFICATION", "PARTIAL"] or (req_text and not raw_deps)) and not unfound and not comments and req_text and req_text.strip():
+        if (not raw_deps and not game_dlcs and not already_installed and not to_install and not unfound and not comments) and req_text and req_text.strip():
             clean_req_text = clean_dependency_title(req_text)
             is_bg, is_dlc_text, _, _ = detect_game_dlc_or_base_game(clean_req_text)
             if not is_bg and not is_dlc_text:

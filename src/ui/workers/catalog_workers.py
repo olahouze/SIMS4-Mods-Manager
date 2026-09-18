@@ -78,7 +78,12 @@ class InstallWorker(BaseWorker):
             self._is_running = True
             self.progress.emit(2, "Initialisation de l'installation...", "Préparation de la requête...")
             u_date = self.mod_data.get("updated_date")
-            u_date_str = u_date.isoformat() if hasattr(u_date, "isoformat") else (str(u_date) if u_date else None)
+            u_date_str = None
+            if u_date:
+                if hasattr(u_date, "isoformat"):
+                    u_date_str = u_date.isoformat()
+                elif isinstance(u_date, str) and u_date.strip():
+                    u_date_str = u_date.strip()
 
             payload = {
                 "catalog_mod_id": self.mod_data.get("id"),

@@ -50,13 +50,15 @@ class SidebarNavWidget(QFrame):
         self.btn_accounts = self._create_nav_button(tr("nav.accounts"), 0)
         self.btn_catalog = self._create_nav_button(tr("nav.catalog"), 1)
         self.btn_installed = self._create_nav_button(tr("nav.installed"), 2)
-        self.btn_updates = self._create_nav_button(tr("nav.updates"), 3)
-        self.btn_logs = self._create_nav_button(tr("nav.logs"), 4)
-        self.btn_settings = self._create_nav_button(tr("nav.settings"), 5)
+        self.btn_downloads = self._create_nav_button(tr("nav.downloads"), 3)
+        self.btn_updates = self._create_nav_button(tr("nav.updates"), 4)
+        self.btn_logs = self._create_nav_button(tr("nav.logs"), 5)
+        self.btn_settings = self._create_nav_button(tr("nav.settings"), 6)
 
         sidebar_layout.addWidget(self.btn_accounts)
         sidebar_layout.addWidget(self.btn_catalog)
         sidebar_layout.addWidget(self.btn_installed)
+        sidebar_layout.addWidget(self.btn_downloads)
         sidebar_layout.addWidget(self.btn_updates)
         sidebar_layout.addWidget(self.btn_logs)
         sidebar_layout.addWidget(self.btn_settings)
@@ -118,10 +120,17 @@ class SidebarNavWidget(QFrame):
         else:
             self.btn_updates.setText(tr("nav.updates"))
 
+    def update_downloads_badge(self, count: int):
+        if count > 0:
+            self.btn_downloads.setText(tr("nav.downloads_with_count", count=count))
+        else:
+            self.btn_downloads.setText(tr("nav.downloads"))
+
     def retranslate_ui(self):
         self.btn_accounts.setText(tr("nav.accounts"))
         self.btn_catalog.setText(tr("nav.catalog"))
         self.btn_installed.setText(tr("nav.installed"))
+        self.btn_downloads.setText(tr("nav.downloads"))
         self.btn_updates.setText(tr("nav.updates"))
         self.btn_logs.setText(tr("nav.logs"))
         self.btn_settings.setText(tr("nav.settings"))

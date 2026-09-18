@@ -27,9 +27,9 @@ class InstalledView(QWidget):
     details_requested = Signal(dict)
     mods_changed = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, api_client=None):
         super().__init__(parent)
-        self.api_client = get_api_client()
+        self.api_client = api_client or get_api_client()
         self.all_mods = []
         self.init_ui()
 
@@ -217,7 +217,7 @@ class InstalledView(QWidget):
             res = self.api_client.uninstall_mod(mod_id)
             if res.get("success", False):
                 logger.info(f"Mod '{title}' désinstallé avec succès.")
-                DialogHelper.information(self, tr("installed.delete_success_title"), tr("installed.delete_success_msg", title=title))
+                DialogHelper.success(self, tr("installed.delete_success_title"), tr("installed.delete_success_msg", title=title))
                 self.mods_changed.emit()
             else:
                 logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")

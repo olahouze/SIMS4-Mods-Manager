@@ -1,3 +1,4 @@
+import logging
 import concurrent.futures
 import os
 import pytest
@@ -22,6 +23,42 @@ def _tracked_init(self, *args, **kwargs):
 concurrent.futures.ThreadPoolExecutor.__init__ = _tracked_init
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolate_test_logger(tmp_path_factory):
+    """
+    Détache le FileHandler écrivant dans app.log de production pendant l'exécution des tests.
+    Évite de polluer app.log avec des erreurs mockées (MagicMock, etc.).
+    """
+    test_log_dir = tmp_path_factory.mktemp("test_logs")
+    test_log_file = test_log_dir / "test_app.log"
+
+    app_logger = logging.getLogger("sims4_mod_manager")
+    orig_file_handlers = [h for h in app_logger.handlers if isinstance(h, logging.FileHandler)]
+
+    for h in orig_file_handlers:
+        app_logger.removeHandler(h)
+        try:
+            h.close()
+        except Exception:
+            pass
+
+    test_handler = logging.FileHandler(test_log_file, encoding="utf-8")
+    test_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        fmt="[%(asctime)s] [%(levelname)s] [%(name)s:%(lineno)d] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    test_handler.setFormatter(formatter)
+    app_logger.addHandler(test_handler)
+
+    yield test_log_file
+
+    app_logger.removeHandler(test_handler)
+    try:
+        test_handler.close()
+    except Exception:
+        pass
+
 
 @pytest.fixture(autouse=True)
 def reset_shutdown_state():
@@ -29,7 +66,6 @@ def reset_shutdown_state():
     ShutdownManager.reset()
     yield
     ShutdownManager.reset()
-
 
 
 @pytest.fixture(scope="session", autouse=True)

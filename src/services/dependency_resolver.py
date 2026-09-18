@@ -28,6 +28,7 @@ def resolve_mod_dependencies(
     is_syncing: Optional[bool] = None,
     catalog_remote_ids: Optional[set] = None,
     requirements_overrides: Optional[Dict[str, str]] = None,
+    deduplicate: bool = True,
 ) -> List[DependencyItem]:
     """
     Resolves dependency items against database catalog, installed mods, and official game DLCs.
@@ -212,7 +213,57 @@ def resolve_mod_dependencies(
                 dlc_code=None,
             )
         )
-    return items
+
+    if not deduplicate:
+        return items
+
+    # Deduplicate and merge resolved dependency items
+    deduped: List[DependencyItem] = []
+    seen_ids: Dict[Tuple[str, str], int] = {}
+    seen_fps: Dict[str, int] = {}
+
+    for item in items:
+        s = item.source
+        r = item.remote_id
+        clean_t = ModMatcher.clean_mod_title(item.title) if item.title else ""
+        fp = ModMatcher.canonical_fingerprint(clean_t) if clean_t else ""
+
+        existing_idx = None
+        if item.is_game_dlc:
+            dlc_k = f"dlc:{item.dlc_code or item.dlc_name or item.title}".lower()
+            if dlc_k in seen_fps:
+                existing_idx = seen_fps[dlc_k]
+            else:
+                seen_fps[dlc_k] = len(deduped)
+        else:
+            if r and (s, r) in seen_ids:
+                existing_idx = seen_ids[(s, r)]
+            elif fp and fp in seen_fps:
+                existing_idx = seen_fps[fp]
+
+        if existing_idx is not None:
+            existing = deduped[existing_idx]
+            if item.is_installed and not existing.is_installed:
+                existing.is_installed = True
+                existing.status = "INSTALLED"
+            if not existing.remote_id and item.remote_id:
+                existing.remote_id = item.remote_id
+            if not existing.url and item.url:
+                existing.url = item.url
+            if r:
+                seen_ids[(s, r)] = existing_idx
+            if fp:
+                seen_fps[fp] = existing_idx
+        else:
+            idx = len(deduped)
+            if not item.is_game_dlc:
+                if r:
+                    seen_ids[(s, r)] = idx
+                if fp:
+                    seen_fps[fp] = idx
+            deduped.append(item)
+
+    return deduped
 
 
 

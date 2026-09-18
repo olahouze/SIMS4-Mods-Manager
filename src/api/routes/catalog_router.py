@@ -164,12 +164,12 @@ def start_sync(payload: CatalogSyncRequest, background_tasks: BackgroundTasks):
     initial_pages = (
         sum(c.get("default_pages", 1) for c in categories)
         if payload.max_pages <= 0
-        else (len(categories) * payload.max_pages)
+        else sum(min(payload.max_pages, c.get("default_pages", 1)) for c in categories)
     )
     page_msg = (
         "toutes les pages détectées" if payload.max_pages <= 0 else f"{payload.max_pages} pages par source"
     )
-    SyncTracker.start(initial_pages, categories_list=categories)
+    SyncTracker.start(initial_pages, categories_list=categories, max_pages_per_cat=payload.max_pages)
     SyncTracker.message = f"Synchronisation démarrée ({page_msg})."
     background_tasks.add_task(_run_catalog_sync, payload.max_pages)
     return SyncTracker.to_response()
@@ -221,14 +221,14 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
             or "background-color:" in desc
         )
     )
-    if (
+    needs_remote_fetch = (
         force_refresh
         or not desc
         or is_legacy
-        or not m.requirements_status
-        or m.requirements_status == "NONE"
-        or (m.requirements_text and not m.get_requirements_mods_list())
-    ) and m.page_url:
+        or m.requirements_status is None
+        or (m.requirements_text and not m.get_requirements_mods_list() and m.requirements_status != "RESOLVED")
+    )
+    if needs_remote_fetch and m.page_url:
         try:
             provider = ProviderRegistry.get_provider(m.source)
             if provider:

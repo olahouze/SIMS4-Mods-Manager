@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QScrollArea,
     QLabel,
+    QPushButton,
+    QFrame,
     QMessageBox,
     QDialog,
 )
@@ -15,9 +17,8 @@ from src.ui.components.filter_bar import FilterBar
 from src.ui.components.mod_card import ModCard
 from src.ui.components.responsive_card_grid import ResponsiveCardGrid
 from src.ui.components.dependencies_dialog import DependenciesDialog
-from src.ui.components.progress_dialog import ProgressDialog
 from src.ui.components.provider_drawer import ProviderDrawer
-from src.ui.workers.catalog_workers import SyncTriggerWorker, InstallWorker, CatalogFetchWorker
+from src.ui.workers.catalog_workers import SyncTriggerWorker, CatalogFetchWorker
 from src.ui.views.catalog.filter_adapter import build_catalog_api_params
 from src.ui.views.catalog.catalog_widgets import CatalogSyncBannerWidget, CatalogPaginationBar
 from src.i18n import tr
@@ -32,6 +33,8 @@ class CatalogView(QWidget):
     """
 
     details_requested = Signal(dict)
+    download_requested = Signal(dict)
+    view_downloads_requested = Signal()
     install_finished = Signal(bool, str)
 
     def __init__(self, parent=None):
@@ -92,6 +95,56 @@ class CatalogView(QWidget):
         self.pagination_bar.prev_requested.connect(self._on_prev_page)
         self.pagination_bar.next_requested.connect(self._on_next_page)
         layout.addWidget(self.pagination_bar)
+
+        # Non-intrusive Download Notification Banner
+        self.toast_banner = QFrame(self)
+        self.toast_banner.setObjectName("DownloadToast")
+        self.toast_banner.setStyleSheet("""
+            QFrame#DownloadToast {
+                background-color: #0f172a;
+                border: 1px solid #0284c7;
+                border-radius: 10px;
+            }
+        """)
+        toast_layout = QHBoxLayout(self.toast_banner)
+        toast_layout.setContentsMargins(14, 8, 14, 8)
+        toast_layout.setSpacing(12)
+
+        self.toast_label = QLabel()
+        self.toast_label.setStyleSheet("color: #f8fafc; font-size: 13px; font-weight: 600;")
+        toast_layout.addWidget(self.toast_label, stretch=1)
+
+        self.btn_toast_view = QPushButton(tr("downloads.toast_action_view"))
+        self.btn_toast_view.setStyleSheet("""
+            QPushButton {
+                background-color: #0284c7;
+                color: #ffffff;
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QPushButton:hover { background-color: #0369a1; }
+        """)
+        self.btn_toast_view.clicked.connect(self.view_downloads_requested.emit)
+        toast_layout.addWidget(self.btn_toast_view)
+
+        btn_toast_close = QPushButton("✕")
+        btn_toast_close.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #94a3b8;
+                border: none;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QPushButton:hover { color: #f8fafc; }
+        """)
+        btn_toast_close.clicked.connect(lambda: self.toast_banner.setVisible(False))
+        toast_layout.addWidget(btn_toast_close)
+
+        self.toast_banner.setVisible(False)
+        layout.addWidget(self.toast_banner)
 
         main_h_layout.addWidget(left_widget, stretch=1)
 
@@ -310,15 +363,26 @@ class CatalogView(QWidget):
     def install_mod(self, mod_data: dict):
         mod_id = mod_data.get("id")
         try:
-            dep_res = self.api_client.check_dependencies(mod_id)
-            if dep_res and (dep_res.get("missing") or dep_res.get("already_installed") or dep_res.get("game_dlcs")):
+            payload = {
+                "catalog_mod_id": mod_id,
+                "source": mod_data.get("source", "loverslab"),
+                "remote_id": mod_data.get("remote_id"),
+                "page_url": mod_data.get("page_url"),
+                "title": mod_data.get("title"),
+            }
+            dep_res = self.api_client.check_dependencies(payload)
+            al_inst = dep_res.get("already_installed_dependencies") or dep_res.get("already_installed") or []
+            missing = dep_res.get("missing_dependencies") or dep_res.get("missing") or []
+            unfound = dep_res.get("unfound_dependencies") or dep_res.get("unfound") or []
+            dlcs = dep_res.get("game_dlc_dependencies") or dep_res.get("game_dlcs") or []
+            if dep_res and (missing or al_inst or dlcs or unfound):
                 dlg = DependenciesDialog(
                     mod_title=dep_res.get("mod_title", mod_data.get("title", "")),
-                    already_installed=dep_res.get("already_installed", []),
-                    missing=dep_res.get("missing", []),
-                    unfound=dep_res.get("unfound", []),
+                    already_installed=al_inst,
+                    missing=missing,
+                    unfound=unfound,
                     is_partial=dep_res.get("is_partial", False),
-                    game_dlcs=dep_res.get("game_dlcs", []),
+                    game_dlcs=dlcs,
                     mod_data=mod_data,
                     parent=self,
                 )
@@ -327,13 +391,15 @@ class CatalogView(QWidget):
         except Exception as e:
             logger.warning(f"Impossible de vérifier les dépendances avant installation: {e}")
 
-        self.progress_dlg = ProgressDialog(tr("catalog.install_progress_title", title=mod_data.get('title', '')), self)
-        self.progress_dlg.show()
+        # Emit download request for dedicated downloads tab (non-blocking)
+        self.download_requested.emit(mod_data)
 
-        self.install_worker = InstallWorker(mod_data)
-        self.install_worker.progress.connect(self._on_install_progress)
-        self.install_worker.finished.connect(self._on_install_finished)
-        self.install_worker.start()
+        # Show non-intrusive toast banner allowing user to continue browsing the catalog
+        title = mod_data.get("title") or "Mod"
+        if hasattr(self, "toast_banner"):
+            self.toast_label.setText(tr("downloads.toast_started", title=title))
+            self.toast_banner.setVisible(True)
+            QTimer.singleShot(6000, lambda: self.toast_banner.setVisible(False))
 
     def _on_install_progress(self, percent: int, status: str, details: str = ""):
         if hasattr(self, "progress_dlg") and self.progress_dlg.isVisible():

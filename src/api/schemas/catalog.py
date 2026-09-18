@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 class DependencyItem(BaseModel):
@@ -103,9 +103,31 @@ class CatalogInstallRequest(BaseModel):
     remote_id: Optional[str] = None
     page_url: Optional[str] = None
     title: Optional[str] = None
-    updated_date: Optional[datetime] = None
+    updated_date: Optional[Union[datetime, str]] = None
     install_dependencies: bool = True
     allow_partial: bool = True
+
+    @field_validator("updated_date", mode="before")
+    @classmethod
+    def parse_updated_date(cls, v):
+        if not v:
+            return None
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            v_str = v.strip()
+            if not v_str:
+                return None
+            try:
+                from dateutil import parser as date_parser
+                return date_parser.parse(v_str, dayfirst=True)
+            except Exception:
+                try:
+                    return datetime.fromisoformat(v_str)
+                except Exception:
+                    return None
+        return None
+
 
 
 class CatalogInstallResponse(BaseModel):

@@ -1,5 +1,5 @@
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 
 
 class ApiClient:
@@ -134,8 +134,14 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
-    def check_dependencies(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        resp = self._client.post("/api/catalog/check-dependencies", json=payload)
+    def check_dependencies(self, payload: Union[Dict[str, Any], int, str]) -> Dict[str, Any]:
+        if isinstance(payload, int) or (isinstance(payload, str) and payload.isdigit()):
+            body = {"catalog_mod_id": int(payload)}
+        elif isinstance(payload, dict):
+            body = payload
+        else:
+            body = {"remote_id": str(payload)}
+        resp = self._client.post("/api/catalog/check-dependencies", json=body)
         resp.raise_for_status()
         return resp.json()
 

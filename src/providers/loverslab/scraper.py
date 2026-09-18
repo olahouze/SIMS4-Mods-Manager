@@ -170,7 +170,14 @@ class LoversLabProvider(BaseSourceProvider):
             patreon_redirect_url = None
 
             try:
-                r_chk = session.get(direct_dl_url, allow_redirects=False, timeout=8)
+                try:
+                    r_chk = session.head(direct_dl_url, allow_redirects=False, timeout=3.0)
+                except Exception:
+                    r_chk = None
+
+                if r_chk is None or not isinstance(getattr(r_chk, "status_code", None), int) or r_chk.status_code == 405:
+                    r_chk = session.get(direct_dl_url, allow_redirects=False, timeout=3.0)
+
                 if r_chk.status_code in [301, 302, 303, 307, 308]:
                     loc = r_chk.headers.get("Location", "")
                     if "patreon.com" in loc.lower():
@@ -309,17 +316,19 @@ class LoversLabProvider(BaseSourceProvider):
 
     def download_mod_file(
         self,
-        mod_url: str,
-        dest_folder: Path,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
-        cancel_event: Optional[Any] = None,
-    ) -> List[Path]:
+        download_url: Optional[str] = None,
+        dest_path: Optional[Path] = None,
+        progress_callback: Optional[Callable[[int, str, str], None]] = None,
+        **kwargs,
+    ) -> Tuple[bool, str]:
+        target_url = download_url or kwargs.get("mod_url", "")
+        target_path = dest_path or kwargs.get("dest_folder") or kwargs.get("dest_path")
         return download_loverslab_file(
-            mod_url=mod_url,
-            dest_folder=dest_folder,
+            download_url=target_url,
+            dest_path=target_path,
+            patreon_provider=self.patreon_provider,
             base_url=self.base_url,
             progress_callback=progress_callback,
-            cancel_event=cancel_event,
         )
 
     def check_access(self, mod_data: Dict[str, Any]) -> str:

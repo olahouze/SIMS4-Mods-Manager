@@ -116,3 +116,8 @@ class DialogHelper:
     def success(cls, parent: Optional[QWidget], title: str, message: str) -> None:
         """Displays a standardized success dialog."""
         cls.info(parent, title, message)
+
+    @classmethod
+    def information(cls, parent: Optional[QWidget], title: str, message: str) -> None:
+        """Displays a standardized info dialog (alias for info)."""
+        cls.info(parent, title, message)

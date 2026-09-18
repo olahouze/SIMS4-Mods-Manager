@@ -18,7 +18,7 @@ from src.utils.logger import logger
 class SyncTracker:
     """Thread-safe tracker for catalog synchronization progress with pause and stop support."""
 
-    _lock = threading.Lock()
+    _lock = threading.RLock()
     _pause_event = threading.Event()
     _pause_event.set()  # Initially unpaused
 
@@ -42,7 +42,12 @@ class SyncTracker:
     _last_count_time: float = 0.0
 
     @classmethod
-    def start(cls, max_pages: int, categories_list: Optional[List[Dict[str, Any]]] = None) -> None:
+    def start(
+        cls,
+        max_pages: int,
+        categories_list: Optional[List[Dict[str, Any]]] = None,
+        max_pages_per_cat: int = 0,
+    ) -> None:
         with cls._lock:
             cls.is_running = True
             cls.is_paused = False
@@ -70,7 +75,11 @@ class SyncTracker:
                         "id": c["id"],
                         "name": c["name"],
                         "pages_completed": 0,
-                        "total_pages": c.get("default_pages", 1),
+                        "total_pages": (
+                            c.get("default_pages", 1)
+                            if max_pages_per_cat <= 0
+                            else min(max_pages_per_cat, c.get("default_pages", 1))
+                        ),
                         "mods_count": 0,
                         "status": "PENDING",
                     }

@@ -581,25 +581,39 @@ def test_special_dependency_cases_and_wickedwhims_mapping():
             {"source": "loverslab", "remote_id": "", "title": "Nisa's Wicked Perversions"},
         ]
 
-        resolved = resolve_mod_dependencies(
+        # Non-deduplicated: test all raw entries resolve to target
+        resolved_raw = resolve_mod_dependencies(
             raw_deps,
             session,
             installed_by_remote={},
             installed_by_title={},
             is_syncing=False,
+            deduplicate=False,
         )
 
-        assert len(resolved) == 4
+        assert len(resolved_raw) == 4
         # WickedWhims variations matched via special case table
         for i in range(3):
-            assert resolved[i].remote_id == "3169"
-            assert resolved[i].title == "WickedWhims"
-            assert resolved[i].status == "DETECTED_NOT_INSTALLED"
+            assert resolved_raw[i].remote_id == "3169"
+            assert resolved_raw[i].title == "WickedWhims"
+            assert resolved_raw[i].status == "DETECTED_NOT_INSTALLED"
 
         # Nisa resolved via normal catalog matching
-        assert resolved[3].remote_id == "test_nisa"
-        assert resolved[3].title == "Nisa's Wicked Perversions"
-        assert resolved[3].status == "DETECTED_NOT_INSTALLED"
+        assert resolved_raw[3].remote_id == "test_nisa"
+        assert resolved_raw[3].title == "Nisa's Wicked Perversions"
+        assert resolved_raw[3].status == "DETECTED_NOT_INSTALLED"
+
+        # Deduplicated (default): merges duplicate WickedWhims variations into 1
+        resolved_deduped = resolve_mod_dependencies(
+            raw_deps,
+            session,
+            installed_by_remote={},
+            installed_by_title={},
+            is_syncing=False,
+            deduplicate=True,
+        )
+        assert len(resolved_deduped) == 2
+        assert {r.title for r in resolved_deduped} == {"WickedWhims", "Nisa's Wicked Perversions"}
 
 
 def test_find_dependent_installed_mods():

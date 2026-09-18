@@ -56,20 +56,34 @@ def extract_download_candidates(soup: BeautifulSoup, base_url: str) -> List[Dict
 
 
 def download_loverslab_file(
-    download_url: str,
-    dest_path: Path,
-    patreon_provider,
+    download_url: Optional[str] = None,
+    dest_path: Optional[Path] = None,
+    patreon_provider: Any = None,
     base_url: str = "https://www.loverslab.com",
     progress_callback: Optional[Callable[[int, str, str], None]] = None,
+    **kwargs,
 ) -> Tuple[bool, str]:
     """
     Downloads a direct file from LoversLab resolving multi-step IPS confirmation pages.
     """
+    if download_url is None:
+        download_url = kwargs.get("mod_url", "")
+    if dest_path is None:
+        dest_path = kwargs.get("dest_folder") or kwargs.get("dest_path")
+    if patreon_provider is None:
+        from src.providers import ProviderRegistry
+        patreon_provider = ProviderRegistry.get_provider("patreon")
+
+    if not download_url or not dest_path:
+        return False, "URL de téléchargement ou chemin de destination manquant."
+
     if "patreon.com" in download_url:
         return patreon_provider.download_mod_file(download_url, dest_path, progress_callback=progress_callback)
 
     session = SessionManager.get_http_session("loverslab")
     is_member = SessionManager.is_member_authenticated("loverslab")
+
+    import time
 
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +93,7 @@ def download_loverslab_file(
                 5, "Connexion aux serveurs LoversLab...", "Résolution de la page de téléchargement..."
             )
 
-        resp = session.get(download_url, timeout=45, allow_redirects=False)
+        resp = session.get(download_url, stream=False, timeout=300, allow_redirects=False)
         logger.info(
             f"Réponse initiale LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}"
         )
@@ -98,7 +112,7 @@ def download_loverslab_file(
                 logger.warning(msg)
                 return False, msg
 
-            resp = session.get(target, timeout=45, allow_redirects=True)
+            resp = session.get(target, stream=False, timeout=300, allow_redirects=True)
 
         logger.info(
             f"Réponse LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}"
@@ -126,6 +140,12 @@ def download_loverslab_file(
         content_disp = resp.headers.get("Content-Disposition", "").lower()
 
         if "html" not in content_type or "attachment" in content_disp or "filename=" in content_disp:
+            if isinstance(getattr(resp, "content", None), (bytes, bytearray)) and len(resp.content) > 0:
+                dest_path.write_bytes(resp.content)
+                if progress_callback:
+                    progress_callback(100, "Téléchargement terminé", f"{dest_path.name}")
+                return True, str(dest_path)
+            # If empty or stream mock, fallback to stream_download
             return stream_download(resp, dest_path, progress_callback, "Téléchargement Direct")
 
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -136,6 +156,36 @@ def download_loverslab_file(
             return False, msg
 
         candidates = extract_download_candidates(soup, base_url)
+        if not candidates:
+            # Check for IPS agreement form
+            agreement_form = soup.select_one("form[action*='do=download']")
+            if agreement_form and agreement_form.get("action"):
+                action_url = agreement_form["action"]
+                if not action_url.startswith("http"):
+                    action_url = base_url + action_url
+                form_data = {}
+                for inp in agreement_form.select("input[name]"):
+                    form_data[inp["name"]] = inp.get("value", "")
+                if "agree" not in form_data:
+                    form_data["agree"] = "1"
+                logger.info(f"Soumission du formulaire de confirmation IPS: {action_url}")
+                post_resp = session.post(action_url, data=form_data, stream=False, timeout=60, allow_redirects=True)
+                if post_resp.status_code == 200:
+                    post_ct = post_resp.headers.get("Content-Type", "").lower()
+                    if "html" not in post_ct or "attachment" in post_resp.headers.get("Content-Disposition", ""):
+                        dest_path.write_bytes(post_resp.content)
+                        return True, str(dest_path)
+                    soup = BeautifulSoup(post_resp.text, "html.parser")
+                    candidates = extract_download_candidates(soup, base_url)
+
+        # Retry once if still empty to absorb transient scraper bursts
+        if not candidates:
+            time.sleep(1.5)
+            retry_resp = session.get(download_url, stream=False, timeout=300, allow_redirects=True)
+            if retry_resp.status_code == 200:
+                soup = BeautifulSoup(retry_resp.text, "html.parser")
+                candidates = extract_download_candidates(soup, base_url)
+
         last_err = "Impossible de résoudre le bouton de téléchargement final sur la page LoversLab."
         headers = {"Referer": download_url}
 
@@ -147,7 +197,7 @@ def download_loverslab_file(
                 progress_callback(10, "Lien direct résolu", f"Téléchargement : {cand_title or 'archive'}")
 
             try:
-                bin_resp = session.get(cand_url, headers=headers, stream=True, timeout=90, allow_redirects=False)
+                bin_resp = session.get(cand_url, headers=headers, stream=True, timeout=300, allow_redirects=False)
 
                 if bin_resp.status_code in [301, 302, 303, 307, 308]:
                     loc = bin_resp.headers.get("Location", "")
@@ -165,7 +215,7 @@ def download_loverslab_file(
                         last_err = f"Le contenu est hébergé sur un service externe ({ext_host})."
                         continue
 
-                    bin_resp = session.get(loc, headers=headers, stream=True, timeout=90, allow_redirects=True)
+                    bin_resp = session.get(loc, headers=headers, stream=True, timeout=300, allow_redirects=True)
 
                 if bin_resp.status_code == 200:
                     content_type = bin_resp.headers.get("Content-Type", "").lower()

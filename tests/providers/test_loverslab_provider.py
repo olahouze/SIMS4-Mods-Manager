@@ -197,3 +197,20 @@ def test_image_format_detection(tmp_path, monkeypatch):
 
     assert len(results) >= 1
     assert "img_" in results[-1]
+
+
+def test_loverslab_download_mod_file_signature(tmp_path):
+    provider = LoversLabProvider()
+    with patch("src.providers.loverslab.scraper.download_loverslab_file") as mock_dl:
+        mock_dl.return_value = (True, "OK")
+
+        # 1. Standard call
+        ok, msg = provider.download_mod_file("https://loverslab.com/files/file/123/", tmp_path / "test.zip")
+        assert ok is True
+        mock_dl.assert_called_once()
+
+        # 2. Call with keyword arguments
+        mock_dl.reset_mock()
+        ok2, msg2 = provider.download_mod_file(download_url="https://loverslab.com/files/file/123/", dest_path=tmp_path / "test2.zip")
+        assert ok2 is True
+        mock_dl.assert_called_once()
