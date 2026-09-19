@@ -14,9 +14,13 @@ Ce script simule de bout en bout le flux utilisateur en utilisant l'API REST de 
 # ruff: noqa: E402
 import argparse
 import atexit
+import concurrent.futures
+import json
 import re
+import signal
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +31,24 @@ from urllib.parse import urlparse
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# Reconfiguration de stdout/stderr pour éviter les plantages charmap sur Windows
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+def _safe_str(val: Any) -> str:
+    """Encode une chaîne de façon sécurisée pour la console sans planter sur les émojis."""
+    s = str(val or "")
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    return s.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 import httpx
 
@@ -48,11 +70,14 @@ class SimulationRunner:
     def __init__(
         self,
         api_url: str = "http://127.0.0.1:8000",
-        max_pages: int = 1,
-        max_installs: Optional[int] = None,
+        max_pages: int = -1,
+        max_installs: int = -1,
         skip_install: bool = False,
         force_login: bool = False,
         keep_installed: bool = False,
+        concurrency: int = 4,
+        limit_audit: Optional[int] = None,
+        fail_on_errors: bool = False,
     ):
         self.api_url = api_url.rstrip("/")
         self.max_pages = max_pages
@@ -60,6 +85,13 @@ class SimulationRunner:
         self.skip_install = skip_install
         self.force_login = force_login
         self.keep_installed = keep_installed
+        self.concurrency = max(1, concurrency)
+        self.limit_audit = limit_audit
+        self.fail_on_errors = fail_on_errors
+
+        self._lock = threading.Lock()
+        self._interrupted = False
+        self._setup_signal_handlers()
 
         self.server_process: Optional[subprocess.Popen] = None
         self.api_client: Optional[ApiClient] = None
@@ -74,6 +106,7 @@ class SimulationRunner:
 
         self.verified_downloadable_mods: List[Dict[str, Any]] = []
         self.installed_mod_ids_before: set[int] = set()
+        self.installed_session_mod_ids: set[int] = set()
         self.cleanup_results: List[Dict[str, Any]] = []
 
         # Résultats pour le rapport final
@@ -92,6 +125,27 @@ class SimulationRunner:
             "cleaned_mods_count": 0,
             "errors_logged_count": 0,
         }
+
+    def _setup_signal_handlers(self) -> None:
+        """Capture Ctrl+C et terminaisons pour garantir le nettoyage."""
+        def _handle_signal(sig, frame):
+            if self._interrupted:
+                sys.exit(1)
+            self._interrupted = True
+            print("\n\n[ATTENTION] Interruption reçue (Ctrl+C). Nettoyage d'urgence en cours...")
+            try:
+                self.cleanup_installed_test_mods()
+            except Exception as e:
+                print(f" [WARNING] Erreur lors du nettoyage d'interruption : {e}")
+            self._cleanup_server()
+            sys.exit(130)
+
+        try:
+            signal.signal(signal.SIGINT, _handle_signal)
+            if hasattr(signal, "SIGTERM"):
+                signal.signal(signal.SIGTERM, _handle_signal)
+        except Exception:
+            pass
 
     # =========================================================================
     # Étape 0 : Cycle de vie du serveur API
@@ -170,12 +224,70 @@ class SimulationRunner:
         """Éteint proprement le serveur s'il a été lancé par le script."""
         if self.server_process and self.server_process.poll() is None:
             print("\n[INFO] Extinction propre du serveur API en arrière-plan...")
+            pid = self.server_process.pid
             self.server_process.terminate()
             try:
-                self.server_process.wait(timeout=5)
+                self.server_process.wait(timeout=4)
             except subprocess.TimeoutExpired:
-                self.server_process.kill()
+                if sys.platform == "win32":
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False,
+                        )
+                    except Exception:
+                        self.server_process.kill()
+                else:
+                    self.server_process.kill()
             print(" -> Serveur API arrêté.")
+
+    def _get_installed_mods_list(self) -> List[Dict[str, Any]]:
+        """Récupère la liste des mods installés via l'API REST de manière robuste (supporte 'items' et 'mods')."""
+        try:
+            resp = self.call_api("get_installed_mods")
+            if isinstance(resp, list):
+                return resp
+            if isinstance(resp, dict):
+                return resp.get("items") or resp.get("mods") or []
+        except Exception as e:
+            print(f" [WARNING] Impossible de récupérer la liste des mods installés via l'API : {e}")
+        return []
+
+    def clean_orphaned_test_mods(self) -> None:
+        """Désinstalle immédiatement tous les mods de test LoversLab restés installés dans le jeu."""
+        self.ensure_api_server()
+        print("\n[NETTOYAGE] Recherche des mods de test LoversLab à désinstaller...")
+        installed = self._get_installed_mods_list()
+        # Ne pas toucher à WickedWhims officiel s'il était déjà présent
+        test_mods = [
+            m for m in installed
+            if m.get("source") == "loverslab" and str(m.get("remote_id")) != "807"
+        ]
+        if not test_mods:
+            print(" -> Aucun mod de test orphelin à nettoyer.")
+            return
+
+        print(f" -> {len(test_mods)} mod(s) de test LoversLab détecté(s) pour désinstallation automatique.")
+        for im in test_mods:
+            mod_id = im["id"]
+            title = im.get("title", "Mod")
+            folder_name = im.get("folder_name", "")
+            safe_t = _safe_str(title)
+            safe_f = _safe_str(folder_name)
+            try:
+                res = self.call_api("uninstall_mod", mod_id)
+                success = res.get("success", False)
+                msg = res.get("message", "")
+                if success:
+                    print(f" -> [OK] Nettoyé : '{safe_t}' ({safe_f})")
+                    self.stats["cleaned_mods_count"] += 1
+                else:
+                    print(f" -> [FAIL] Échec nettoyage : '{safe_t}' : {_safe_str(msg)}")
+            except Exception as e:
+                print(f" -> [FAIL] Exception nettoyage '{safe_t}' : {_safe_str(e)}")
+        print("\n -> Nettoyage terminé avec succès !")
 
     # =========================================================================
     # Étape 1 : Gestion des identifiants & session LoversLab
@@ -231,9 +343,10 @@ class SimulationRunner:
             except Exception:
                 pass
 
-        page_desc = "TOUTES les pages" if self.max_pages <= 0 else f"{self.max_pages} page(s) par catégorie"
+        api_max_pages = 0 if (self.max_pages is None or self.max_pages <= 0) else self.max_pages
+        page_desc = "TOUTES les pages" if api_max_pages == 0 else f"{api_max_pages} page(s) par catégorie"
         print(f" -> Démarrage du scraping via POST /api/catalog/sync ({page_desc})...")
-        start_resp = self.call_api("start_catalog_sync", max_pages=self.max_pages)
+        start_resp = self.call_api("start_catalog_sync", max_pages=api_max_pages)
         print(f" -> Réponse API : {start_resp.get('message', 'Démarré')}")
 
         # Polling du statut jusqu'à achèvement
@@ -270,7 +383,7 @@ class SimulationRunner:
     # Étape 3 : Audit de cohérence Internet depuis le script
     # =========================================================================
     def audit_mods_consistency(self) -> None:
-        """Parcourt les mods du catalogue et teste en direct sur Internet la cohérence."""
+        """Parcourt les mods du catalogue et teste en direct sur Internet la cohérence en mode concurrent."""
         print("\n[ÉTAPE 3] Audit de cohérence sur Internet pour chaque mod...")
         assert self.http_session is not None
 
@@ -291,60 +404,85 @@ class SimulationRunner:
             page += 1
 
         self.stats["total_catalog_mods"] = len(all_mods)
-        print(f" -> Total de {len(all_mods)} mod(s) LoversLab à auditer.")
 
-        # Accès direct à la DB pour avoir les détails bruts (download_urls, external_links)
-        db = DatabaseManager.get_instance()
-        db_mods_map: Dict[int, CatalogMod] = {}
-        with db.get_session() as session:
-            for cm in session.query(CatalogMod).filter_by(source="loverslab").all():
-                db_mods_map[cm.id] = cm
+        # Limitation de l'audit si demandé via --limit-audit
+        if self.limit_audit and self.limit_audit > 0:
+            target_mods = all_mods[: self.limit_audit]
+            print(f" -> Limitation d'audit activée (--limit-audit {self.limit_audit}) : {len(target_mods)}/{len(all_mods)} mod(s) retenu(s).")
+        else:
+            target_mods = all_mods
+            print(f" -> Total de {len(target_mods)} mod(s) LoversLab à auditer.")
 
-        for idx, mod in enumerate(all_mods, start=1):
-            mod_id = mod.get("id")
-            title = mod.get("title", "Sans titre")
-            page_url = mod.get("page_url", "")
-            source = mod.get("source", "loverslab")
-            remote_id = mod.get("remote_id") or (str(mod_id) if mod_id else "")
-            patreon_status = mod.get("patreon_status", "NONE")
-            cm_obj = db_mods_map.get(mod_id)
+        # Accès local DB en fallback si disponible pour enrichir les liens bruts
+        db_mods_map: Dict[int, Any] = {}
+        try:
+            db = DatabaseManager.get_instance()
+            with db.get_session() as session:
+                for cm in session.query(CatalogMod).filter_by(source="loverslab").all():
+                    db_mods_map[cm.id] = cm
+        except Exception:
+            db_mods_map = {}
 
-            safe_title_console = title[:40].encode(sys.stdout.encoding or "utf-8", errors="replace").decode(sys.stdout.encoding or "utf-8")
-            try:
-                sys.stdout.write(f"\r -> Audit [{idx}/{len(all_mods)}] : {safe_title_console}...                    ")
-                sys.stdout.flush()
-            except Exception:
-                pass
+        progress_tracker = [0]
+        total_targets = len(target_mods)
+        print(f" -> Lancement de l'audit avec {self.concurrency} thread(s) concurrent(s)...")
 
-            self.stats["total_audited_mods"] += 1
-
-            # 3.1 Disponibilité de la page web
-            page_ok, page_err = self._check_page_reachable(page_url)
-            if not page_ok:
-                self._record_inconsistency(
-                    title=title,
-                    url=page_url,
-                    app_status="Répertorié dans le catalogue",
-                    internet_status=f"Page inaccessible ({page_err})",
-                    details="La page du mod LoversLab retourne une erreur ou a été supprimée.",
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.concurrency) as executor:
+            futures = [
+                executor.submit(
+                    self._audit_single_mod,
+                    mod,
+                    db_mods_map.get(mod.get("id")),
+                    total_targets,
+                    progress_tracker,
                 )
-                continue  # Pas de test plus poussé si la page est inaccessible
+                for mod in target_mods
+            ]
+            concurrent.futures.wait(futures)
 
+        print(f"\n -> Audit terminé ! {len(self.inconsistencies)} incohérence(s) constatée(s).")
+        self.stats["inconsistencies_count"] = len(self.inconsistencies)
+
+    def _audit_single_mod(
+        self,
+        mod: Dict[str, Any],
+        cm_obj: Optional[Any],
+        total_count: int,
+        progress_tracker: List[int],
+    ) -> None:
+        """Audite un mod individuel de manière thread-safe."""
+        mod_id = mod.get("id")
+        title = mod.get("title", "Sans titre")
+        page_url = mod.get("page_url", "")
+        source = mod.get("source", "loverslab")
+        remote_id = mod.get("remote_id") or (str(mod_id) if mod_id else "")
+        patreon_status = mod.get("patreon_status", "NONE")
+
+        # 3.1 Disponibilité de la page web
+        page_ok, page_err = self._check_page_reachable(page_url)
+        if not page_ok:
+            self._record_inconsistency(
+                title=title,
+                url=page_url,
+                app_status="Répertorié dans le catalogue",
+                internet_status=f"Page inaccessible ({page_err})",
+                details="La page du mod LoversLab retourne une erreur ou a été supprimée.",
+            )
+        else:
             # 3.2 Vérification du téléchargement direct LoversLab
-            # Pour tous les mods LoversLab non-verrouillés, on vérifie si la page dispose d'un accès de téléchargement actif
             if source == "loverslab" and page_url and patreon_status != "LOCKED":
                 dl_ok, dl_err = self._check_loverslab_direct_download(page_url)
                 if dl_ok:
-                    self.verified_downloadable_mods.append({
-                        "id": mod_id,
-                        "title": title,
-                        "source": source,
-                        "remote_id": remote_id,
-                        "page_url": page_url,
-                    })
+                    with self._lock:
+                        self.verified_downloadable_mods.append({
+                            "id": mod_id,
+                            "title": title,
+                            "source": source,
+                            "remote_id": remote_id,
+                            "page_url": page_url,
+                        })
                 else:
-                    # N'enregistrer une incohérence que si le mod revendiquait un téléchargement direct ou si la page échoue
-                    has_explicit_direct = bool(cm_obj and cm_obj.get_download_urls_list())
+                    has_explicit_direct = bool(cm_obj and getattr(cm_obj, "get_download_urls_list", lambda: [])())
                     if has_explicit_direct:
                         self._record_inconsistency(
                             title=title,
@@ -356,7 +494,7 @@ class SimulationRunner:
 
             # 3.3 Cohérence du statut Patreon
             if patreon_status and patreon_status != "NONE":
-                ext_links = cm_obj.get_external_links_list() if cm_obj else []
+                ext_links = cm_obj.get_external_links_list() if cm_obj and hasattr(cm_obj, "get_external_links_list") else []
                 patreon_link = next((link for link in ext_links if "patreon.com" in link.lower()), None)
                 if patreon_link:
                     p_ok, p_actual, p_err = self._check_patreon_post_coherence(patreon_link, patreon_status)
@@ -370,9 +508,9 @@ class SimulationRunner:
                         )
 
             # 3.4 Test des liens externes (Mega, Mediafire, Simfileshare...)
-            if cm_obj:
+            if cm_obj and hasattr(cm_obj, "get_external_links_list"):
                 ext_links = cm_obj.get_external_links_list()
-                for link in ext_links[:2]:  # Test des 2 premiers liens externes max
+                for link in ext_links[:2]:
                     if "patreon.com" in link.lower():
                         continue
                     link_ok, link_err = self._check_external_link(link)
@@ -385,8 +523,21 @@ class SimulationRunner:
                             details=f"Le lien d'hébergement externe ({link[:50]}) semble mort.",
                         )
 
-        print(f"\n -> Audit terminé ! {len(self.inconsistencies)} incohérence(s) constatée(s).")
-        self.stats["inconsistencies_count"] = len(self.inconsistencies)
+        # Mise à jour thread-safe de la progression
+        with self._lock:
+            progress_tracker[0] += 1
+            done = progress_tracker[0]
+            self.stats["total_audited_mods"] += 1
+            safe_title_console = title[:35].encode(
+                sys.stdout.encoding or "utf-8", errors="replace"
+            ).decode(sys.stdout.encoding or "utf-8")
+            try:
+                sys.stdout.write(
+                    f"\r -> Audit [{done}/{total_count}] : {safe_title_console}...                    "
+                )
+                sys.stdout.flush()
+            except Exception:
+                pass
 
     def _check_page_reachable(self, url: str) -> tuple[bool, str]:
         """Vérifie si l'URL LoversLab répond avec un code HTTP normal, avec réessai sur erreurs éphémères Cloudflare (520/5xx)."""
@@ -474,16 +625,17 @@ class SimulationRunner:
     def _record_inconsistency(
         self, title: str, url: str, app_status: str, internet_status: str, details: str
     ) -> None:
-        """Enregistre une incohérence avérée."""
-        self.inconsistencies.append(
-            {
-                "title": title,
-                "url": url,
-                "app_status": app_status,
-                "internet_status": internet_status,
-                "details": details,
-            }
-        )
+        """Enregistre une incohérence avérée de manière thread-safe."""
+        with self._lock:
+            self.inconsistencies.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "app_status": app_status,
+                    "internet_status": internet_status,
+                    "details": details,
+                }
+            )
 
     # =========================================================================
     # Étape 4 : Installation séquentielle des mods installables (API)
@@ -497,92 +649,89 @@ class SimulationRunner:
             print(" -> Option --skip-install spécifiée. Aucune installation effectuée.")
             return
 
-        # Mémoriser les mods déjà installés dans le jeu avant la simulation
+        # Mémoriser les mods déjà installés dans le jeu avant les installations
+        if not self.installed_mod_ids_before:
+            initial_installed = self._get_installed_mods_list()
+            self.installed_mod_ids_before = {
+                m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m
+            }
+        print(f" -> {len(self.installed_mod_ids_before)} mod(s) préexistant(s) mémorisé(s) dans le jeu.")
+
+        # Recherche prioritaire via l'API REST
+        api_mods: List[Dict[str, Any]] = []
         try:
-            initial_installed = self.call_api("get_installed_mods").get("mods", [])
-            self.installed_mod_ids_before = {m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m}
-        except Exception:
-            self.installed_mod_ids_before = set()
+            cat_resp = self.call_api("get_catalog", source="loverslab", limit=100)
+            api_mods = cat_resp.get("items", [])
+        except Exception as e:
+            print(f" [WARNING] Impossible de charger le catalogue via l'API : {e}")
 
-        # Recherche des mods LoversLab installables
-        db = DatabaseManager.get_instance()
-        candidate_mods: List[CatalogMod] = []
-        mod_with_deps: Optional[CatalogMod] = None
+        mod_with_deps: Optional[Dict[str, Any]] = None
+        candidate_mods: List[Dict[str, Any]] = []
 
-        with db.get_session() as session:
-            # 1. Recherche prioritaire d'au moins 1 mod possédant des dépendances/prérequis déclarés
-            mods_with_reqs = (
-                session.query(CatalogMod)
-                .filter(
-                    CatalogMod.source == "loverslab",
-                    CatalogMod.page_url.isnot(None),
-                    CatalogMod.patreon_status != "LOCKED",
-                    (CatalogMod.requirements_text.isnot(None)) | (CatalogMod.requirements_mods_json != "[]"),
-                )
-                .order_by(CatalogMod.updated_date.desc().nullslast())
-                .all()
-            )
+        # 1. Recherche d'un mod avec dépendances/prérequis
+        for m in api_mods:
+            if m.get("patreon_status") == "LOCKED":
+                continue
+            has_deps = bool(m.get("dependencies"))
+            has_reqs_text = bool(m.get("requirements_text"))
+            has_req_status = m.get("requirements_status") not in (None, "NONE", "")
+            title_lower = m.get("title", "").lower()
+            keyword_dep = any(k in title_lower for k in ["animation", "wicked", "traducc", "translation"])
+            if has_deps or has_reqs_text or has_req_status or keyword_dep:
+                mod_with_deps = m
+                break
 
-            # Recherche alternative sur les mots-clés typiques de dépendances (animations, translations, etc.)
-            if not mods_with_reqs:
-                mods_with_reqs = (
-                    session.query(CatalogMod)
-                    .filter(
-                        CatalogMod.source == "loverslab",
-                        CatalogMod.page_url.isnot(None),
-                        CatalogMod.patreon_status != "LOCKED",
-                        (CatalogMod.title.ilike("%animation%"))
-                        | (CatalogMod.title.ilike("%wicked%"))
-                        | (CatalogMod.title.ilike("%traducc%"))
-                        | (CatalogMod.title.ilike("%translation%")),
-                    )
-                    .order_by(CatalogMod.updated_date.desc().nullslast())
-                    .all()
-                )
+        # 2. Priorité aux mods validés comme téléchargeables en direct lors de l'étape 3
+        if self.verified_downloadable_mods:
+            v_ids = {m["id"] for m in self.verified_downloadable_mods if m.get("id")}
+            for m in api_mods:
+                if m.get("id") in v_ids:
+                    candidate_mods.append(m)
 
-            if mods_with_reqs:
-                mod_with_deps = mods_with_reqs[0]
+        # 3. Fallback sur les mods LoversLab non-verrouillés de l'API
+        if not candidate_mods:
+            candidate_mods = [m for m in api_mods if m.get("patreon_status") != "LOCKED"][:30]
 
-            # 2. Priorité aux mods validés comme téléchargeables en direct lors de l'étape 3
-            if self.verified_downloadable_mods:
-                v_ids = [m["id"] for m in self.verified_downloadable_mods if m.get("id")]
-                if v_ids:
-                    mods_by_id = {
-                        m.id: m
-                        for m in session.query(CatalogMod)
-                        .filter(CatalogMod.id.in_(v_ids))
+        # 4. Fallback base de données locale si l'API n'a retourné aucun candidat
+        if not candidate_mods and not mod_with_deps:
+            try:
+                db = DatabaseManager.get_instance()
+                with db.get_session() as session:
+                    db_mods = (
+                        session.query(CatalogMod)
+                        .filter(
+                            CatalogMod.source == "loverslab",
+                            CatalogMod.page_url.isnot(None),
+                            CatalogMod.patreon_status != "LOCKED",
+                        )
+                        .order_by(CatalogMod.updated_date.desc().nullslast())
+                        .limit(30)
                         .all()
-                    }
-                    for vid in v_ids:
-                        if vid in mods_by_id:
-                            candidate_mods.append(mods_by_id[vid])
-
-            # 3. Si aucun (ex: étape 3 sautée ou audit court), chercher tous les mods LoversLab non-verrouillés
-            if not candidate_mods:
-                candidate_mods = (
-                    session.query(CatalogMod)
-                    .filter(
-                        CatalogMod.source == "loverslab",
-                        CatalogMod.page_url.isnot(None),
-                        CatalogMod.patreon_status != "LOCKED",
                     )
-                    .order_by(CatalogMod.updated_date.desc().nullslast())
-                    .limit(30)
-                    .all()
-                )
+                    for cm in db_mods:
+                        candidate_mods.append({
+                            "id": cm.id,
+                            "source": cm.source,
+                            "remote_id": cm.remote_id,
+                            "title": cm.title,
+                            "page_url": cm.page_url,
+                        })
+            except Exception:
+                pass
 
         if not candidate_mods and not mod_with_deps:
             print(" -> Aucun mod LoversLab directement installable détecté.")
             return
 
         # Assembler target_mods en plaçant le mod avec dépendances en tête de liste
-        target_mods: List[CatalogMod] = []
+        target_mods: List[Dict[str, Any]] = []
         if mod_with_deps:
             target_mods.append(mod_with_deps)
-            print(f" -> Mod avec dépendances inclus prioritairement : '{mod_with_deps.title}'")
+            print(f" -> Mod avec dépendances inclus prioritairement : '{mod_with_deps.get('title')}'")
 
         for m in candidate_mods:
-            if not any(tm.id == m.id for tm in target_mods):
+            m_id = m.get("id")
+            if not any(tm.get("id") == m_id for tm in target_mods):
                 target_mods.append(m)
 
         if self.max_installs is not None and self.max_installs > 0:
@@ -591,18 +740,24 @@ class SimulationRunner:
         print(f" -> {len(target_mods)} mod(s) sélectionné(s) pour installation séquentielle.")
 
         for idx, mod in enumerate(target_mods, start=1):
-            print(f"\n[{idx}/{len(target_mods)}] Installation de : '{mod.title}' (ID #{mod.remote_id})...")
+            m_title = mod.get("title", "Sans titre")
+            m_id = mod.get("id")
+            m_source = mod.get("source", "loverslab")
+            m_remote_id = mod.get("remote_id") or str(m_id)
+            m_page_url = mod.get("page_url", "")
+
+            print(f"\n[{idx}/{len(target_mods)}] Installation de : '{m_title}' (ID #{m_remote_id})...")
             start_t = time.time()
             self.stats["installations_attempted"] += 1
 
             try:
                 res = self.call_api(
                     "install_mod",
-                    catalog_mod_id=mod.id,
-                    source=mod.source,
-                    remote_id=mod.remote_id,
-                    page_url=mod.page_url,
-                    title=mod.title,
+                    catalog_mod_id=m_id,
+                    source=m_source,
+                    remote_id=m_remote_id,
+                    page_url=m_page_url,
+                    title=m_title,
                 )
                 duration = time.time() - start_t
                 success = res.get("success", False)
@@ -612,15 +767,21 @@ class SimulationRunner:
                 if success:
                     print(f" -> [OK] Succès en {duration:.1f}s : {msg}")
                     self.stats["installations_succeeded"] += 1
+                    # Enregistrement immédiat des nouveaux mods installés (y compris dépendances)
+                    curr_after = self._get_installed_mods_list()
+                    for im in curr_after:
+                        im_id = im.get("id")
+                        if im_id and im_id not in self.installed_mod_ids_before:
+                            self.installed_session_mod_ids.add(im_id)
                 else:
                     print(f" -> [FAIL] Échec en {duration:.1f}s : {msg}")
                     self.stats["installations_failed"] += 1
 
                 self.installation_results.append(
                     {
-                        "title": mod.title,
-                        "source": mod.source,
-                        "remote_id": mod.remote_id,
+                        "title": m_title,
+                        "source": m_source,
+                        "remote_id": m_remote_id,
                         "duration_sec": round(duration, 1),
                         "success": success,
                         "message": msg,
@@ -633,9 +794,9 @@ class SimulationRunner:
                 self.stats["installations_failed"] += 1
                 self.installation_results.append(
                     {
-                        "title": mod.title,
-                        "source": mod.source,
-                        "remote_id": mod.remote_id,
+                        "title": m_title,
+                        "source": m_source,
+                        "remote_id": m_remote_id,
                         "duration_sec": round(duration, 1),
                         "success": False,
                         "message": f"Exception API: {e}",
@@ -650,13 +811,13 @@ class SimulationRunner:
             print(" -> Option --keep-installed spécifiée. Les mods restent installés dans le jeu.")
             return
 
-        try:
-            curr_installed = self.call_api("get_installed_mods").get("mods", [])
-        except Exception as e:
-            print(f" [WARNING] Impossible de récupérer la liste des mods installés via l'API : {e}")
-            return
-
-        newly_installed = [m for m in curr_installed if m.get("id") not in self.installed_mod_ids_before]
+        curr_installed = self._get_installed_mods_list()
+        # Mods ciblés : ceux identifiés durant cette session OU absents de l'état initial
+        newly_installed = [
+            m for m in curr_installed
+            if (m.get("id") in self.installed_session_mod_ids)
+            or (m.get("id") not in self.installed_mod_ids_before)
+        ]
         if not newly_installed:
             print(" -> Aucun nouveau mod installé à nettoyer.")
             return
@@ -666,15 +827,17 @@ class SimulationRunner:
             mod_id = im["id"]
             title = im.get("title", "Mod")
             folder_name = im.get("folder_name", "")
+            safe_t = _safe_str(title)
+            safe_f = _safe_str(folder_name)
             try:
                 res = self.call_api("uninstall_mod", mod_id)
                 success = res.get("success", False)
                 msg = res.get("message", "")
                 if success:
-                    print(f" -> [OK] Nettoyé : '{title}' ({folder_name})")
+                    print(f" -> [OK] Nettoyé : '{safe_t}' ({safe_f})")
                     self.stats["cleaned_mods_count"] += 1
                 else:
-                    print(f" -> [FAIL] Échec nettoyage : '{title}' : {msg}")
+                    print(f" -> [FAIL] Échec nettoyage : '{safe_t}' : {_safe_str(msg)}")
                 self.cleanup_results.append({
                     "title": title,
                     "folder": folder_name,
@@ -682,7 +845,7 @@ class SimulationRunner:
                     "message": msg,
                 })
             except Exception as e:
-                print(f" -> [FAIL] Exception nettoyage '{title}' : {e}")
+                print(f" -> [FAIL] Exception nettoyage '{safe_t}' : {_safe_str(e)}")
                 self.cleanup_results.append({
                     "title": title,
                     "folder": folder_name,
@@ -739,10 +902,10 @@ class SimulationRunner:
                 is_capturing_traceback = False
                 continue
 
-            # Vérification horodatage si présent [YYYY-MM-DD HH:MM:SS]
-            ts_match = re.match(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]", line)
+            # Vérification horodatage si présent [YYYY-MM-DD HH:MM:SS] ou format ISO/standard
+            ts_match = re.match(r"^\[?(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})", line)
             if ts_match:
-                line_ts = ts_match.group(1)
+                line_ts = ts_match.group(1).replace("T", " ")
                 if line_ts < start_time_threshold:
                     is_capturing_traceback = False
                     continue
@@ -768,15 +931,19 @@ class SimulationRunner:
         # 3. Génération du rapport Markdown horodaté
         now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_path = REPORTS_DIR / f"simulation_rapport_{now_str}.md"
+        report_json_path = REPORTS_DIR / f"simulation_rapport_{now_str}.json"
 
         start_time = self.stats["start_time"].strftime("%Y-%m-%d %H:%M:%S")
         end_time = self.stats["end_time"].strftime("%Y-%m-%d %H:%M:%S")
+
+        pages_disp = f"{self.max_pages}" if (self.max_pages and self.max_pages > 0) else "Toutes (-1)"
+        installs_disp = f"{self.max_installs}" if (self.max_installs and self.max_installs > 0) else "Tous (-1)"
 
         with open(report_path, "w", encoding="utf-8") as rf:
             rf.write("# Rapport d'Exécution : Simulation Utilisateur & Audit de Cohérence\n\n")
             rf.write(f"- **Date d'exécution** : {start_time} à {end_time}\n")
             rf.write(f"- **URL de l'API ciblée** : `{self.api_url}`\n")
-            rf.write(f"- **Paramètres** : `--max-pages {self.max_pages}`, `--max-installs {self.max_installs}`\n\n")
+            rf.write(f"- **Paramètres** : `--max-pages {pages_disp}`, `--max-installs {installs_disp}`, `--concurrency {self.concurrency}`\n\n")
 
             # Synthèse chiffrée
             rf.write("## 1. Synthèse globale\n\n")
@@ -847,9 +1014,36 @@ class SimulationRunner:
                     rf.write(f"{err}\n")
                 rf.write("```\n")
 
+        # 4. Génération du rapport JSON structuré
+        json_data = {
+            "metadata": {
+                "start_time": start_time,
+                "end_time": end_time,
+                "api_url": self.api_url,
+                "max_pages": self.max_pages,
+                "max_installs": self.max_installs,
+                "concurrency": self.concurrency,
+                "limit_audit": self.limit_audit,
+            },
+            "stats": {
+                k: (v.isoformat() if isinstance(v, datetime) else v)
+                for k, v in self.stats.items()
+            },
+            "inconsistencies": self.inconsistencies,
+            "installation_results": self.installation_results,
+            "cleanup_results": self.cleanup_results,
+            "filtered_errors": self.filtered_errors,
+        }
+        try:
+            with open(report_json_path, "w", encoding="utf-8") as jf:
+                json.dump(json_data, jf, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f" [WARNING] Erreur lors de l'export JSON du rapport : {e}")
+
         print("\n================================================================================")
-        print(" RAPPORT GÉNÉRÉ AVEC SUCCÈS")
-        print(f" Chemin absolu : {report_path.resolve()}")
+        print(" RAPPORTS GÉNÉRÉS AVEC SUCCÈS")
+        print(f" Markdown : {report_path.resolve()}")
+        print(f" JSON     : {report_json_path.resolve()}")
         print("================================================================================\n")
 
         return report_path.resolve()
@@ -862,6 +1056,13 @@ class SimulationRunner:
 
         try:
             self.ensure_api_server()
+            # Mémorisation stricte des mods déjà installés dans le jeu avant toute opération
+            initial_installed = self._get_installed_mods_list()
+            self.installed_mod_ids_before = {
+                m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m
+            }
+            print(f" -> {len(self.installed_mod_ids_before)} mod(s) déjà installé(s) au préalable dans le jeu.")
+
             self.setup_loverslab_session()
             self.sync_catalog()
             self.audit_mods_consistency()
@@ -884,19 +1085,19 @@ def main():
     parser.add_argument(
         "--max-pages",
         type=int,
-        default=1,
-        help="Nombre de pages LoversLab à scraper par catégorie (0 pour toutes les pages, défaut : 1)",
+        default=-1,
+        help="Nombre de pages LoversLab à scraper par catégorie (-1 pour toutes les pages, défaut : -1)",
     )
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Scraper l'intégralité du site LoversLab (équivalent à --max-pages 0)",
+        help="Scraper l'intégralité du site LoversLab (équivalent à --max-pages -1)",
     )
     parser.add_argument(
         "--max-installs",
         type=int,
-        default=None,
-        help="Nombre maximal de mods installables à installer séquentiellement (défaut : tous)",
+        default=-1,
+        help="Nombre maximal de mods installables à installer séquentiellement (-1 pour tous, défaut : -1)",
     )
     parser.add_argument(
         "--skip-install",
@@ -913,10 +1114,37 @@ def main():
         action="store_true",
         help="Conserver les mods installés dans le jeu sans les désinstaller automatiquement à la fin de la simulation",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=4,
+        help="Nombre de threads/requêtes concurrentes pour l'audit web (défaut : 4)",
+    )
+    parser.add_argument(
+        "--limit-audit",
+        type=int,
+        default=None,
+        help="Nombre maximal de mods à auditer en direct sur Internet (défaut : tous)",
+    )
+    parser.add_argument(
+        "--fail-on-errors",
+        action="store_true",
+        help="Retourner un code de retour non-nul (exit 1) en cas d'erreurs d'installation ou d'erreurs critiques dans les logs",
+    )
+    parser.add_argument(
+        "--clean-only",
+        action="store_true",
+        help="Désinstaller immédiatement les mods de test LoversLab restés dans le jeu sans relancer la simulation",
+    )
 
     args = parser.parse_args()
 
-    max_pages = 0 if args.full else args.max_pages
+    if args.clean_only:
+        runner = SimulationRunner(api_url=args.api_url)
+        runner.clean_orphaned_test_mods()
+        return
+
+    max_pages = -1 if args.full else args.max_pages
 
     runner = SimulationRunner(
         api_url=args.api_url,
@@ -924,8 +1152,19 @@ def main():
         max_installs=args.max_installs,
         skip_install=args.skip_install,
         force_login=args.force_login,
+        keep_installed=args.keep_installed,
+        concurrency=args.concurrency,
+        limit_audit=args.limit_audit,
+        fail_on_errors=args.fail_on_errors,
     )
     runner.run()
+
+    if args.fail_on_errors:
+        failed_installs = runner.stats.get("installations_failed", 0)
+        logged_errors = runner.stats.get("errors_logged_count", 0)
+        if failed_installs > 0 or logged_errors > 0:
+            print(f"\n[CI/CD ERROR] Échec de la simulation : {failed_installs} installation(s) échouée(s), {logged_errors} erreur(s) relevée(s).")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

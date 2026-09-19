@@ -60,45 +60,62 @@ uv run python scripts/simulate_user_flow.py [OPTIONS]
 | Option | Type | Description | Défaut |
 | :--- | :--- | :--- | :--- |
 | `--api-url` | `str` | URL racine de l'API REST de l'application | `http://127.0.0.1:8000` |
-| `--max-pages` | `int` | Nombre de pages LoversLab à scraper par catégorie (`0` pour toutes) | `1` |
-| `--full` | *drapeau* | Raccourci pour scraper l'intégralité du site LoversLab (`--max-pages 0`) | `False` |
-| `--max-installs` | `int` | Nombre maximal de mods installables à installer séquentiellement | `None` (tous) |
+| `--max-pages` | `int` | Nombre de pages LoversLab à scraper par catégorie (`-1` pour toutes) | `-1` (toutes) |
+| `--full` | *drapeau* | Raccourci pour scraper l'intégralité du site LoversLab (`--max-pages -1`) | `False` |
+| `--max-installs` | `int` | Nombre maximal de mods installables à installer séquentiellement (`-1` pour tous) | `-1` (tous) |
 | `--skip-install` | *drapeau* | Exécute uniquement le scraping et l'audit web, sans modifier le dossier du jeu | `False` |
 | `--force-login` | *drapeau* | Force l'ouverture du navigateur pour réauthentifier LoversLab | `False` |
+| `--keep-installed` | *drapeau* | Conserve les mods installés sans les désinstaller automatiquement à la fin | `False` |
+| `--concurrency` | `int` | Nombre de threads concurrents pour accélérer l'audit web | `4` |
+| `--limit-audit` | `int` | Nombre maximal de mods à auditer sur Internet (`-1` pour tous, échantillon de test) | `None` (tous) |
+| `--fail-on-errors` | *drapeau* | Retourne un exit code `1` si des installations échouent ou en cas d'erreurs critiques (CI/CD) | `False` |
+| `--clean-only` | *drapeau* | Désinstalle immédiatement les mods de test LoversLab restés dans le jeu sans relancer la simulation | `False` |
 
 ---
 
 ## 💡 Exemples pratiques
 
-### 1. Test rapide (Scraping 1 page + Audit, sans installation dans le jeu)
+### 1. Nettoyage immédiat des mods de test résiduels
+Permet de purger les mods de test restés dans le jeu suite à une simulation antérieure :
+```bash
+uv run python scripts/simulate_user_flow.py --clean-only
+```
+
+### 2. Exécution par défaut (Intégrale : toutes les pages & tous les mods installables)
+Par défaut, le script scrape toutes les pages (`--max-pages -1`) et installe tous les mods installables (`--max-installs -1`) avant de les nettoyer automatiquement :
+```bash
+uv run python scripts/simulate_user_flow.py
+```
+
+### 3. Test rapide restreint (Scraping 1 page + Audit limité à 5 mods, sans installation)
 Idéal pour valider rapidement le bon fonctionnement sans toucher aux fichiers Sims 4 :
 ```bash
-uv run python scripts/simulate_user_flow.py --max-pages 1 --skip-install
+uv run python scripts/simulate_user_flow.py --max-pages 1 --limit-audit 5 --skip-install
 ```
 
-### 2. Test complet léger (Scraping 1 page + 1 installation)
+### 4. Test complet ciblé avec parallélisme accru (1 page + 1 installation)
 ```bash
-uv run python scripts/simulate_user_flow.py --max-pages 1 --max-installs 1
+uv run python scripts/simulate_user_flow.py --max-pages 1 --max-installs 1 --concurrency 6
 ```
 
-### 3. Simulation avec réauthentification LoversLab forcée
+### 5. Exécution CI/CD avec code de retour strict
+```bash
+uv run python scripts/simulate_user_flow.py --max-pages 1 --max-installs 2 --fail-on-errors
+```
+
+### 6. Simulation avec réauthentification LoversLab forcée
 Ouvre le navigateur Playwright pour valider le captcha ou se connecter avant de lancer l'audit :
 ```bash
 uv run python scripts/simulate_user_flow.py --force-login --max-pages 1 --skip-install
-```
-
-### 4. Audit complet exhaustif du catalogue
-Scrape toutes les pages LoversLab et audite chaque mod :
-```bash
-uv run python scripts/simulate_user_flow.py --full --skip-install
 ```
 
 ---
 
 ## 📊 Rapports générés (`scripts/rapports/`)
 
-Les rapports sont automatiquement créés dans le dossier `scripts/rapports/` au format Markdown horodaté :
-`scripts/rapports/simulation_rapport_YYYYMMDD_HHMMSS.md`
+Les rapports sont automatiquement créés dans le dossier `scripts/rapports/` sous **deux formats complémentaires** horodatés :
+1. **Format Markdown** : `scripts/rapports/simulation_rapport_YYYYMMDD_HHMMSS.md`
+2. **Format JSON structuré** : `scripts/rapports/simulation_rapport_YYYYMMDD_HHMMSS.json`
 
 Ce dossier est ignoré par Git via le fichier `.gitignore`.
 
@@ -107,3 +124,4 @@ Ce dossier est ignoré par Git via le fichier `.gitignore`.
 2. **Incohérences détectées sur Internet** : Tableau détaillé listant uniquement les anomalies constatées (Titre, URL, Statut dans l'application, Résultat Internet réel, Explication).
 3. **Résultats des installations séquentielles** : Durée, statut, message et dépendances installées pour chaque mod.
 4. **Erreurs d'application relevées** : Bloc textuel contenant l'ensemble des erreurs `[ERROR]`, `[CRITICAL]` et exceptions survenues lors de la session (sans aucun bruit `[INFO]` ni `[DEBUG]`).
+5. **Rapport JSON** : Structure clé-valeur (`metadata`, `stats`, `inconsistencies`, `installation_results`, `cleanup_results`, `filtered_errors`) facilement exploitable par des scripts tiers ou des outils de visualisation.
