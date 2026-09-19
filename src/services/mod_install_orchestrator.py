@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from typing import Optional, Callable
 
-from src.api.schemas.catalog import CatalogInstallRequest, CatalogInstallResponse
+from src.api.schemas.catalog import CatalogInstallRequest, CatalogInstallResponse, DependencyItem
 from src.database.models import CatalogMod, InstalledMod
 from src.database.manager import DatabaseManager
 from src.providers import ProviderRegistry
@@ -143,11 +143,25 @@ def perform_mod_install(
             else:
                 err_msg = f"Échec de l'installation de la dépendance requise '{dep_title}': {dep_res.message}"
                 logger.error(f"[INSTALL-DEP] ❌ [{idx}/{total_missing}] {err_msg}")
-                return CatalogInstallResponse(
-                    success=False,
-                    message=f"Installation interrompue : {err_msg}",
-                    installed_dependencies=installed_dependencies,
-                )
+                if payload.allow_partial:
+                    logger.warning(
+                        f"[INSTALL-DEP] ⚠️ allow_partial=True : Poursuite de l'installation du mod principal '{mod_title}' malgré l'échec de la dépendance '{dep_title}'."
+                    )
+                    not_detected_deps.append(
+                        DependencyItem(
+                            source=dep_source,
+                            remote_id=dep_remote_id,
+                            title=dep_title,
+                            url=dep_url or "",
+                            status="NOT_DETECTED_FINISHED",
+                        )
+                    )
+                else:
+                    return CatalogInstallResponse(
+                        success=False,
+                        message=f"Installation interrompue : {err_msg}",
+                        installed_dependencies=installed_dependencies,
+                    )
 
     logger.info(f"[INSTALL-MAIN] Démarrage de l'installation du mod principal : '{mod_title}' ({source} #{remote_id})...")
 

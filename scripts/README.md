@@ -28,19 +28,20 @@ Le script [`simulate_user_flow.py`](simulate_user_flow.py) simule les actions co
    - Parcourt exhaustivement tous les mods du catalogue via l'API (`GET /api/catalog`).
    - Teste en direct chaque mod sur le Web :
      - **Accessibilité de la page** : Détection des erreurs HTTP 404, 410 ou pages supprimées.
-     - **Téléchargement direct LoversLab** : Test de la requête `/?do=download` pour vérifier qu'elle délivre bien le fichier ou la sélection attendue (détection des erreurs 403, 404 ou redirections anormales).
+     - **Téléchargement direct LoversLab** : Test de la requête `/?do=download` restreint au domaine `loverslab.com`. Toute redirection vers des hébergeurs tiers externes (SimsFinds, MediaFire, Mega...) est identifiée comme lien externe pour ne pas tenter d'installation directe impossible.
      - **Cohérence Patreon** : Vérifie la cohérence entre le statut enregistré (`PUBLIC`, `UNLOCKED`, `LOCKED`) et l'accès réel sur Patreon.
      - **Validité des liens externes** : Contrôle des liens d'hébergement externes (Mega, Mediafire, Simfileshare, Google Drive...).
    - **Règle stricte** : Seules les **incohérences avérées** sont consignées (aucun bruit pour les mods conformes).
 
 5. **Installation séquentielle des mods installables (Étape 4)** :
-   - Détecte les mods LoversLab directement installables et les installe séquentiellement via `POST /api/catalog/install` (`install_dependencies=True`).
-   - Journalise le temps d'exécution, le statut de succès/échec et les dépendances installées.
+   - Détecte les mods LoversLab directement installables et les installe séquentiellement via `POST /api/catalog/install` (`install_dependencies=True`, `allow_partial=True`).
+   - **Tolérance aux dépendances non résolues** : Si une dépendance est introuvable ou échoue, le mod principal est tout de même installé en **succès partiel** (`⚠️ Succès partiel`), garantissant un test d'installation complet sans blocage.
+   - Journalise le temps d'exécution, le statut de succès/succès partiel/échec et les dépendances installées.
 
 6. **Filtrage sélectif des logs & Rapport final (Étape 5)** :
    - Parcours séquentiel exhaustif du fichier `app.log` et du buffer API.
    - **Filtrage strict** : Élimination absolue des lignes d'information (`[INFO]`) et de débogage (`[DEBUG]`). Seules les erreurs réelles (`[ERROR]`, `[CRITICAL]` et traces de pile d'exceptions Python) sont conservées.
-   - Génération d'un rapport Markdown horodaté dans le sous-dossier `scripts/rapports/`.
+   - Génération d'un rapport Markdown horodaté dans le sous-dossier `scripts/rapports/` distinguant les succès complets et partiels.
    - Affichage immédiat du chemin absolu du rapport dans la console.
 
 ---

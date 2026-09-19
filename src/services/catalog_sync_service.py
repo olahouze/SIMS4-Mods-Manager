@@ -135,6 +135,8 @@ def run_catalog_sync(max_pages: int) -> None:
                                         patreon_tier=m_data.get("patreon_tier", ""),
                                     )
                                     mod_record.set_tags_list(m_data.get("tags", []))
+                                    if m_data.get("external_links"):
+                                        mod_record.set_external_links_list(m_data["external_links"])
                                     session.add(mod_record)
                                     total_new += 1
                                     new_on_page += 1
@@ -147,6 +149,8 @@ def run_catalog_sync(max_pages: int) -> None:
                                         existing.patreon_status = m_data["patreon_status"]
                                     if m_data.get("patreon_tier"):
                                         existing.patreon_tier = m_data["patreon_tier"]
+                                    if m_data.get("external_links"):
+                                        existing.set_external_links_list(m_data["external_links"])
                                     existing.set_tags_list(m_data.get("tags", []))
                             session.commit()
 
@@ -220,7 +224,11 @@ def check_catalog_dependencies(
                         cat_mod.requirements_text = det.get("requirements_text")
                         cat_mod.requirements_status = det.get("requirements_status", "NONE")
                         cat_mod.set_requirements_mods_list(det.get("requirements_mods", []))
-                        session.commit()
+                    if det.get("download_urls"):
+                        cat_mod.set_download_urls_list(det.get("download_urls", []))
+                    if det.get("external_links"):
+                        cat_mod.set_external_links_list(det.get("external_links", []))
+                    session.commit()
             except Exception as e:
                 logger.debug(f"Erreur vérification requirements pour {mod_title}: {e}")
 

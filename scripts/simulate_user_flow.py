@@ -126,6 +126,7 @@ class SimulationRunner:
             "inconsistencies_count": 0,
             "installations_attempted": 0,
             "installations_succeeded": 0,
+            "installations_partial": 0,
             "installations_failed": 0,
             "cleaned_mods_count": 0,
             "errors_logged_count": 0,
@@ -614,8 +615,8 @@ class SimulationRunner:
             resp.close()
             if status in [404, 410]:
                 return False, f"HTTP {status} sur {dl_url}"
-            if "patreon.com" in final_url:
-                return False, f"Redirection inattendue vers Patreon ({resp.url})"
+            if "loverslab.com" not in final_url:
+                return False, f"Redirection vers un service tiers externe ({resp.url})"
             if status == 403:
                 return False, "Erreur 403 Forbidden (accès refusé ou captcha actif)"
             if status >= 400:
@@ -743,6 +744,10 @@ class SimulationRunner:
                         .all()
                     )
                     for cm in db_mods:
+                        ext_links = cm.get_external_links_list() if hasattr(cm, "get_external_links_list") else []
+                        dl_urls = cm.get_download_urls_list() if hasattr(cm, "get_download_urls_list") else []
+                        if ext_links and not dl_urls:
+                            continue
                         candidate_mods.append({
                             "id": cm.id,
                             "source": cm.source,
@@ -806,15 +811,22 @@ class SimulationRunner:
                     remote_id=m_remote_id,
                     page_url=m_page_url,
                     title=m_title,
+                    install_dependencies=True,
+                    allow_partial=True,
                 )
                 duration = time.time() - start_t
                 success = res.get("success", False)
                 msg = res.get("message", "")
                 installed_deps = res.get("installed_dependencies", [])
+                is_partial = "partielle" in msg.lower() or "dépendance(s) introuvable" in msg.lower()
 
                 if success:
-                    print(f" -> [OK] Succès en {duration:.1f}s : {msg}")
-                    self.stats["installations_succeeded"] += 1
+                    if is_partial:
+                        print(f" -> [PARTIEL] Succès partiel en {duration:.1f}s : {msg}")
+                        self.stats["installations_partial"] += 1
+                    else:
+                        print(f" -> [OK] Succès en {duration:.1f}s : {msg}")
+                        self.stats["installations_succeeded"] += 1
                     # Enregistrement immédiat des nouveaux mods installés (y compris dépendances)
                     curr_after = self._get_installed_mods_list()
                     for im in curr_after:
@@ -832,6 +844,7 @@ class SimulationRunner:
                         "remote_id": m_remote_id,
                         "duration_sec": round(duration, 1),
                         "success": success,
+                        "is_partial": is_partial,
                         "message": msg,
                         "installed_dependencies": installed_deps,
                     }
@@ -1020,7 +1033,8 @@ class SimulationRunner:
             rf.write(f"| Mods audités en direct sur Internet | **{self.stats['total_audited_mods']}** |\n")
             rf.write(f"| Incohérences détectées | **{self.stats['inconsistencies_count']}** |\n")
             rf.write(f"| Installations tentées | **{self.stats['installations_attempted']}** |\n")
-            rf.write(f"| Installations réussies | **{self.stats['installations_succeeded']}** |\n")
+            rf.write(f"| Installations réussies (complètes) | **{self.stats['installations_succeeded']}** |\n")
+            rf.write(f"| Installations partielles (dépendances non résolues) | **{self.stats['installations_partial']}** |\n")
             rf.write(f"| Installations échouées | **{self.stats['installations_failed']}** |\n")
             rf.write(f"| Mods de test désinstallés (nettoyés) | **{self.stats['cleaned_mods_count']}** |\n")
             rf.write(f"| Erreurs d'application relevées dans les logs | **{self.stats['errors_logged_count']}** |\n\n")
@@ -1053,7 +1067,10 @@ class SimulationRunner:
                 rf.write("| Mod | Durée | Résultat | Message | Dépendances Installées |\n")
                 rf.write("| :--- | :--- | :--- | :--- | :--- |\n")
                 for inst in self.installation_results:
-                    status_icon = "✅ Succès" if inst["success"] else "❌ Échec"
+                    if inst["success"]:
+                        status_icon = "⚠️ Succès partiel" if inst.get("is_partial") else "✅ Succès"
+                    else:
+                        status_icon = "❌ Échec"
                     safe_title = inst["title"].replace("|", "-")
                     safe_msg = inst["message"].replace("|", "-")
                     deps_str = ", ".join(inst["installed_dependencies"]) if inst["installed_dependencies"] else "Aucune"

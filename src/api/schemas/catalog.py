@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Any
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -105,7 +105,7 @@ class CatalogInstallRequest(BaseModel):
     title: Optional[str] = None
     updated_date: Optional[Union[datetime, str]] = None
     install_dependencies: bool = True
-    allow_partial: bool = True
+    allow_partial: bool = False
 
     @field_validator("updated_date", mode="before")
     @classmethod
@@ -153,6 +153,8 @@ class ModDetailsResponse(BaseModel):
     requirements_status: str = "NONE"
     dependencies: List[DependencyItem] = []
     screenshots: List[str] = []
+    download_urls: List[Dict[str, Any]] = []
+    external_links: List[str] = []
 
 
 class CheckMissingReportRequest(BaseModel):

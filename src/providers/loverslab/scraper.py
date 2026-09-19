@@ -107,12 +107,20 @@ class LoversLabProvider(BaseSourceProvider):
                     try:
                         r_chk = session.get(dl_chk, allow_redirects=False, timeout=6)
                         loc = r_chk.headers.get("Location", "")
-                        if r_chk.status_code in [301, 302, 303, 307, 308] and "patreon.com" in loc.lower():
-                            pat_info = self.patreon_provider.check_post_access(loc)
-                            entry["patreon_status"] = pat_info.get("status", "PUBLIC")
-                            entry["patreon_tier"] = pat_info.get("tier_str", "")
-                            if "Patreon" not in entry["tags"]:
-                                entry["tags"].append("Patreon")
+                        if r_chk.status_code in [301, 302, 303, 307, 308]:
+                            if "patreon.com" in loc.lower():
+                                pat_info = self.patreon_provider.check_post_access(loc)
+                                entry["patreon_status"] = pat_info.get("status", "PUBLIC")
+                                entry["patreon_tier"] = pat_info.get("tier_str", "")
+                                if "Patreon" not in entry["tags"]:
+                                    entry["tags"].append("Patreon")
+                            elif loc and "loverslab.com" not in loc.lower():
+                                entry["patreon_status"] = "NONE"
+                                ext_list = entry.setdefault("external_links", [])
+                                if loc not in ext_list:
+                                    ext_list.append(loc)
+                            else:
+                                entry["patreon_status"] = "NONE"
                         else:
                             entry["patreon_status"] = "NONE"
                     except Exception:

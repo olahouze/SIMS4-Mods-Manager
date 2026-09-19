@@ -241,6 +241,10 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
                     m.requirements_text = details.get("requirements_text")
                     m.requirements_status = details.get("requirements_status", "NONE")
                     m.set_requirements_mods_list(details.get("requirements_mods", []))
+                if details.get("download_urls"):
+                    m.set_download_urls_list(details.get("download_urls", []))
+                if details.get("external_links"):
+                    m.set_external_links_list(details.get("external_links", []))
                 session.commit()
         except Exception as e:
             logger.debug(f"Erreur extraction détails/requirements pour {m.title}: {e}")
@@ -283,4 +287,6 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
         requirements_status=m.requirements_status or "NONE",
         dependencies=dep_items,
         screenshots=screenshots,
+        download_urls=m.get_download_urls_list(),
+        external_links=m.get_external_links_list(),
     )

@@ -57,6 +57,10 @@ Catégorise chaque prérequis d'un mod dans l'un des **4 statuts stricts** :
 | `NOT_DETECTED_SCANNING` | Non trouvé, mais le scraping catalogue est toujours en cours | Badge orange animé "Scan en cours..." |
 | `NOT_DETECTED_FINISHED` | Non trouvé et le catalogue a fini d'être parcouru | Badge rouge "Non trouvé" (lien externe ou mod tiers) |
 
+- **Filtrage du Bruit & Commentaires (`dependency_noise_rules.py`)** :
+  Les phrases narratives, instructions du jeu (*"Game Options"*, *"Script Mods Allowed"*) et disclaimers d'absence de prérequis sont automatiquement identifiés et écartés ou classés en `COMMENT_NOISE`.
+- **Surcharge Utilisateur (`requirements_overrides`)** :
+  L'utilisateur peut manuellement requalifier n'importe quel prérequis en `MOD` ou `COMMENT` depuis l'interface graphique. Pour plus de détails, voir le guide dédié : [`dependency_classification_and_noise.md`](dependency_classification_and_noise.md).
 - **Détection des Dépendances Inverses (`find_dependent_installed_mods`)** :
   Permet d'identifier tous les mods installés qui dépendent d'un mod donné avant sa suppression, afin d'afficher une boîte de dialogue d'avertissement explicite listant les mods qui cesseront de fonctionner.
 - **Table de Correspondance pour Cas Spécifiques (`SPECIAL_DEPENDENCY_CASES`)** :
