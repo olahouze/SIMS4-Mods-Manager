@@ -76,8 +76,9 @@ class SimulationRunner:
         force_login: bool = False,
         keep_installed: bool = False,
         concurrency: int = 4,
-        limit_audit: Optional[int] = None,
+        limit_audit: int = -1,
         fail_on_errors: bool = False,
+        skip_sync: bool = False,
     ):
         self.api_url = api_url.rstrip("/")
         self.max_pages = max_pages
@@ -86,11 +87,15 @@ class SimulationRunner:
         self.force_login = force_login
         self.keep_installed = keep_installed
         self.concurrency = max(1, concurrency)
-        self.limit_audit = limit_audit
+        self.limit_audit = -1 if (limit_audit is None or limit_audit <= 0) else limit_audit
         self.fail_on_errors = fail_on_errors
+        self.skip_sync = skip_sync
 
         self._lock = threading.Lock()
         self._interrupted = False
+        self._thread_local = threading.local()
+        self._loverslab_cookies_cache: Dict[str, str] = {}
+        self._loverslab_ua_cache: Optional[str] = None
         self._setup_signal_handlers()
 
         self.server_process: Optional[subprocess.Popen] = None
@@ -322,9 +327,19 @@ class SimulationRunner:
             else:
                 print(f" -> Connexion LoversLab réussie ! {len(cookies)} cookie(s) sauvegardé(s).")
 
-        # Initialisation de la session curl_cffi pour les tests internet autonomes
-        self.http_session = SessionManager.get_http_session("loverslab", force_new=True)
-        print(" -> Session HTTP autonome (curl_cffi chrome120) prête pour l'audit.")
+        # Initialisation de la session curl_cffi principale et du gestionnaire de sessions par thread
+        self.http_session = self._create_isolated_session()
+        print(" -> Sessions HTTP autonomes (curl_cffi chrome120 par thread) prêtes pour l'audit.")
+
+    def _create_isolated_session(self) -> Any:
+        """Crée une session HTTP curl_cffi isolée et configurée pour LoversLab."""
+        return SessionManager.get_http_session("loverslab", force_new=True)
+
+    def _get_thread_session(self) -> Any:
+        """Retourne la session HTTP curl_cffi dédiée au thread courant (concurrence réelle, zéro verrou libcurl)."""
+        if not hasattr(self._thread_local, "session") or self._thread_local.session is None:
+            self._thread_local.session = self._create_isolated_session()
+        return self._thread_local.session
 
     # =========================================================================
     # Étape 2 : Lancement et attente du scraping complet LoversLab (API)
@@ -387,10 +402,11 @@ class SimulationRunner:
         print("\n[ÉTAPE 3] Audit de cohérence sur Internet pour chaque mod...")
         assert self.http_session is not None
 
-        # 1. Récupération exhaustive de tous les mods via l'API
+        # 1. Récupération des mods via l'API (avec pagination optimisée)
         all_mods: List[Dict[str, Any]] = []
         page = 1
-        limit = 100
+        limit = 200
+        needed_audit = self.limit_audit if (self.limit_audit and self.limit_audit > 0) else None
 
         print(" -> Récupération paginée des mods du catalogue via GET /api/catalog...")
         while True:
@@ -398,17 +414,22 @@ class SimulationRunner:
             items = resp.get("items", [])
             all_mods.extend(items)
             total = resp.get("total", len(all_mods))
+            self.stats["total_catalog_mods"] = total
             print(f"    Page {page} chargée ({len(all_mods)}/{total} mods)...")
+            if needed_audit and len(all_mods) >= needed_audit:
+                all_mods = all_mods[:needed_audit]
+                break
             if len(all_mods) >= total or not items:
                 break
             page += 1
 
-        self.stats["total_catalog_mods"] = len(all_mods)
+        if not self.stats["total_catalog_mods"]:
+            self.stats["total_catalog_mods"] = len(all_mods)
 
         # Limitation de l'audit si demandé via --limit-audit
-        if self.limit_audit and self.limit_audit > 0:
-            target_mods = all_mods[: self.limit_audit]
-            print(f" -> Limitation d'audit activée (--limit-audit {self.limit_audit}) : {len(target_mods)}/{len(all_mods)} mod(s) retenu(s).")
+        if needed_audit:
+            target_mods = all_mods
+            print(f" -> Limitation d'audit activée (--limit-audit {self.limit_audit}) : {len(target_mods)} mod(s) retenu(s).")
         else:
             target_mods = all_mods
             print(f" -> Total de {len(target_mods)} mod(s) LoversLab à auditer.")
@@ -540,44 +561,60 @@ class SimulationRunner:
                 pass
 
     def _check_page_reachable(self, url: str) -> tuple[bool, str]:
-        """Vérifie si l'URL LoversLab répond avec un code HTTP normal, avec réessai sur erreurs éphémères Cloudflare (520/5xx)."""
+        """Vérifie si l'URL LoversLab répond avec un code HTTP normal, en streaming léger avec réessai court."""
         if not url:
             return False, "URL vide"
-        max_retries = 2
+        session = self._get_thread_session()
+        max_retries = 1
         for attempt in range(max_retries + 1):
             try:
-                assert self.http_session is not None
-                resp = self.http_session.get(url, timeout=12, allow_redirects=True)
-                if resp.status_code in [404, 410]:
-                    return False, f"HTTP {resp.status_code}"
-                if "The page you are looking for does not exist" in resp.text:
-                    return False, "Page d'erreur LoversLab (contenu introuvable)"
-                if resp.status_code in [520, 502, 503, 504, 429]:
+                resp = session.get(url, timeout=7, stream=True, allow_redirects=True)
+                status = resp.status_code
+                if status in [404, 410]:
+                    resp.close()
+                    return False, f"HTTP {status} (Page supprimée)"
+                if status == 403:
+                    head_chunk = next(resp.iter_content(chunk_size=8192), b"")
+                    resp.close()
+                    if b"2D161/2" in head_chunk or b"do not have permission" in head_chunk:
+                        return False, "HTTP 403 (Accès refusé / Mod retiré ou archivé sur LoversLab - code IPS 2D161/2)"
+                    return False, "HTTP 403 (Accès interdit / captcha ou blocage)"
+                if status in [520, 502, 503, 504, 429]:
+                    resp.close()
                     if attempt < max_retries:
-                        time.sleep(1.5)
+                        time.sleep(0.5)
                         continue
-                    return True, f"Indisponibilité réseau temporaire Cloudflare (HTTP {resp.status_code})"
-                if resp.status_code >= 400:
-                    return False, f"HTTP {resp.status_code}"
+                    return True, f"Indisponibilité réseau temporaire Cloudflare (HTTP {status})"
+                if status >= 400:
+                    resp.close()
+                    return False, f"HTTP {status}"
+
+                # Ne lire que le premier chunk (8 Ko) pour vérifier l'erreur sans transférer tout le HTML
+                head_chunk = next(resp.iter_content(chunk_size=8192), b"")
+                resp.close()
+                if b"The page you are looking for does not exist" in head_chunk:
+                    return False, "Page d'erreur LoversLab (contenu introuvable)"
+
                 return True, ""
             except Exception as e:
                 if attempt < max_retries:
-                    time.sleep(1.5)
+                    time.sleep(0.5)
                     continue
                 return False, str(e)
         return True, ""
 
     def _check_loverslab_direct_download(self, page_url: str) -> tuple[bool, str]:
         """Simule l'accès au téléchargement direct LoversLab pour tester la validité."""
-        assert self.http_session is not None
+        session = self._get_thread_session()
         dl_url = page_url.rstrip("/") + "/?do=download"
         try:
-            # Effectue une requête GET sans télécharger le corps volumineux
-            resp = self.http_session.get(dl_url, timeout=15, stream=True, allow_redirects=True)
+            resp = session.get(dl_url, timeout=8, stream=True, allow_redirects=True)
             status = resp.status_code
+            final_url = str(resp.url).lower()
+            resp.close()
             if status in [404, 410]:
                 return False, f"HTTP {status} sur {dl_url}"
-            if "patreon.com" in str(resp.url).lower():
+            if "patreon.com" in final_url:
                 return False, f"Redirection inattendue vers Patreon ({resp.url})"
             if status == 403:
                 return False, "Erreur 403 Forbidden (accès refusé ou captcha actif)"
@@ -588,14 +625,18 @@ class SimulationRunner:
             return False, str(e)
 
     def _check_patreon_post_coherence(self, patreon_url: str, app_status: str) -> tuple[bool, str, str]:
-        """Vérifie si l'état réel d'un post Patreon concorde avec l'application."""
-        assert self.http_session is not None
+        """Vérifie si l'état réel d'un post Patreon concorde avec l'application via streaming partiel."""
+        session = self._get_thread_session()
         try:
-            resp = self.http_session.get(patreon_url, timeout=12, allow_redirects=True)
+            resp = session.get(patreon_url, timeout=7, stream=True, allow_redirects=True)
             if resp.status_code in [404, 410]:
+                resp.close()
                 return False, "404_NOT_FOUND", f"Post Patreon supprimé ({resp.status_code})"
 
-            text = resp.text.lower()
+            # Lecture tronquée des 16 premiers Ko
+            chunk = next(resp.iter_content(chunk_size=16384), b"")
+            resp.close()
+            text = chunk.decode("utf-8", errors="ignore").lower()
             is_locked = "unlock this post" in text or "join now to view" in text or "locked" in text
             actual = "LOCKED" if is_locked else "PUBLIC"
 
@@ -609,12 +650,14 @@ class SimulationRunner:
             return True, "UNKNOWN", str(e)  # Pas d'incohérence si Patreon est simplement inaccessible
 
     def _check_external_link(self, url: str) -> tuple[bool, str]:
-        """Teste rapidement un lien externe (Mega, Mediafire, etc.)."""
-        assert self.http_session is not None
+        """Teste rapidement un lien externe (Mega, Mediafire, etc.) en streaming léger."""
+        session = self._get_thread_session()
         try:
-            resp = self.http_session.get(url, timeout=8, stream=True, allow_redirects=True)
-            if resp.status_code in [404, 410]:
-                return False, f"HTTP {resp.status_code}"
+            resp = session.get(url, timeout=5, stream=True, allow_redirects=True)
+            status = resp.status_code
+            resp.close()
+            if status in [404, 410]:
+                return False, f"HTTP {status}"
             return True, ""
         except Exception as e:
             # Considéré comme inaccessible uniquement en cas d'erreur de résolution
@@ -657,43 +700,35 @@ class SimulationRunner:
             }
         print(f" -> {len(self.installed_mod_ids_before)} mod(s) préexistant(s) mémorisé(s) dans le jeu.")
 
-        # Recherche prioritaire via l'API REST
-        api_mods: List[Dict[str, Any]] = []
-        try:
-            cat_resp = self.call_api("get_catalog", source="loverslab", limit=100)
-            api_mods = cat_resp.get("items", [])
-        except Exception as e:
-            print(f" [WARNING] Impossible de charger le catalogue via l'API : {e}")
-
-        mod_with_deps: Optional[Dict[str, Any]] = None
         candidate_mods: List[Dict[str, Any]] = []
 
-        # 1. Recherche d'un mod avec dépendances/prérequis
-        for m in api_mods:
-            if m.get("patreon_status") == "LOCKED":
-                continue
-            has_deps = bool(m.get("dependencies"))
-            has_reqs_text = bool(m.get("requirements_text"))
-            has_req_status = m.get("requirements_status") not in (None, "NONE", "")
-            title_lower = m.get("title", "").lower()
-            keyword_dep = any(k in title_lower for k in ["animation", "wicked", "traducc", "translation"])
-            if has_deps or has_reqs_text or has_req_status or keyword_dep:
-                mod_with_deps = m
-                break
-
-        # 2. Priorité aux mods validés comme téléchargeables en direct lors de l'étape 3
+        # 1. Priorité absolue : tous les mods validés comme téléchargeables en direct lors de l'étape 3
         if self.verified_downloadable_mods:
-            v_ids = {m["id"] for m in self.verified_downloadable_mods if m.get("id")}
-            for m in api_mods:
-                if m.get("id") in v_ids:
-                    candidate_mods.append(m)
+            candidate_mods = list(self.verified_downloadable_mods)
+            print(f" -> {len(candidate_mods)} mod(s) validé(s) comme directement téléchargeables lors de l'audit.")
+        else:
+            # Fallback si l'audit n'a rien validé (ex: audit sauté ou vide) : chargement complet via l'API
+            print(" -> Aucun mod validé lors de l'audit. Recherche des mods installables via l'API REST...")
+            try:
+                page = 1
+                limit = 200
+                while True:
+                    cat_resp = self.call_api("get_catalog", source="loverslab", page=page, limit=limit)
+                    items = cat_resp.get("items", [])
+                    total = cat_resp.get("total", len(items))
+                    for m in items:
+                        if m.get("patreon_status") != "LOCKED":
+                            candidate_mods.append(m)
+                    if len(candidate_mods) >= total or not items:
+                        break
+                    if self.max_installs > 0 and len(candidate_mods) >= self.max_installs:
+                        break
+                    page += 1
+            except Exception as e:
+                print(f" [WARNING] Erreur lors du chargement du catalogue via l'API : {e}")
 
-        # 3. Fallback sur les mods LoversLab non-verrouillés de l'API
+        # Fallback base de données locale si l'API n'a retourné aucun candidat
         if not candidate_mods:
-            candidate_mods = [m for m in api_mods if m.get("patreon_status") != "LOCKED"][:30]
-
-        # 4. Fallback base de données locale si l'API n'a retourné aucun candidat
-        if not candidate_mods and not mod_with_deps:
             try:
                 db = DatabaseManager.get_instance()
                 with db.get_session() as session:
@@ -705,7 +740,6 @@ class SimulationRunner:
                             CatalogMod.patreon_status != "LOCKED",
                         )
                         .order_by(CatalogMod.updated_date.desc().nullslast())
-                        .limit(30)
                         .all()
                     )
                     for cm in db_mods:
@@ -718,6 +752,20 @@ class SimulationRunner:
                         })
             except Exception:
                 pass
+
+        # 2. Recherche prioritaire d'un mod avec dépendances/prérequis
+        mod_with_deps: Optional[Dict[str, Any]] = None
+        for m in candidate_mods:
+            if m.get("patreon_status") == "LOCKED":
+                continue
+            has_deps = bool(m.get("dependencies"))
+            has_reqs_text = bool(m.get("requirements_text"))
+            has_req_status = m.get("requirements_status") not in (None, "NONE", "")
+            title_lower = m.get("title", "").lower()
+            keyword_dep = any(k in title_lower for k in ["animation", "wicked", "traducc", "translation"])
+            if has_deps or has_reqs_text or has_req_status or keyword_dep:
+                mod_with_deps = m
+                break
 
         if not candidate_mods and not mod_with_deps:
             print(" -> Aucun mod LoversLab directement installable détecté.")
@@ -937,13 +985,32 @@ class SimulationRunner:
         end_time = self.stats["end_time"].strftime("%Y-%m-%d %H:%M:%S")
 
         pages_disp = f"{self.max_pages}" if (self.max_pages and self.max_pages > 0) else "Toutes (-1)"
+        if self.skip_sync:
+            pages_disp = "Ignoré (--skip-sync)"
         installs_disp = f"{self.max_installs}" if (self.max_installs and self.max_installs > 0) else "Tous (-1)"
+        if self.skip_install:
+            installs_disp = "Désactivées (--skip-install)"
+        limit_audit_disp = f"{self.limit_audit}" if (self.limit_audit and self.limit_audit > 0) else "Tous (-1)"
+
+        param_flags = [
+            f"`--max-pages {pages_disp}`",
+            f"`--max-installs {installs_disp}`",
+            f"`--concurrency {self.concurrency}`",
+            f"`--limit-audit {limit_audit_disp}`",
+        ]
+        if self.skip_sync:
+            param_flags.append("`--skip-sync`")
+        if self.skip_install:
+            param_flags.append("`--skip-install`")
+        if self.keep_installed:
+            param_flags.append("`--keep-installed`")
+        params_str = ", ".join(param_flags)
 
         with open(report_path, "w", encoding="utf-8") as rf:
             rf.write("# Rapport d'Exécution : Simulation Utilisateur & Audit de Cohérence\n\n")
             rf.write(f"- **Date d'exécution** : {start_time} à {end_time}\n")
             rf.write(f"- **URL de l'API ciblée** : `{self.api_url}`\n")
-            rf.write(f"- **Paramètres** : `--max-pages {pages_disp}`, `--max-installs {installs_disp}`, `--concurrency {self.concurrency}`\n\n")
+            rf.write(f"- **Paramètres** : {params_str}\n\n")
 
             # Synthèse chiffrée
             rf.write("## 1. Synthèse globale\n\n")
@@ -1024,6 +1091,9 @@ class SimulationRunner:
                 "max_installs": self.max_installs,
                 "concurrency": self.concurrency,
                 "limit_audit": self.limit_audit,
+                "skip_install": self.skip_install,
+                "skip_sync": self.skip_sync,
+                "keep_installed": self.keep_installed,
             },
             "stats": {
                 k: (v.isoformat() if isinstance(v, datetime) else v)
@@ -1064,7 +1134,10 @@ class SimulationRunner:
             print(f" -> {len(self.installed_mod_ids_before)} mod(s) déjà installé(s) au préalable dans le jeu.")
 
             self.setup_loverslab_session()
-            self.sync_catalog()
+            if not self.skip_sync:
+                self.sync_catalog()
+            else:
+                print("\n[ÉTAPE 2] Synchronisation LoversLab ignorée (--skip-sync actif). Réutilisation du catalogue existant.")
             self.audit_mods_consistency()
             self.install_mods_sequentially()
             self.cleanup_installed_test_mods()
@@ -1105,6 +1178,11 @@ def main():
         help="N'exécuter que l'audit et le scraping sans installer de mod dans le jeu",
     )
     parser.add_argument(
+        "--skip-sync",
+        action="store_true",
+        help="Ignorer l'étape de scraping/synchronisation du catalogue LoversLab et réutiliser les données locales",
+    )
+    parser.add_argument(
         "--force-login",
         action="store_true",
         help="Forcer l'ouverture du navigateur Playwright pour réauthentifier LoversLab",
@@ -1123,8 +1201,8 @@ def main():
     parser.add_argument(
         "--limit-audit",
         type=int,
-        default=None,
-        help="Nombre maximal de mods à auditer en direct sur Internet (défaut : tous)",
+        default=-1,
+        help="Nombre maximal de mods à auditer en direct sur Internet (-1 pour tous, défaut : -1)",
     )
     parser.add_argument(
         "--fail-on-errors",
@@ -1151,6 +1229,7 @@ def main():
         max_pages=max_pages,
         max_installs=args.max_installs,
         skip_install=args.skip_install,
+        skip_sync=args.skip_sync,
         force_login=args.force_login,
         keep_installed=args.keep_installed,
         concurrency=args.concurrency,

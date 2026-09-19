@@ -64,10 +64,11 @@ uv run python scripts/simulate_user_flow.py [OPTIONS]
 | `--full` | *drapeau* | Raccourci pour scraper l'intégralité du site LoversLab (`--max-pages -1`) | `False` |
 | `--max-installs` | `int` | Nombre maximal de mods installables à installer séquentiellement (`-1` pour tous) | `-1` (tous) |
 | `--skip-install` | *drapeau* | Exécute uniquement le scraping et l'audit web, sans modifier le dossier du jeu | `False` |
+| `--skip-sync` | *drapeau* | Réutilise le catalogue local existant sans relancer le scraping LoversLab (gain de temps majeur) | `False` |
 | `--force-login` | *drapeau* | Force l'ouverture du navigateur pour réauthentifier LoversLab | `False` |
 | `--keep-installed` | *drapeau* | Conserve les mods installés sans les désinstaller automatiquement à la fin | `False` |
 | `--concurrency` | `int` | Nombre de threads concurrents pour accélérer l'audit web | `4` |
-| `--limit-audit` | `int` | Nombre maximal de mods à auditer sur Internet (`-1` pour tous, échantillon de test) | `None` (tous) |
+| `--limit-audit` | `int` | Nombre maximal de mods à auditer sur Internet (`-1` pour tous, échantillon de test) | `-1` (tous) |
 | `--fail-on-errors` | *drapeau* | Retourne un exit code `1` si des installations échouent ou en cas d'erreurs critiques (CI/CD) | `False` |
 | `--clean-only` | *drapeau* | Désinstalle immédiatement les mods de test LoversLab restés dans le jeu sans relancer la simulation | `False` |
 
