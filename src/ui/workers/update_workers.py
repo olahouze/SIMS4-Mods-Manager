@@ -28,6 +28,7 @@ class UpdateWorker(BaseWorker):
         self.installed_ids = installed_ids or []
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         client = get_api_client()
         try:

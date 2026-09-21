@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from src.services.catalog_sync_service import (
+from src.application.catalog.catalog_sync_service import (
     SyncTracker,
     run_catalog_sync,
     check_catalog_dependencies,

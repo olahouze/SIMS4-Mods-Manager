@@ -28,6 +28,8 @@ from src.utils.thread_utils import cleanup_all_threads
 
 
 class StatusCheckSignals(QObject):
+    """Classe StatusCheckSignals : assure la gestion et l'orchestration de Statuschecksignals."""
+
     health_checked = Signal(bool, bool)  # success, mods_detected
     updates_checked = Signal(int)  # updates_count
 
@@ -41,6 +43,7 @@ class BackgroundStatusWorker(QRunnable):
         self.signals = signals
 
     def run(self):
+        """Exécute l'opération run."""
         try:
             health = self.api_client.get_health()
             self.signals.health_checked.emit(True, health.get("mods_dir_detected", False))
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1500, self.auto_start_background_sync)
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
@@ -154,45 +158,100 @@ class MainWindow(QMainWindow):
     # Backward compatible sidebar property accessors
     @property
     def nav_buttons(self):
+        """Exécute l'opération nav buttons.
+
+        Returns:
+            Résultat de l'opération nav_buttons.
+        """
         return self.sidebar.nav_buttons
 
     @property
     def btn_accounts(self):
+        """Exécute l'opération btn accounts.
+
+        Returns:
+            Résultat de l'opération btn_accounts.
+        """
         return self.sidebar.btn_accounts
 
     @property
     def btn_catalog(self):
+        """Exécute l'opération btn catalog.
+
+        Returns:
+            Résultat de l'opération btn_catalog.
+        """
         return self.sidebar.btn_catalog
 
     @property
     def btn_installed(self):
+        """Exécute l'opération btn installed.
+
+        Returns:
+            Résultat de l'opération btn_installed.
+        """
         return self.sidebar.btn_installed
 
     @property
     def btn_downloads(self):
+        """Exécute l'opération btn downloads.
+
+        Returns:
+            Résultat de l'opération btn_downloads.
+        """
         return self.sidebar.btn_downloads
 
     @property
     def btn_updates(self):
+        """Exécute l'opération btn updates.
+
+        Returns:
+            Résultat de l'opération btn_updates.
+        """
         return self.sidebar.btn_updates
 
     @property
     def btn_logs(self):
+        """Exécute l'opération btn logs.
+
+        Returns:
+            Résultat de l'opération btn_logs.
+        """
         return self.sidebar.btn_logs
 
     @property
     def btn_settings(self):
+        """Exécute l'opération btn settings.
+
+        Returns:
+            Résultat de l'opération btn_settings.
+        """
         return self.sidebar.btn_settings
 
     @property
     def game_status(self):
+        """Exécute l'opération game status.
+
+        Returns:
+            Résultat de l'opération game_status.
+        """
         return self.sidebar.game_status
 
     @property
     def play_btn(self):
+        """Exécute l'opération play btn.
+
+        Returns:
+            Résultat de l'opération play_btn.
+        """
         return self.sidebar.play_btn
 
     def switch_page(self, index: int):
+        """Exécute l'opération switch page.
+
+        Args:
+            index: Paramètre index.
+        """
         self.stacked_widget.setCurrentIndex(index)
         self.sidebar.set_active_page(index)
 
@@ -215,6 +274,13 @@ class MainWindow(QMainWindow):
         self.update_nav_badge()
 
     def show_mod_details(self, mod_data: dict, origin_name: str = "Catalogue", origin_index: int = 1):
+        """Exécute l'opération show mod details.
+
+        Args:
+            mod_data: Paramètre mod_data.
+            origin_name: Paramètre origin_name.
+            origin_index: Paramètre origin_index.
+        """
         self.current_origin_index = origin_index
         for btn in self.nav_buttons:
             btn.setChecked(False)
@@ -272,6 +338,7 @@ class MainWindow(QMainWindow):
             self.catalog_view.start_sync_monitoring()
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.setWindowTitle(tr("app.window_title"))
         self.sidebar.retranslate_ui()
         self.refresh_game_status()
@@ -302,6 +369,7 @@ class MainWindow(QMainWindow):
                 logger.debug(f"Erreur retranslate_ui sur provider_drawer: {e}")
 
     def refresh_game_status(self):
+        """Exécute l'opération refresh game status."""
         worker = BackgroundStatusWorker(self.api_client, self.status_signals)
         QThreadPool.globalInstance().start(worker)
 
@@ -309,6 +377,7 @@ class MainWindow(QMainWindow):
         self.sidebar.update_game_status(success, mods_detected)
 
     def update_nav_badge(self):
+        """Exécute l'opération update nav badge."""
         self.refresh_game_status()
 
     def _on_updates_checked(self, count: int):
@@ -324,6 +393,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("dialogs.error_title"), tr("nav.launch_game_error", error=str(e)))
 
     def auto_start_background_sync(self):
+        """Exécute l'opération auto start background sync."""
         try:
             status = self.api_client.get_catalog_sync_status()
             if status.get("is_running", False):
@@ -360,6 +430,11 @@ class MainWindow(QMainWindow):
             logger.debug(f"Vérification automatique de synchronisation au démarrage: {e}")
 
     def closeEvent(self, event):
+        """Exécute l'opération closeevent.
+
+        Args:
+            event: Paramètre event.
+        """
         logger.info("Fermeture de l'application demandée par l'utilisateur...")
         ShutdownManager.trigger_shutdown()
         if hasattr(self, "catalog_view") and hasattr(self.catalog_view, "monitor_timer"):

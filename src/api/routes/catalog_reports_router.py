@@ -14,7 +14,7 @@ from src.api.schemas.catalog import (
     RequirementsOverrideRequest,
 )
 from src.database.models import CatalogMod
-from src.services.requirement_reporter_service import RequirementReporterService
+from src.application.dependencies.requirement_reporter_service import RequirementReporterService
 from src.utils.logger import logger
 
 reports_router = APIRouter(tags=["Catalog Reports"])
@@ -29,10 +29,10 @@ def check_missing_report(payload: CheckMissingReportRequest, session: Session = 
     elif payload.source and payload.remote_id:
         cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
 
-    page_url = cat_mod.page_url if cat_mod else payload.page_url
-    source = cat_mod.source if cat_mod else (payload.source or "loverslab")
-    mod_title = cat_mod.title if cat_mod else (payload.title or "Mod")
-    author = cat_mod.author if cat_mod else (payload.author or "Author")
+    page_url = str((cat_mod.page_url if cat_mod else payload.page_url) or "")
+    source = str((cat_mod.source if cat_mod else payload.source) or "loverslab")
+    mod_title = str((cat_mod.title if cat_mod else payload.title) or "Mod")
+    author = str((cat_mod.author if cat_mod else payload.author) or "Author")
 
     status = RequirementReporterService.check_report_status(
         source=source,
@@ -54,10 +54,10 @@ def report_missing_requirements(payload: SubmitMissingReportRequest, session: Se
     elif payload.source and payload.remote_id:
         cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
 
-    page_url = cat_mod.page_url if cat_mod else payload.page_url
-    source = cat_mod.source if cat_mod else (payload.source or "loverslab")
-    mod_title = cat_mod.title if cat_mod else (payload.title or "Mod")
-    author = cat_mod.author if cat_mod else (payload.author or "Author")
+    page_url = str((cat_mod.page_url if cat_mod else payload.page_url) or "")
+    source = str((cat_mod.source if cat_mod else payload.source) or "loverslab")
+    mod_title = str((cat_mod.title if cat_mod else payload.title) or "Mod")
+    author = str((cat_mod.author if cat_mod else payload.author) or "Author")
 
     res = RequirementReporterService.submit_report(
         source=source,

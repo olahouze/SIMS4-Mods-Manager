@@ -19,6 +19,8 @@ from src.utils.thread_utils import BaseWorker
 
 
 class LoginWorker(BaseWorker):
+    """Classe LoginWorker : assure la gestion et l'orchestration de Loginworker."""
+
     finished = Signal(bool, str)
 
     def __init__(self, provider_name: str):
@@ -26,6 +28,7 @@ class LoginWorker(BaseWorker):
         self.provider_name = provider_name
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         try:
             if self._is_cancelled:
@@ -149,6 +152,13 @@ class AccountCardWidget(QFrame):
         c_layout.addLayout(b_layout)
 
     def update_badge(self, is_member: bool, is_ready: bool, display: Optional[str] = None):
+        """Exécute l'opération update badge.
+
+        Args:
+            is_member: Paramètre is_member.
+            is_ready: Paramètre is_ready.
+            display: Paramètre display.
+        """
         if is_member:
             self.status_badge.setText(tr("accounts.status_member", display=display or "Actif"))
             self.status_badge.setStyleSheet(
@@ -166,6 +176,7 @@ class AccountCardWidget(QFrame):
             )
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.title_lbl.setText(tr(self.title_key))
         self.desc_lbl.setText(tr(self.desc_key))
         self.clear_btn.setText(tr("accounts.btn_clear"))

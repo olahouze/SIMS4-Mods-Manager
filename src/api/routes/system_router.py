@@ -5,7 +5,7 @@ from src.api.schemas.system import HealthResponse
 from src.core.config import AppConfig
 from src.database.manager import DatabaseManager
 from src.core.session_manager import SessionManager
-from src.services.game_service import GameDetector
+from src.application.game.game_service import GameDetector
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/system", tags=["System & Health"])

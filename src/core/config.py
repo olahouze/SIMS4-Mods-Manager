@@ -10,6 +10,8 @@ APP_DIR_NAME = ".sims4_mod_manager"
 
 @dataclass
 class AppConfig:
+    """Classe AppConfig : assure la gestion et l'orchestration de Appconfig."""
+
     custom_mods_dir: Optional[str] = None
     custom_game_exe: Optional[str] = None
     cached_mods_dir: Optional[str] = None
@@ -28,12 +30,22 @@ class AppConfig:
 
     @classmethod
     def get_app_dir(cls) -> Path:
+        """Exécute l'opération get app dir.
+
+        Returns:
+            Résultat de l'opération get_app_dir.
+        """
         path = Path.home() / APP_DIR_NAME
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_db_path(cls) -> Path:
+        """Exécute l'opération get db path.
+
+        Returns:
+            Résultat de l'opération get_db_path.
+        """
         env_path = os.environ.get("SIMS4_DB_PATH")
         if env_path:
             p = Path(env_path)
@@ -43,54 +55,99 @@ class AppConfig:
 
     @classmethod
     def get_browser_profile_dir(cls) -> Path:
+        """Exécute l'opération get browser profile dir.
+
+        Returns:
+            Résultat de l'opération get_browser_profile_dir.
+        """
         path = cls.get_app_dir() / "browser_profile"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_backups_dir(cls) -> Path:
+        """Exécute l'opération get backups dir.
+
+        Returns:
+            Résultat de l'opération get_backups_dir.
+        """
         path = cls.get_app_dir() / "backups"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_cache_dir(cls) -> Path:
+        """Exécute l'opération get cache dir.
+
+        Returns:
+            Résultat de l'opération get_cache_dir.
+        """
         path = cls.get_app_dir() / "cache"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_thumbnails_cache_dir(cls) -> Path:
+        """Exécute l'opération get thumbnails cache dir.
+
+        Returns:
+            Résultat de l'opération get_thumbnails_cache_dir.
+        """
         path = cls.get_cache_dir() / "thumbnails"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_images_cache_dir(cls) -> Path:
+        """Exécute l'opération get images cache dir.
+
+        Returns:
+            Résultat de l'opération get_images_cache_dir.
+        """
         path = cls.get_cache_dir() / "images"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_screenshots_cache_dir(cls) -> Path:
+        """Exécute l'opération get screenshots cache dir.
+
+        Returns:
+            Résultat de l'opération get_screenshots_cache_dir.
+        """
         path = cls.get_cache_dir() / "screenshots"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_desc_images_cache_dir(cls) -> Path:
+        """Exécute l'opération get desc images cache dir.
+
+        Returns:
+            Résultat de l'opération get_desc_images_cache_dir.
+        """
         path = cls.get_cache_dir() / "desc_images"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_logs_dir(cls) -> Path:
+        """Exécute l'opération get logs dir.
+
+        Returns:
+            Résultat de l'opération get_logs_dir.
+        """
         path = cls.get_app_dir() / "logs"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @classmethod
     def get_config_file_path(cls) -> Path:
+        """Exécute l'opération get config file path.
+
+        Returns:
+            Résultat de l'opération get_config_file_path.
+        """
         return cls.get_app_dir() / "config.json"
 
     @classmethod
@@ -128,6 +185,11 @@ class AppConfig:
             return instance
 
     def save(self) -> None:
+        """Exécute l'opération save.
+
+        Returns:
+            Résultat de l'opération save.
+        """
         config_path = self.get_config_file_path()
         data = {f.name: getattr(self, f.name) for f in fields(self)}
         with open(config_path, "w", encoding="utf-8") as f:

@@ -19,6 +19,7 @@ class FilterBar(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 10)
         layout.setSpacing(10)

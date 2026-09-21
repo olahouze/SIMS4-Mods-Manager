@@ -14,9 +14,9 @@ graph TD
     UIWorkers[Workers Asynchrones QThread<br/>src/ui/workers/] -->|Appels Background| ApiClient
     ApiClient -->|REST JSON / NDJSON| APILayer[API REST FastAPI<br/>src/api/routes/]
     APILayer -->|Validation & DTOs| Schemas[Schémas Pydantic<br/>src/api/schemas/]
-    APILayer -->|Délégation Métier| Services[Services Métier<br/>src/services/]
-    Services -->|Persistance & CRUD| Database[Couche Données<br/>src/database/]
-    Services -->|Web Scraping & Téléchargement| Providers[Fournisseurs Externes<br/>src/providers/]
+    APILayer -->|Délégation Métier| Application[Couche Application<br/>src/application/]
+    Application -->|Persistance & CRUD| Database[Couche Données<br/>src/infrastructure/, src/database/]
+    Application -->|Web Scraping & Téléchargement| Providers[Fournisseurs Externes<br/>src/providers/]
     Providers -->|Sessions & Anti-Bot| Core[Core & Utilitaires<br/>src/core/, src/utils/]
 ```
 
@@ -139,7 +139,7 @@ SIMS4-Mods-Manager/
 ## 🛡️ Règles Architecturales Strictes
 
 1. **Aucun Import Direct BDD depuis l'UI** : L'interface graphique PySide6 n'importe jamais `DatabaseManager` ni `src.database.models`. Elle consomme exclusivement les données via `ApiClient` (`src.api.client.py`).
-2. **Pas de Logique Métier dans les Routeurs** : Les fichiers `src/api/routes/*_router.py` sont de simples contrôleurs HTTP. Ils reçoivent les requêtes, valident les schémas Pydantic, appellent la couche `src/services/` et retournent les réponses formatées.
+2. **Pas de Logique Métier dans les Routeurs** : Les fichiers `src/api/routes/*_router.py` sont de simples contrôleurs HTTP. Ils reçoivent les requêtes, valident les schémas Pydantic, appellent la couche applicative `src/application/` et retournent les réponses formatées.
 3. **Immutabilité des Schémas (DTOs)** : Les schémas d'entrée/sortie sont isolés dans `src/api/schemas/` et ne dépendent jamais des modèles ORM SQLAlchemy.
 4. **Zéro Fichier Shim ou Déprécié** : Tous les modules pointent directement sur les emplacements canoniques, éliminant toute dette technique liée à des fichiers de transition.
 5. **Gestion de l'Arrêt Propre (Graceful Shutdown)** : Tous les processus asynchrones vérifient périodiquement `ShutdownManager.is_shutting_down()` pour éviter toute fuite mémoire ou plantage de threads orphelins.

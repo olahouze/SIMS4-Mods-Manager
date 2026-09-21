@@ -92,8 +92,8 @@ def test_extract_multi_requirements_delimiter_splitting():
 
 def test_resolve_mod_dependencies_four_statuses():
     """Tests that dependencies resolve to exactly one of the 4 requested statuses."""
-    from src.services.dependency_resolver import resolve_mod_dependencies
-    from src.services.catalog_sync_service import SyncTracker
+    from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
+    from src.application.catalog.catalog_sync_service import SyncTracker
 
     db = DatabaseManager.get_instance()
 
@@ -221,7 +221,7 @@ def test_install_partial_when_pending_verification(monkeypatch):
     assert mod_id is not None
 
     from src.providers.loverslab import LoversLabProvider
-    from src.services.mod_installer_service import ModInstaller
+    from src.application.mods.mod_installer_service import ModInstaller
 
     def mock_get_details(self, url):
         return {
@@ -274,7 +274,7 @@ def test_loverslab_14_subcategories_and_worker():
 
 
 def test_sync_tracker_categories_progress():
-    from src.services.catalog_sync_service import SyncTracker
+    from src.application.catalog.catalog_sync_service import SyncTracker
 
     provider = LoversLabProvider()
     SyncTracker.start(300, categories_list=provider.CATEGORIES)
@@ -475,7 +475,7 @@ def test_mod_detail_view_requirements_loading_and_retractable():
 def test_cross_view_synchronization_and_panel_counts():
     """Validates cross-view synchronization signals and true indexed mod count in sync panel."""
     from src.database import DatabaseManager, CatalogMod
-    from src.services.catalog_sync_service import SyncTracker
+    from src.application.catalog.catalog_sync_service import SyncTracker
     from src.ui.views.catalog_view import CatalogView
     from src.ui.views.installed_view import InstalledView
     from src.ui.views.updates_view import UpdatesView
@@ -519,7 +519,7 @@ def test_special_dependency_cases_and_wickedwhims_mapping():
     and that Nisa's Wicked Perversions is NOT in the special cases table
     and is handled through standard catalog resolution.
     """
-    from src.services.dependency_resolver import (
+    from src.application.dependencies.dependency_resolver import (
         SPECIAL_DEPENDENCY_CASES,
         find_special_dependency_case,
         resolve_mod_dependencies,
@@ -628,7 +628,7 @@ def test_find_dependent_installed_mods():
     """
     Tests detection of installed mods that depend on a target mod before uninstallation.
     """
-    from src.services.dependency_resolver import find_dependent_installed_mods
+    from src.application.dependencies.dependency_resolver import find_dependent_installed_mods
     from src.database.manager import DatabaseManager
     from src.database.models import InstalledMod, CatalogMod
 
@@ -729,8 +729,8 @@ def test_extract_requirements_with_sims4_dlc():
 
 def test_resolve_mod_dependencies_with_game_dlc():
     """Verifies that resolve_mod_dependencies returns status GAME_DLC and does not block install."""
-    from src.services.dependency_resolver import resolve_mod_dependencies
-    from src.services.catalog_sync_service import check_catalog_dependencies
+    from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
+    from src.application.catalog.catalog_sync_service import check_catalog_dependencies
 
     db = DatabaseManager.get_instance()
 

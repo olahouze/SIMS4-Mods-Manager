@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 
 class SettingsResponse(BaseModel):
+    """Classe SettingsResponse : assure la gestion et l'orchestration de Settingsresponse."""
+
     custom_mods_dir: Optional[str] = None
     custom_game_exe: Optional[str] = None
     auto_backup: bool
@@ -20,6 +22,8 @@ class SettingsResponse(BaseModel):
 
 
 class SettingsUpdateRequest(BaseModel):
+    """Classe SettingsUpdateRequest : assure la gestion et l'orchestration de Settingsupdaterequest."""
+
     custom_mods_dir: Optional[str] = None
     custom_game_exe: Optional[str] = None
     auto_backup: Optional[bool] = None
@@ -31,23 +35,31 @@ class SettingsUpdateRequest(BaseModel):
 
 
 class ClearCacheResponse(BaseModel):
+    """Classe ClearCacheResponse : assure la gestion et l'orchestration de Clearcacheresponse."""
+
     success: bool
     message: str
     deleted_count: int
 
 
 class LaunchGameResponse(BaseModel):
+    """Classe LaunchGameResponse : assure la gestion et l'orchestration de Launchgameresponse."""
+
     success: bool
     message: str
 
 
 class DatabaseStatsResponse(BaseModel):
+    """Classe DatabaseStatsResponse : assure la gestion et l'orchestration de Databasestatsresponse."""
+
     catalog_mods_count: int
     installed_mods_count: int
     db_path: str
 
 
 class DatabasePurgeResponse(BaseModel):
+    """Classe DatabasePurgeResponse : assure la gestion et l'orchestration de Databasepurgeresponse."""
+
     success: bool
     deleted_count: int
     message: str

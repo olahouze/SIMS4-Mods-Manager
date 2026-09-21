@@ -42,6 +42,12 @@ class SubcategoryRowWidget(QFrame):
         r_layout.addWidget(self.lbl_detail)
 
     def set_status(self, text: str, color: str = "#64748b"):
+        """Exécute l'opération set status.
+
+        Args:
+            text: Paramètre text.
+            color: Paramètre color.
+        """
         self.lbl_detail.setText(text)
         weight = "700" if color != "#64748b" else "400"
         self.lbl_detail.setStyleSheet(f"font-size: 9px; color: {color}; font-weight: {weight};")

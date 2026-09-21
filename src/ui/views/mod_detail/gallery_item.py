@@ -10,6 +10,8 @@ from src.ui.theme import Theme
 
 
 class GalleryItemWidget(QFrame):
+    """Classe GalleryItemWidget : assure la gestion et l'orchestration de Galleryitemwidget."""
+
     clicked = Signal(int)
 
     def __init__(self, index: int, parent=None):
@@ -29,10 +31,20 @@ class GalleryItemWidget(QFrame):
         layout.addWidget(self.img_lbl)
 
     def set_pixmap(self, pix: QPixmap):
+        """Exécute l'opération set pixmap.
+
+        Args:
+            pix: Paramètre pix.
+        """
         self.img_lbl.setText("")
         self.img_lbl.setPixmap(pix)
 
     def mousePressEvent(self, event):
+        """Exécute l'opération mousepressevent.
+
+        Args:
+            event: Paramètre event.
+        """
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.index)
         super().mousePressEvent(event)

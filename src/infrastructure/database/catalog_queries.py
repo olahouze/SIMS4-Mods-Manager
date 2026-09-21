@@ -112,12 +112,6 @@ def build_catalog_query(
 
     if sort in ["az", "title"]:
         query = query.order_by(CatalogMod.title.asc(), CatalogMod.id.desc())
-    elif sort == "downloads":
-        query = query.order_by(CatalogMod.download_count.desc().nullslast(), CatalogMod.id.desc())
-    elif sort == "rating":
-        query = query.order_by(CatalogMod.rating.desc().nullslast(), CatalogMod.id.desc())
-    elif sort == "views":
-        query = query.order_by(CatalogMod.views_count.desc().nullslast(), CatalogMod.id.desc())
     else:
         query = query.order_by(CatalogMod.updated_date.desc().nullslast(), CatalogMod.id.desc())
 

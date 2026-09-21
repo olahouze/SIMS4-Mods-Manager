@@ -31,6 +31,11 @@ class ResponsiveCardGrid(QWidget):
 
     @property
     def cards(self) -> List[QWidget]:
+        """Exécute l'opération cards.
+
+        Returns:
+            Résultat de l'opération cards.
+        """
         return self._cards
 
     def calculate_columns(self, available_width: int) -> int:

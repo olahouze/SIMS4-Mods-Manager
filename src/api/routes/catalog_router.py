@@ -1,5 +1,5 @@
 import re
-from typing import Optional
+from typing import Optional, Any
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, defer
@@ -14,13 +14,13 @@ from src.api.schemas.catalog import (
 from src.database.models import CatalogMod, InstalledMod
 from src.api.deps import get_db
 from src.providers import ProviderRegistry
-from src.services.catalog_sync_service import (
+from src.application.catalog.catalog_sync_service import (
     SyncTracker,
     run_catalog_sync,
 )
-from src.services.dependency_resolver import resolve_mod_dependencies
-from src.services.mod_installer_service import perform_mod_install
-from src.services.mod_update_service import check_has_update
+from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
+from src.application.mods.mod_installer_service import perform_mod_install
+from src.application.mods.mod_update_service import check_has_update
 from src.utils.logger import logger
 
 
@@ -80,7 +80,7 @@ def get_catalog(
         conditions.append(InstalledMod.title.in_(page_titles))
 
     relevant_installed = session.query(InstalledMod).filter(or_(*conditions)).all() if conditions else []
-    installed_by_remote = {(im.source, im.remote_id): im for im in relevant_installed if im.remote_id}
+    installed_by_remote = {(im.source or "unknown", im.remote_id): im for im in relevant_installed if im.remote_id}
     installed_by_title = {im.title.lower(): im for im in relevant_installed if im.title}
     installed_by_id = {im.catalog_mod_id: im for im in relevant_installed if im.catalog_mod_id and not im.remote_id}
 
@@ -105,7 +105,7 @@ def get_catalog(
     for m in paginated_mods:
         inst = installed_by_remote.get((m.source, m.remote_id)) or installed_by_id.get(m.id)
         is_installed = inst is not None
-        has_update = check_has_update(inst, m) if is_installed else False
+        has_update = check_has_update(inst, m) if inst is not None else False
 
         dep_items = resolve_mod_dependencies(
             m.get_requirements_mods_list(),
@@ -223,29 +223,35 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
         or m.requirements_status is None
         or (m.requirements_text and not m.get_requirements_mods_list() and m.requirements_status != "RESOLVED")
     )
+    details_dict: dict[str, Any] = {}
     if needs_remote_fetch and m.page_url:
         try:
-            provider = ProviderRegistry.get_provider(m.source)
+            provider = ProviderRegistry.get_provider(str(m.source or "loverslab"))
             if provider:
                 details = provider.get_mod_details(m.page_url)
-                fetched_desc = details.get("description", "")
+                details_dict = (
+                    details.model_dump()
+                    if hasattr(details, "model_dump")
+                    else (details if isinstance(details, dict) else {})
+                )
+                fetched_desc = details_dict.get("description", "")
                 if fetched_desc:
                     m.description = fetched_desc
                     desc = fetched_desc
-                if details.get("requirements_text") is not None or details.get("requirements_status"):
-                    m.requirements_text = details.get("requirements_text")
-                    m.requirements_status = details.get("requirements_status", "NONE")
-                    m.set_requirements_mods_list(details.get("requirements_mods", []))
-                if details.get("download_urls"):
-                    m.set_download_urls_list(details.get("download_urls", []))
-                if details.get("external_links"):
-                    m.set_external_links_list(details.get("external_links", []))
+                if details_dict.get("requirements_text") is not None or details_dict.get("requirements_status"):
+                    m.requirements_text = details_dict.get("requirements_text")
+                    m.requirements_status = details_dict.get("requirements_status", "NONE")
+                    m.set_requirements_mods_list(details_dict.get("requirements_mods", []))
+                if details_dict.get("download_urls"):
+                    m.set_download_urls_list(details_dict.get("download_urls", []))
+                if details_dict.get("external_links"):
+                    m.set_external_links_list(details_dict.get("external_links", []))
                 session.commit()
         except Exception as e:
             logger.debug(f"Erreur extraction détails/requirements pour {m.title}: {e}")
 
     all_inst = session.query(InstalledMod).all()
-    installed_by_remote = {(im.source, im.remote_id): im for im in all_inst if im.remote_id}
+    installed_by_remote = {(im.source or "unknown", im.remote_id): im for im in all_inst if im.remote_id}
     installed_by_title = {im.title.lower(): im for im in all_inst if im.title}
     dep_items = resolve_mod_dependencies(
         m.get_requirements_mods_list(),
@@ -255,9 +261,9 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
         is_syncing=SyncTracker.is_running,
     )
 
-    screenshots = details.get("screenshots", []) if "details" in locals() else []
+    screenshots = details_dict.get("screenshots", [])
     if not screenshots and desc:
-        imgs_in_desc = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', desc)
+        imgs_in_desc = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', str(desc or ""))
         screenshots = [
             u
             for u in imgs_in_desc
@@ -267,12 +273,12 @@ def get_catalog_mod_details(mod_id: int, force_refresh: bool = False, session: S
 
     return ModDetailsResponse(
         id=m.id,
-        source=m.source,
-        remote_id=m.remote_id,
-        title=m.title,
+        source=str(m.source or "unknown"),
+        remote_id=str(m.remote_id or ""),
+        title=str(m.title or "Untitled"),
         author=m.author or "Inconnu",
         description=desc or "Aucune description détaillée disponible pour ce mod.",
-        page_url=m.page_url,
+        page_url=str(m.page_url or ""),
         thumbnail_url=m.thumbnail_url or "",
         tags=m.get_tags_list(),
         updated_date=m.updated_date.strftime("%d/%m/%Y") if m.updated_date else None,

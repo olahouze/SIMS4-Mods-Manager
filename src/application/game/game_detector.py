@@ -14,7 +14,7 @@ from typing import Optional, List
 from src.core.config import AppConfig
 from src.utils.logger import logger
 from src.utils.resource_cfg import ensure_resource_cfg
-from src.services.game_launcher import GameLauncher
+from src.application.game.game_launcher import GameLauncher
 
 # Common localized folder names for Electronic Arts / The Sims 4 user directories
 LOCALIZED_SIMS4_FOLDERS = [
@@ -187,12 +187,12 @@ class GameDetector:
                 return cached_p
 
         # 3. Discovery
-        mods_dir = cls._do_detect_mods_dir()
-        if mods_dir:
-            cls._cached_mods_dir = mods_dir
-            config.cached_mods_dir = str(mods_dir)
+        detected_dir = cls._do_detect_mods_dir()
+        if detected_dir:
+            cls._cached_mods_dir = detected_dir
+            config.cached_mods_dir = str(detected_dir)
             config.save()
-        return mods_dir
+        return detected_dir
 
     @classmethod
     def _do_detect_mods_dir(cls) -> Optional[Path]:

@@ -9,7 +9,7 @@ from src.domain.interfaces.repositories.mod_repository_interface import IInstall
 from src.infrastructure.database.repositories.sqlalchemy_installed_mod_repository import (
     SqlAlchemyInstalledModRepository,
 )
-from src.services.game_service import GameDetector
+from src.application.game.game_service import GameDetector
 from src.utils.logger import logger
 
 
@@ -21,6 +21,11 @@ class ModToggleManager:
 
     @property
     def repo(self) -> IInstalledModRepository:
+        """Exécute l'opération repo.
+
+        Returns:
+            Résultat de l'opération repo.
+        """
         return self._repo or SqlAlchemyInstalledModRepository()
 
     def toggle(self, installed_mod_id: int, target_state: Optional[bool] = None) -> tuple[bool, str]:
@@ -81,3 +86,6 @@ class ModToggleManager:
     def toggle_mod(cls, installed_mod_id: int, target_state: Optional[bool] = None) -> tuple[bool, str]:
         """Méthode de classe conservée pour compatibilité ascendante."""
         return cls().toggle(installed_mod_id, target_state)
+
+
+ModToggleService = ModToggleManager

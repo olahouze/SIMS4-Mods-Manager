@@ -8,10 +8,10 @@ from typing import Optional, List, Tuple, Dict, Any, Callable
 from src.core.config import AppConfig
 from src.database.models import CatalogMod, InstalledMod
 from src.database.manager import DatabaseManager
-from src.services.game_service import GameDetector
+from src.application.game.game_service import GameDetector
 from src.utils.archive import extract_archive, is_archive, create_backup_zip
 from src.utils.logger import logger
-from src.services.mod_install_orchestrator import perform_mod_install
+from src.application.mods.mod_install_orchestrator import perform_mod_install
 
 from src.utils.file_utils import (
     sanitize_mod_folder_name,
@@ -65,12 +65,14 @@ class ModInstaller:
             if not existing_installed:
                 existing_installed = session.query(InstalledMod).filter_by(title=title, source=source_name).first()
 
-            if existing_installed:
+            if existing_installed and existing_installed.folder_name:
                 safe_folder_name = existing_installed.folder_name
             else:
-                safe_folder_name = generate_unique_mod_folder_name(source_name, title, mods_dir)
+                safe_folder_name = generate_unique_mod_folder_name(
+                    source_name or "manual", title or file_path.stem, mods_dir
+                )
 
-            target_mod_dir = mods_dir / safe_folder_name
+            target_mod_dir = mods_dir / (safe_folder_name or "unknown_mod")
 
             backup_file_path = None
             if existing_installed and target_mod_dir.exists():
@@ -117,8 +119,8 @@ class ModInstaller:
                     progress_callback(85, "Copie du fichier package...", f"Dossier : {safe_folder_name}")
                 target_filename = file_path.name
                 try:
-                    with open(file_path, "rb") as f:
-                        magic = f.read(4)
+                    with open(file_path, "rb") as fh:
+                        magic = fh.read(4)
                     if magic == b"DBPF":
                         clean_name = re.sub(r"[^a-zA-Z0-9_\-\. ]+", "_", custom_title or file_path.stem).strip()
                         if not clean_name.lower().endswith(".package"):
@@ -202,7 +204,7 @@ class ModInstaller:
                 return False, "Mod introuvable dans la base de données."
 
             if mods_dir:
-                target_dir = mods_dir / mod.folder_name
+                target_dir = mods_dir / (mod.folder_name or "")
                 if target_dir.exists():
                     try:
                         shutil.rmtree(target_dir)
@@ -232,12 +234,12 @@ class ModInstaller:
         with db.get_session() as session:
             installed = session.query(InstalledMod).all()
             for mod in installed:
-                mod_folder = mods_dir / mod.folder_name
+                mod_folder = mods_dir / (mod.folder_name or "")
                 if not mod_folder.exists() or not any(mod_folder.glob("*")):
                     logger.info(
                         f"Mod supprimé du disque détecté, nettoyage de la BDD : '{mod.title}' ({mod.folder_name})"
                     )
-                    removed_titles.append(mod.title)
+                    removed_titles.append(mod.title or "")
                     session.delete(mod)
 
             if removed_titles:

@@ -1,12 +1,12 @@
 import re
 import zipfile
-from src.services.mod_installer_service import (
+from src.application.mods.mod_installer_service import (
     ModInstaller,
     sanitize_filename,
     sanitize_mod_folder_name,
     generate_unique_mod_folder_name,
 )
-from src.services.mod_toggle_service import ModToggleManager
+from src.application.mods.mod_toggle_service import ModToggleManager
 from src.database import DatabaseManager, InstalledMod
 from src.core.config import AppConfig
 

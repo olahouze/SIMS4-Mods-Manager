@@ -22,7 +22,7 @@ Pour garantir une expérience utilisateur fluide et éviter de bloquer des insta
 
 ## 2. Tableau Centralisé des Motifs de Commentaires & Faux Positifs
 
-Le module [`src/services/dependency_noise_rules.py`](file:///d:/Workspace/Github/OLAHOUZE/SIMS4-Mods-Manager/src/services/dependency_noise_rules.py) regroupe les motifs et expressions courantes reconnus comme des commentaires ou du bruit :
+Le module [`src/application/dependencies/dependency_noise_rules.py`](file:///d:/Workspace/Github/OLAHOUZE/SIMS4-Mods-Manager/src/application/dependencies/dependency_noise_rules.py) regroupe les motifs et expressions courantes reconnus comme des commentaires ou du bruit :
 
 | Catégorie | Exemples de motifs reconnus | Action du Moteur |
 | :--- | :--- | :--- |

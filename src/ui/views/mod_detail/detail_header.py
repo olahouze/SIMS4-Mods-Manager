@@ -18,6 +18,8 @@ from src.i18n import tr
 
 
 class DetailHeaderWidget(QWidget):
+    """Classe DetailHeaderWidget : assure la gestion et l'orchestration de Detailheaderwidget."""
+
     back_requested = Signal()
     install_requested = Signal()
     uninstall_requested = Signal()
@@ -133,49 +135,111 @@ class DetailHeaderWidget(QWidget):
     # Compatibility properties
     @property
     def back_btn(self):
+        """Exécute l'opération back btn.
+
+        Returns:
+            Résultat de l'opération back_btn.
+        """
         return self.btn_back
 
     @property
     def install_btn(self):
+        """Exécute l'opération install btn.
+
+        Returns:
+            Résultat de l'opération install_btn.
+        """
         return self.btn_install
 
     @property
     def open_folder_btn(self):
+        """Exécute l'opération open folder btn.
+
+        Returns:
+            Résultat de l'opération open_folder_btn.
+        """
         return self.btn_open_folder
 
     @property
     def web_btn(self):
+        """Exécute l'opération web btn.
+
+        Returns:
+            Résultat de l'opération web_btn.
+        """
         return self.btn_open_web
 
     @property
     def title_lbl(self):
+        """Exécute l'opération title lbl.
+
+        Returns:
+            Résultat de l'opération title_lbl.
+        """
         return self.lbl_title
 
     @property
     def thumb_label(self):
+        """Exécute l'opération thumb label.
+
+        Returns:
+            Résultat de l'opération thumb_label.
+        """
         return self._thumb_label
 
     @property
     def meta_author(self):
+        """Exécute l'opération meta author.
+
+        Returns:
+            Résultat de l'opération meta_author.
+        """
         return self.lbl_author
 
     @property
     def meta_date(self):
+        """Exécute l'opération meta date.
+
+        Returns:
+            Résultat de l'opération meta_date.
+        """
         return self.lbl_updated
 
     @property
     def meta_tags(self):
+        """Exécute l'opération meta tags.
+
+        Returns:
+            Résultat de l'opération meta_tags.
+        """
         return self.lbl_tags
 
     @property
     def installed_badge(self):
+        """Exécute l'opération installed badge.
+
+        Returns:
+            Résultat de l'opération installed_badge.
+        """
         return self._installed_badge
 
     @property
     def source_badge(self):
+        """Exécute l'opération source badge.
+
+        Returns:
+            Résultat de l'opération source_badge.
+        """
         return self.badge_access
 
     def update_mod_info(self, mod_data: dict, origin_name: str = "Catalogue", origin_index: int = 1):
+        """Exécute l'opération update mod info.
+
+        Args:
+            mod_data: Paramètre mod_data.
+            origin_name: Paramètre origin_name.
+            origin_index: Paramètre origin_index.
+        """
         self._mod_data = mod_data
         self.origin_name = origin_name
         self.origin_index = origin_index
@@ -217,6 +281,7 @@ class DetailHeaderWidget(QWidget):
             self.btn_install.setStyleSheet(Theme.action_button_style(variant="primary", padding="8px 20px"))
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.btn_back.setText(tr("mod_detail.back_to", origin=self.origin_name))
         self.btn_open_folder.setText(tr("mod_detail.btn_open_folder"))
         self.btn_open_web.setText(tr("mod_detail.btn_official_page"))

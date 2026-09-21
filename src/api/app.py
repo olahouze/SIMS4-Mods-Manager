@@ -20,6 +20,11 @@ from src.utils.logger import logger
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    """Exécute l'opération lifespan.
+
+    Args:
+        app: Paramètre app.
+    """
     logger.info("Démarrage de l'API REST SIMS 4 Mods Manager...")
     DatabaseManager.get_instance()
     ProviderRegistry.initialize()
@@ -61,6 +66,11 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def root():
+        """Exécute l'opération root.
+
+        Returns:
+            Résultat de l'opération root.
+        """
         return RedirectResponse(url="/docs")
 
     return app

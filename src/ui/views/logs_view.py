@@ -34,6 +34,7 @@ class LogsView(QWidget):
             qt_handler._emitter.log_received.connect(self._on_log_received)
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
@@ -185,6 +186,7 @@ class LogsView(QWidget):
         self.info_label.setText(f"{self.log_text.document().blockCount() - 1} / {len(self.all_logs)}")
 
     def copy_all_logs(self):
+        """Exécute l'opération copy all logs."""
         text = self.log_text.toPlainText()
         if not text:
             return
@@ -194,6 +196,7 @@ class LogsView(QWidget):
         self.info_label.setText(tr("logs.copy_success_msg"))
 
     def clear_logs(self):
+        """Exécute l'opération clear logs."""
         try:
             self.api_client.clear_logs()
             self.all_logs.clear()
@@ -203,6 +206,7 @@ class LogsView(QWidget):
             QMessageBox.warning(self, tr("common.error"), f"{e}")
 
     def open_logs_folder(self):
+        """Exécute l'opération open logs folder."""
         try:
             self.api_client.open_logs_folder()
         except Exception as e:

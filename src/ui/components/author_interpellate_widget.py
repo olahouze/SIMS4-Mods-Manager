@@ -16,6 +16,8 @@ from src.utils.thread_utils import safe_stop_thread, BaseWorker
 
 
 class CheckReportStatusWorker(BaseWorker):
+    """Classe CheckReportStatusWorker : assure la gestion et l'orchestration de Checkreportstatusworker."""
+
     status_ready = Signal(dict)
 
     def __init__(self, payload: dict, parent=None):
@@ -23,6 +25,7 @@ class CheckReportStatusWorker(BaseWorker):
         self.payload = payload
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         try:
             if self._is_cancelled:
@@ -222,6 +225,7 @@ class AuthorInterpellateWidget(QWidget):
         """)
 
     def cleanup(self):
+        """Exécute l'opération cleanup."""
         if self._check_worker:
             safe_stop_thread(self._check_worker)
             self._check_worker = None

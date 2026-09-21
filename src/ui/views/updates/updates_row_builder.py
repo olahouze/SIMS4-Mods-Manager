@@ -22,6 +22,15 @@ class UpdatesRowBuilder:
 
     @staticmethod
     def create_checkbox_cell(is_checked: bool, on_toggle: Callable[[], None]) -> Tuple[QWidget, QCheckBox]:
+        """Exécute l'opération create checkbox cell.
+
+        Args:
+            is_checked: Paramètre is_checked.
+            on_toggle: Paramètre on_toggle.
+
+        Returns:
+            Résultat de l'opération create_checkbox_cell.
+        """
         cb_widget = QWidget()
         cb_layout = QHBoxLayout(cb_widget)
         cb_layout.setContentsMargins(0, 0, 0, 0)
@@ -46,6 +55,16 @@ class UpdatesRowBuilder:
 
     @staticmethod
     def create_title_cell(title: str, source: str, folder_name: str) -> QWidget:
+        """Exécute l'opération create title cell.
+
+        Args:
+            title: Paramètre title.
+            source: Paramètre source.
+            folder_name: Paramètre folder_name.
+
+        Returns:
+            Résultat de l'opération create_title_cell.
+        """
         title_widget = QWidget()
         t_layout = QVBoxLayout(title_widget)
         t_layout.setContentsMargins(12, 10, 12, 10)
@@ -75,6 +94,14 @@ class UpdatesRowBuilder:
 
     @staticmethod
     def create_version_pill(version_str: str) -> QWidget:
+        """Exécute l'opération create version pill.
+
+        Args:
+            version_str: Paramètre version_str.
+
+        Returns:
+            Résultat de l'opération create_version_pill.
+        """
         cur_widget = QWidget()
         c_layout = QHBoxLayout(cur_widget)
         c_layout.setContentsMargins(8, 0, 8, 0)
@@ -95,6 +122,15 @@ class UpdatesRowBuilder:
 
     @staticmethod
     def create_new_version_pill(new_version_str: str, has_update: bool) -> QWidget:
+        """Exécute l'opération create new version pill.
+
+        Args:
+            new_version_str: Paramètre new_version_str.
+            has_update: Paramètre has_update.
+
+        Returns:
+            Résultat de l'opération create_new_version_pill.
+        """
         new_widget = QWidget()
         n_layout = QHBoxLayout(new_widget)
         n_layout.setContentsMargins(8, 0, 8, 0)
@@ -127,6 +163,15 @@ class UpdatesRowBuilder:
 
     @staticmethod
     def create_status_cell(has_update: bool, has_link: bool) -> QWidget:
+        """Exécute l'opération create status cell.
+
+        Args:
+            has_update: Paramètre has_update.
+            has_link: Paramètre has_link.
+
+        Returns:
+            Résultat de l'opération create_status_cell.
+        """
         stat_widget = QWidget()
         s_layout = QHBoxLayout(stat_widget)
         s_layout.setContentsMargins(8, 0, 8, 0)
@@ -144,6 +189,15 @@ class UpdatesRowBuilder:
 
     @staticmethod
     def create_action_cell(has_update: bool, on_update: Callable[[], None]) -> QWidget:
+        """Exécute l'opération create action cell.
+
+        Args:
+            has_update: Paramètre has_update.
+            on_update: Paramètre on_update.
+
+        Returns:
+            Résultat de l'opération create_action_cell.
+        """
         action_widget = QWidget()
         act_layout = QHBoxLayout(action_widget)
         act_layout.setContentsMargins(8, 0, 8, 0)

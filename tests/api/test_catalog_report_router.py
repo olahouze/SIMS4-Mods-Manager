@@ -39,7 +39,7 @@ def test_api_check_missing_report_already_reported(client):
     }
 
     with patch(
-        "src.services.requirement_reporter_service.RequirementReporterService.check_report_status",
+        "src.application.dependencies.requirement_reporter_service.RequirementReporterService.check_report_status",
         return_value=mock_status,
     ):
         resp = client.post(
@@ -80,7 +80,7 @@ def test_api_report_missing_requirements_submit(client):
     }
 
     with patch(
-        "src.services.requirement_reporter_service.RequirementReporterService.submit_report",
+        "src.application.dependencies.requirement_reporter_service.RequirementReporterService.submit_report",
         return_value=mock_submit_res,
     ):
         resp = client.post(

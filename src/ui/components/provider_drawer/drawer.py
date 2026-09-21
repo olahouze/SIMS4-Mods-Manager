@@ -157,30 +157,65 @@ class ProviderDrawer(QWidget):
     # Backward compatible attributes delegated to LoversLab card
     @property
     def subcat_widgets(self) -> Dict[str, SubcategoryRowWidget]:
+        """Exécute l'opération subcat widgets.
+
+        Returns:
+            Résultat de l'opération subcat_widgets.
+        """
         return self.ll_card.subcat_widgets
 
     @property
     def subcat_rows(self) -> Dict[str, Tuple[QLabel, QLabel, QLabel]]:
+        """Exécute l'opération subcat rows.
+
+        Returns:
+            Résultat de l'opération subcat_rows.
+        """
         return self.ll_card.subcat_rows
 
     @property
     def drawer_status_pill(self) -> QLabel:
+        """Exécute l'opération drawer status pill.
+
+        Returns:
+            Résultat de l'opération drawer_status_pill.
+        """
         return self.ll_card.drawer_status_pill
 
     @property
     def drawer_progress_bar(self):
+        """Exécute l'opération drawer progress bar.
+
+        Returns:
+            Résultat de l'opération drawer_progress_bar.
+        """
         return self.ll_card.drawer_progress_bar
 
     @property
     def btn_resync(self) -> QPushButton:
+        """Exécute l'opération btn resync.
+
+        Returns:
+            Résultat de l'opération btn_resync.
+        """
         return self.ll_card.btn_resync
 
     @property
     def btn_pause_resume(self) -> QPushButton:
+        """Exécute l'opération btn pause resume.
+
+        Returns:
+            Résultat de l'opération btn_pause_resume.
+        """
         return self.ll_card.btn_pause_resume
 
     @property
     def btn_stop(self) -> QPushButton:
+        """Exécute l'opération btn stop.
+
+        Returns:
+            Résultat de l'opération btn_stop.
+        """
         return self.ll_card.btn_stop
 
     def toggle_drawer(self):

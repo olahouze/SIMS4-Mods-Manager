@@ -34,6 +34,11 @@ class DatabaseManager:
         return cls._instance
 
     def get_session(self) -> Session:
+        """Exécute l'opération get session.
+
+        Returns:
+            Résultat de l'opération get_session.
+        """
         return self.SessionLocal()
 
     def _cleanup_legacy_fts(self) -> None:

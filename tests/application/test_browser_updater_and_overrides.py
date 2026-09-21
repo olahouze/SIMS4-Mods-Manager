@@ -1,6 +1,6 @@
 from unittest.mock import patch, MagicMock
-from src.services.browser_updater_service import BrowserUpdaterService
-from src.services.dependency_resolver import resolve_mod_dependencies
+from src.infrastructure.network.browser_updater_service import BrowserUpdaterService
+from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
 from src.database.models import CatalogMod
 
 

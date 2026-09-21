@@ -12,7 +12,7 @@ from src.api.schemas.settings import (
 from src.core.config import AppConfig
 from src.database.models import CatalogMod, InstalledMod
 from src.database.manager import DatabaseManager
-from src.services.game_service import GameDetector
+from src.application.game.game_service import GameDetector
 from src.utils.logger import logger
 
 router = APIRouter(prefix="", tags=["Settings & Game"])

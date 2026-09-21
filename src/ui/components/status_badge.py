@@ -12,6 +12,14 @@ class StatusBadge(QLabel):
         self.set_badge_type(badge_type)
 
     def set_badge_type(self, badge_type: str) -> None:
+        """Exécute l'opération set badge type.
+
+        Args:
+            badge_type: Paramètre badge_type.
+
+        Returns:
+            Résultat de l'opération set_badge_type.
+        """
         styles = {
             "loverslab": "background-color: #831843; color: #f472b6; border: 1px solid #9d174d;",
             "patreon": "background-color: #7c2d12; color: #fb923c; border: 1px solid #9a3412;",

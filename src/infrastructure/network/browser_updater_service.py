@@ -95,7 +95,7 @@ class BrowserUpdaterService:
                     logger.info("Installation de Chromium annulée par l'utilisateur.")
                     return False, "Téléchargement annulé par l'utilisateur."
 
-                line = proc.stdout.readline()
+                line = proc.stdout.readline() if proc.stdout else ""
                 if line:
                     line_clean = line.strip()
                     logger.debug(f"[Playwright Install]: {line_clean}")

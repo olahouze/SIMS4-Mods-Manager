@@ -69,6 +69,11 @@ class DetailDescriptionWidget(QWidget):
         v_bar.setValue(scroll_pos)
 
     def stop_worker(self) -> None:
+        """Exécute l'opération stop worker.
+
+        Returns:
+            Résultat de l'opération stop_worker.
+        """
         if self.desc_img_worker:
             safe_stop_thread(self.desc_img_worker)
             self.desc_img_worker = None

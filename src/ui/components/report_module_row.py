@@ -146,8 +146,18 @@ class ReportModuleRowWidget(QFrame):
 
     @property
     def is_selected(self) -> bool:
+        """Exécute l'opération is selected.
+
+        Returns:
+            Résultat de l'opération is_selected.
+        """
         return self.cb.isChecked()
 
     @property
     def is_missing_mod(self) -> bool:
+        """Exécute l'opération is missing mod.
+
+        Returns:
+            Résultat de l'opération is_missing_mod.
+        """
         return self.rb_missing.isChecked()

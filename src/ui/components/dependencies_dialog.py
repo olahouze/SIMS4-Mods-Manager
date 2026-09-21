@@ -24,14 +24,17 @@ from src.ui.components.dependency_section_builder import (
     build_installed_section,
     build_missing_section,
 )
-from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
+from src.application.dependencies.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
 from src.ui.workers.report_workers import CheckReportStatusWorker as _BaseCheckReportStatusWorker
 from src.i18n import tr
 from src.utils.logger import logger
 
 
 class CheckReportStatusWorker(_BaseCheckReportStatusWorker):
+    """Classe CheckReportStatusWorker : assure la gestion et l'orchestration de Checkreportstatusworker."""
+
     def run(self):
+        """Exécute l'opération run."""
         try:
             client = get_api_client()
             res = client.check_missing_report(self.payload)
@@ -191,6 +194,11 @@ class DependenciesDialog(QDialog):
 
     @property
     def btn_report_author(self) -> QPushButton:
+        """Exécute l'opération btn report author.
+
+        Returns:
+            Résultat de l'opération btn_report_author.
+        """
         return self.interpellate_widget.btn_report
 
     def _update_dialog_header_and_buttons(self):
@@ -321,5 +329,10 @@ class DependenciesDialog(QDialog):
         self._render_content()
 
     def closeEvent(self, event):
+        """Exécute l'opération closeevent.
+
+        Args:
+            event: Paramètre event.
+        """
         self.interpellate_widget.cleanup()
         super().closeEvent(event)

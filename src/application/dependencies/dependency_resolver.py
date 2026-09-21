@@ -3,8 +3,8 @@ from src.api.schemas.catalog import DependencyItem
 from src.database.models import CatalogMod
 from src.utils.mod_matcher import ModMatcher
 from src.utils.game_dlc_matcher import GameDlcMatcher
-from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
-from src.services.dependency_special_cases import (
+from src.application.dependencies.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
+from src.application.dependencies.dependency_special_cases import (
     SPECIAL_DEPENDENCY_CASES,
     SPECIAL_DEPENDENCY_REMOTE_IDS,
     find_special_dependency_case,
@@ -41,7 +41,7 @@ def resolve_mod_dependencies(
     - COMMENT_NOISE (classified as comment / not a mod by user override)
     """
     if is_syncing is None:
-        from src.services.catalog_sync_service import SyncTracker
+        from src.application.catalog.catalog_sync_service import SyncTracker
 
         is_syncing = SyncTracker.is_running
 

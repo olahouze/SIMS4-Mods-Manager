@@ -24,6 +24,12 @@ def create_db_engine(db_path: Optional[str] = None) -> Engine:
 
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
+        """Exécute l'opération set sqlite pragma.
+
+        Args:
+            dbapi_connection: Paramètre dbapi_connection.
+            connection_record: Paramètre connection_record.
+        """
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")

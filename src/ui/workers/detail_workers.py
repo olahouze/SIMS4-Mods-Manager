@@ -24,6 +24,8 @@ from src.utils.thread_utils import BaseWorker
 
 
 class FetchDetailsWorker(BaseWorker):
+    """Classe FetchDetailsWorker : assure la gestion et l'orchestration de Fetchdetailsworker."""
+
     finished = Signal(dict)
     failed = Signal(str)
 
@@ -43,6 +45,7 @@ class FetchDetailsWorker(BaseWorker):
         self.load_id = load_id
 
     def run(self):
+        """Exécute l'opération run."""
         try:
             self._is_running = True
             if self._is_cancelled:
@@ -118,6 +121,11 @@ class GalleryBatchWorker(BaseWorker):
         self.load_id = load_id
 
     def run(self):
+        """Exécute l'opération run.
+
+        Returns:
+            Résultat de l'opération run.
+        """
         if not self.urls:
             return
 
@@ -210,6 +218,7 @@ class GalleryThumbWorker(BaseWorker):
         self.cache_dir = cache_dir
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         try:
             if self._is_cancelled:
@@ -241,6 +250,8 @@ class GalleryThumbWorker(BaseWorker):
 
 
 class DescriptionImageLoaderWorker(BaseWorker):
+    """Classe DescriptionImageLoaderWorker : assure la gestion et l'orchestration de Descriptionimageloaderworker."""
+
     images_updated = Signal(str)
 
     def __init__(self, raw_html: str):
@@ -249,6 +260,11 @@ class DescriptionImageLoaderWorker(BaseWorker):
         self.cache_dir = AppConfig.get_images_cache_dir()
 
     def run(self):
+        """Exécute l'opération run.
+
+        Returns:
+            Résultat de l'opération run.
+        """
         if not self.raw_html:
             return
 

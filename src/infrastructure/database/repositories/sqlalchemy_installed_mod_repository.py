@@ -21,9 +21,22 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
 
     @property
     def db_manager(self) -> DatabaseManager:
+        """Exécute l'opération db manager.
+
+        Returns:
+            Résultat de l'opération db_manager.
+        """
         return self._custom_db_manager or DatabaseManager.get_instance()
 
     def get_by_id(self, mod_id: int) -> Optional[InstalledModEntity]:
+        """Exécute l'opération get by id.
+
+        Args:
+            mod_id: Paramètre mod_id.
+
+        Returns:
+            Résultat de l'opération get_by_id.
+        """
         with self.db_manager.get_session() as session:
             model = (
                 session.query(InstalledMod)
@@ -34,6 +47,14 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return ModelMapper.installed_to_entity(model) if model else None
 
     def get_by_folder_name(self, folder_name: str) -> Optional[InstalledModEntity]:
+        """Exécute l'opération get by folder name.
+
+        Args:
+            folder_name: Paramètre folder_name.
+
+        Returns:
+            Résultat de l'opération get_by_folder_name.
+        """
         with self.db_manager.get_session() as session:
             model = (
                 session.query(InstalledMod)
@@ -44,6 +65,15 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return ModelMapper.installed_to_entity(model) if model else None
 
     def get_by_source_and_remote_id(self, source: str, remote_id: str) -> Optional[InstalledModEntity]:
+        """Exécute l'opération get by source and remote id.
+
+        Args:
+            source: Paramètre source.
+            remote_id: Paramètre remote_id.
+
+        Returns:
+            Résultat de l'opération get_by_source_and_remote_id.
+        """
         with self.db_manager.get_session() as session:
             model = (
                 session.query(InstalledMod)
@@ -54,6 +84,14 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return ModelMapper.installed_to_entity(model) if model else None
 
     def get_all(self, enabled_only: Optional[bool] = None) -> list[InstalledModEntity]:
+        """Exécute l'opération get all.
+
+        Args:
+            enabled_only: Paramètre enabled_only.
+
+        Returns:
+            Résultat de l'opération get_all.
+        """
         with self.db_manager.get_session() as session:
             query = session.query(InstalledMod).options(joinedload(InstalledMod.catalog_mod))
             if enabled_only is not None:
@@ -62,6 +100,14 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return [ModelMapper.installed_to_entity(m) for m in models]
 
     def save(self, entity: InstalledModEntity) -> InstalledModEntity:
+        """Exécute l'opération save.
+
+        Args:
+            entity: Paramètre entity.
+
+        Returns:
+            Résultat de l'opération save.
+        """
         with self.db_manager.get_session() as session:
             model: Optional[InstalledMod] = None
             if entity.id is not None:
@@ -80,6 +126,14 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return ModelMapper.installed_to_entity(model)
 
     def delete_by_id(self, mod_id: int) -> bool:
+        """Exécute l'opération delete by id.
+
+        Args:
+            mod_id: Paramètre mod_id.
+
+        Returns:
+            Résultat de l'opération delete_by_id.
+        """
         with self.db_manager.get_session() as session:
             model = session.query(InstalledMod).filter(InstalledMod.id == mod_id).first()
             if not model:
@@ -89,6 +143,15 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return True
 
     def set_enabled(self, mod_id: int, is_enabled: bool) -> bool:
+        """Exécute l'opération set enabled.
+
+        Args:
+            mod_id: Paramètre mod_id.
+            is_enabled: Paramètre is_enabled.
+
+        Returns:
+            Résultat de l'opération set_enabled.
+        """
         with self.db_manager.get_session() as session:
             model = session.query(InstalledMod).filter(InstalledMod.id == mod_id).first()
             if not model:
@@ -98,5 +161,10 @@ class SqlAlchemyInstalledModRepository(IInstalledModRepository):
             return True
 
     def count(self) -> int:
+        """Exécute l'opération count.
+
+        Returns:
+            Résultat de l'opération count.
+        """
         with self.db_manager.get_session() as session:
             return session.query(InstalledMod).count()

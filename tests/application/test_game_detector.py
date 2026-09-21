@@ -1,4 +1,4 @@
-from src.services.game_service import GameDetector, LOCALIZED_SIMS4_FOLDERS
+from src.application.game.game_service import GameDetector, LOCALIZED_SIMS4_FOLDERS
 from src.utils.resource_cfg import ensure_resource_cfg
 
 

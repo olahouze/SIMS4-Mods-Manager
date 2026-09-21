@@ -38,7 +38,8 @@ class ApiServer:
 
         def _run():
             try:
-                cls._server_instance.run()
+                if cls._server_instance:
+                    cls._server_instance.run()
             except Exception as e:
                 logger.error(f"Erreur du serveur API en arrière-plan: {e}")
 

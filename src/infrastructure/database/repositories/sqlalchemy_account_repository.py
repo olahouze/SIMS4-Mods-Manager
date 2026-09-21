@@ -19,19 +19,45 @@ class SqlAlchemyAccountRepository(IAccountRepository):
 
     @property
     def db_manager(self) -> DatabaseManager:
+        """Exécute l'opération db manager.
+
+        Returns:
+            Résultat de l'opération db_manager.
+        """
         return self._custom_db_manager or DatabaseManager.get_instance()
 
     def get_by_provider(self, provider_name: str) -> Optional[AccountSessionEntity]:
+        """Exécute l'opération get by provider.
+
+        Args:
+            provider_name: Paramètre provider_name.
+
+        Returns:
+            Résultat de l'opération get_by_provider.
+        """
         with self.db_manager.get_session() as session:
             model = session.query(AccountSession).filter(AccountSession.provider_name == provider_name.lower()).first()
             return ModelMapper.account_to_entity(model) if model else None
 
     def get_all(self) -> list[AccountSessionEntity]:
+        """Exécute l'opération get all.
+
+        Returns:
+            Résultat de l'opération get_all.
+        """
         with self.db_manager.get_session() as session:
             models = session.query(AccountSession).all()
             return [ModelMapper.account_to_entity(m) for m in models]
 
     def save(self, entity: AccountSessionEntity) -> AccountSessionEntity:
+        """Exécute l'opération save.
+
+        Args:
+            entity: Paramètre entity.
+
+        Returns:
+            Résultat de l'opération save.
+        """
         with self.db_manager.get_session() as session:
             model = (
                 session.query(AccountSession)
@@ -48,6 +74,14 @@ class SqlAlchemyAccountRepository(IAccountRepository):
             return ModelMapper.account_to_entity(model)
 
     def delete(self, provider_name: str) -> bool:
+        """Exécute l'opération delete.
+
+        Args:
+            provider_name: Paramètre provider_name.
+
+        Returns:
+            Résultat de l'opération delete.
+        """
         with self.db_manager.get_session() as session:
             model = session.query(AccountSession).filter(AccountSession.provider_name == provider_name.lower()).first()
             if not model:

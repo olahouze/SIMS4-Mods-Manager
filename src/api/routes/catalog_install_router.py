@@ -21,8 +21,8 @@ from src.database.manager import DatabaseManager
 from src.infrastructure.database.repositories.sqlalchemy_catalog_repository import (
     SqlAlchemyCatalogRepository,
 )
-from src.services.catalog_sync_service import check_catalog_dependencies
-from src.services.mod_installer_service import perform_mod_install
+from src.application.catalog.catalog_sync_service import check_catalog_dependencies
+from src.application.mods.mod_installer_service import perform_mod_install
 from src.utils.logger import logger
 
 install_router = APIRouter(tags=["Catalog Installation"])
@@ -86,8 +86,8 @@ def check_dependencies(payload: CatalogInstallRequest, session: Session = Depend
         cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
 
     page_url = cat_mod.page_url if cat_mod else payload.page_url
-    source = cat_mod.source if cat_mod else (payload.source or "loverslab")
-    mod_title = cat_mod.title if cat_mod else (payload.title or "Mod")
+    source = str((cat_mod.source if cat_mod else payload.source) or "loverslab")
+    mod_title = str((cat_mod.title if cat_mod else payload.title) or "Mod")
 
     return check_catalog_dependencies(
         mod_title=mod_title,
@@ -118,9 +118,17 @@ def install_mod_stream(payload: CatalogInstallRequest):
     q: queue.Queue = queue.Queue()
 
     def progress_cb(pct: int, status: str, details: str = ""):
+        """Exécute l'opération progress cb.
+
+        Args:
+            pct: Paramètre pct.
+            status: Paramètre status.
+            details: Paramètre details.
+        """
         q.put({"type": "progress", "percent": pct, "status": status, "details": details})
 
     def run_worker():
+        """Exécute l'opération run worker."""
         try:
             res = perform_fn(payload, progress_callback=progress_cb)
             q.put({"type": "finished", "success": res.success, "message": res.message})
@@ -133,6 +141,7 @@ def install_mod_stream(payload: CatalogInstallRequest):
     ThreadPoolManager.get_instance().submit_io(run_worker)
 
     def event_generator():
+        """Exécute l'opération event generator."""
         while True:
             item = q.get()
             if item is None:

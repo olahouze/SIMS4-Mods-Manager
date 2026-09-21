@@ -270,6 +270,7 @@ class ModDetailView(QWidget, ModDetailCompatMixin):
         self.gallery_widget.retranslate_ui()
 
     def cleanup(self):
+        """Exécute l'opération cleanup."""
         if self.worker:
             safe_stop_thread(self.worker)
             self.worker = None
@@ -277,5 +278,10 @@ class ModDetailView(QWidget, ModDetailCompatMixin):
         self.desc_widget.stop_worker()
 
     def closeEvent(self, event):
+        """Exécute l'opération closeevent.
+
+        Args:
+            event: Paramètre event.
+        """
         self.cleanup()
         super().closeEvent(event)

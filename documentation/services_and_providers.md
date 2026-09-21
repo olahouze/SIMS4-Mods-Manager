@@ -1,12 +1,12 @@
-# Services Métier & Fournisseurs Externes (Providers)
+# Services Applicatifs Métier & Fournisseurs Externes (Providers)
 
-Ce document détaille le fonctionnement interne de la couche **Services (`src/services/`)** et de la couche **Providers (`src/providers/`)**.
+Ce document détaille le fonctionnement interne de la couche **Application (`src/application/`)** et de la couche **Providers (`src/providers/`)**.
 
 ---
 
-## 🛠️ 1. Services Métier (`src/services/`)
+## 🛠️ 1. Services Métier Applicatifs (`src/application/`)
 
-La couche de services encapsule l'ensemble des règles métier applicatives. Elle est totalement indépendante du protocole HTTP (FastAPI) et de l'interface graphique (PySide6).
+La couche applicative encapsule l'ensemble des cas d'utilisation métier. Elle est organisée par domaines thématiques et est totalement indépendante du protocole HTTP (FastAPI) et de l'interface graphique (PySide6).
 
 ### 1.1 `catalog_sync_service.py` (Synchronisation du Catalogue)
 - **Rôle** : Orchestre le scraping en tâche de fond des catégories LoversLab.

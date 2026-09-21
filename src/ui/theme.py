@@ -31,6 +31,16 @@ class Theme:
 
     @classmethod
     def badge_style(cls, variant: str = "neutral", font_size: int = 10, padding: str = "1px 6px") -> str:
+        """Exécute l'opération badge style.
+
+        Args:
+            variant: Paramètre variant.
+            font_size: Paramètre font_size.
+            padding: Paramètre padding.
+
+        Returns:
+            Résultat de l'opération badge_style.
+        """
         palette = cls.BADGE_PALETTES.get(variant, cls.BADGE_PALETTES["neutral"])
         return f"""
             color: {palette["fg"]};
@@ -52,6 +62,19 @@ class Theme:
         radius: int = 6,
         padding: str = "4px 8px",
     ) -> str:
+        """Exécute l'opération card frame style.
+
+        Args:
+            interactive: Paramètre interactive.
+            dashed: Paramètre dashed.
+            bg: Paramètre bg.
+            border: Paramètre border.
+            radius: Paramètre radius.
+            padding: Paramètre padding.
+
+        Returns:
+            Résultat de l'opération card_frame_style.
+        """
         b_type = "dashed" if dashed else "solid"
         bg_col = bg or cls.BG_CARD
         b_col = border or cls.BORDER_DEFAULT
@@ -74,6 +97,17 @@ class Theme:
         radius: int = 6,
         padding: str = "4px 10px",
     ) -> str:
+        """Exécute l'opération action button style.
+
+        Args:
+            variant: Paramètre variant.
+            font_size: Paramètre font_size.
+            radius: Paramètre radius.
+            padding: Paramètre padding.
+
+        Returns:
+            Résultat de l'opération action_button_style.
+        """
         if variant == "primary":
             return f"""
                 QPushButton {{
@@ -136,6 +170,16 @@ class Theme:
     def subtle_toggle_button_style(
         cls, is_active: bool = False, active_color: str = "#93c5fd", border_color: str = "#2563eb"
     ) -> str:
+        """Exécute l'opération subtle toggle button style.
+
+        Args:
+            is_active: Paramètre is_active.
+            active_color: Paramètre active_color.
+            border_color: Paramètre border_color.
+
+        Returns:
+            Résultat de l'opération subtle_toggle_button_style.
+        """
         if is_active:
             return f"""
                 QPushButton {{

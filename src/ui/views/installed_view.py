@@ -34,6 +34,7 @@ class InstalledView(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
@@ -230,6 +231,7 @@ class InstalledView(QWidget):
             DialogHelper.error(self, tr("dialogs.error_title"), f"{e}")
 
     def scan_mods_folder(self):
+        """Exécute l'opération scan mods folder."""
         try:
             res = self.api_client.scan_installed_mods()
             msg = res.get("message", "Scan terminé.")
@@ -242,12 +244,18 @@ class InstalledView(QWidget):
             QMessageBox.critical(self, tr("installed.scan_error_title"), f"{e}")
 
     def open_mods_folder(self):
+        """Exécute l'opération open mods folder."""
         try:
             self.api_client.open_folder()
         except Exception as e:
             QMessageBox.warning(self, tr("dialogs.error_title"), f"{e}")
 
     def open_mod_folder(self, folder_name: str):
+        """Exécute l'opération open mod folder.
+
+        Args:
+            folder_name: Paramètre folder_name.
+        """
         try:
             self.api_client.open_folder(folder_name=folder_name)
         except Exception as e:

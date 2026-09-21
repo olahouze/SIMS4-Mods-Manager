@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 
 from src.api.client import get_api_client
-from src.services.requirement_reporter_service import RequirementReporterService
+from src.application.dependencies.requirement_reporter_service import RequirementReporterService
 from src.ui.workers.report_workers import SubmitReportWorker
 from src.ui.components.report_module_row import ReportModuleRowWidget
 from src.i18n import tr

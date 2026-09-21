@@ -14,6 +14,8 @@ from src.utils.logger import logger
 
 
 class ImageLoadSignals(QObject):
+    """Classe ImageLoadSignals : assure la gestion et l'orchestration de Imageloadsignals."""
+
     loaded = Signal(str, str)  # remote_id, local_path
 
 
@@ -29,6 +31,7 @@ class ImageDownloadTask(QRunnable):
         self.signals = signals
 
     def run(self):
+        """Exécute l'opération run."""
         try:
             api_client = get_api_client()
             resp = api_client.client.get(

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 from src.database import InstalledMod, CatalogMod
-from src.services.mod_update_service import check_has_update, resolve_catalog_mod
+from src.application.mods.mod_update_service import check_has_update, resolve_catalog_mod
 
 
 def test_check_has_update_newer_date():

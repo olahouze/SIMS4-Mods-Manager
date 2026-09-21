@@ -31,6 +31,7 @@ class AccountsView(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
@@ -162,6 +163,11 @@ class AccountsView(QWidget):
         self.refresh_statuses()
 
     def open_login_window(self, provider_name: str):
+        """Exécute l'opération open login window.
+
+        Args:
+            provider_name: Paramètre provider_name.
+        """
         from src.ui.components.browser_download_dialog import BrowserDownloadDialog
 
         if not BrowserDownloadDialog.ensure_browser_ready(parent=self):

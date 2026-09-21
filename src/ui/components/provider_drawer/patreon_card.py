@@ -56,5 +56,6 @@ class PatreonDrawerCard(QFrame):
         p_card_layout.addWidget(self.p_desc)
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.p_desc.setText(tr("drawer.patreon_desc"))
         self.patreon_status_pill.setText(tr("drawer.status_ready"))

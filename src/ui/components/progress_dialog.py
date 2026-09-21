@@ -20,6 +20,11 @@ class ProgressDialog(QDialog):
         self.init_ui(title)
 
     def init_ui(self, title: str):
+        """Exécute l'opération init ui.
+
+        Args:
+            title: Paramètre title.
+        """
         self.setStyleSheet("""
             QDialog {
                 background-color: #0f121e;
@@ -90,17 +95,39 @@ class ProgressDialog(QDialog):
         layout.addWidget(self.details_label)
 
     def set_status(self, text: str):
+        """Exécute l'opération set status.
+
+        Args:
+            text: Paramètre text.
+        """
         self.status_label.setText(text)
 
     def set_details(self, text: str):
+        """Exécute l'opération set details.
+
+        Args:
+            text: Paramètre text.
+        """
         self.details_label.setText(text)
 
     def set_progress(self, value: int):
+        """Exécute l'opération set progress.
+
+        Args:
+            value: Paramètre value.
+        """
         val = max(0, min(100, value))
         self.progress_bar.setValue(val)
         self.pct_badge.setText(f"{val}%")
 
     def update_progress(self, percent: int, status: str, details: str = ""):
+        """Exécute l'opération update progress.
+
+        Args:
+            percent: Paramètre percent.
+            status: Paramètre status.
+            details: Paramètre details.
+        """
         self.set_progress(percent)
         if status:
             self.set_status(status)
@@ -108,6 +135,11 @@ class ProgressDialog(QDialog):
             self.set_details(details)
 
     def set_indeterminate(self, is_indeterminate: bool):
+        """Exécute l'opération set indeterminate.
+
+        Args:
+            is_indeterminate: Paramètre is_indeterminate.
+        """
         if is_indeterminate:
             self.progress_bar.setRange(0, 0)
             self.pct_badge.setText("...")

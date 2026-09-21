@@ -22,6 +22,8 @@ from src.i18n import tr
 
 
 class DetailGalleryWidget(QWidget):
+    """Classe DetailGalleryWidget : assure la gestion et l'orchestration de Detailgallerywidget."""
+
     image_clicked = Signal(int, list)  # (index, all_urls)
 
     def __init__(self, parent=None):
@@ -60,6 +62,12 @@ class DetailGalleryWidget(QWidget):
         self.setVisible(False)
 
     def render_gallery(self, screenshots: List[str], load_id: int = 0):
+        """Exécute l'opération render gallery.
+
+        Args:
+            screenshots: Paramètre screenshots.
+            load_id: Paramètre load_id.
+        """
         self.cleanup()
         self.screenshots = list(screenshots or [])
         self._current_load_id = load_id
@@ -90,6 +98,7 @@ class DetailGalleryWidget(QWidget):
         self.image_clicked.emit(index, self.screenshots)
 
     def cleanup(self):
+        """Exécute l'opération cleanup."""
         if self._batch_worker:
             safe_stop_thread(self._batch_worker)
             self._batch_worker = None
@@ -101,5 +110,6 @@ class DetailGalleryWidget(QWidget):
         self._gallery_items.clear()
 
     def clear_gallery(self):
+        """Exécute l'opération clear gallery."""
         self.cleanup()
         self.setVisible(False)

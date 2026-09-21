@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock, patch
-from src.services.requirement_reporter_service import RequirementReporterService
+from src.application.dependencies.requirement_reporter_service import RequirementReporterService
 
 
 def test_format_author_mention():

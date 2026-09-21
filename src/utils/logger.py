@@ -22,6 +22,11 @@ class QtLogHandler(logging.Handler):
         self.history: deque = deque(maxlen=2000)
 
     def emit(self, record: logging.LogRecord):
+        """Exécute l'opération emit.
+
+        Args:
+            record: Paramètre record.
+        """
         try:
             msg = self.format(record)
             self.history.append(msg)
@@ -52,6 +57,8 @@ def attach_qt_handler(logger_instance: logging.Logger | None = None) -> QtLogHan
     from PySide6.QtCore import QObject, Signal
 
     class QtLogEmitter(QObject):
+        """Classe QtLogEmitter : assure la gestion et l'orchestration de Qtlogemitter."""
+
         log_received = Signal(str, str)  # formatted_message, levelname
 
     emitter = QtLogEmitter()

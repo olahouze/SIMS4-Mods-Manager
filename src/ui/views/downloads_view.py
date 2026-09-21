@@ -45,6 +45,7 @@ class DownloadCardWidget(QFrame):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         self.setObjectName("DownloadCard")
         self.setStyleSheet("""
             QFrame#DownloadCard {
@@ -251,6 +252,13 @@ class DownloadCardWidget(QFrame):
             """)
 
     def update_progress(self, percent: int, status_text: str, details: str = ""):
+        """Exécute l'opération update progress.
+
+        Args:
+            percent: Paramètre percent.
+            status_text: Paramètre status_text.
+            details: Paramètre details.
+        """
         self.progress_val = percent
         self.progress_bar.setValue(percent)
         self.percent_label.setText(f"{percent}%")
@@ -265,6 +273,11 @@ class DownloadCardWidget(QFrame):
         self.details_label.setText(det)
 
     def mark_completed(self, message: str = ""):
+        """Exécute l'opération mark completed.
+
+        Args:
+            message: Paramètre message.
+        """
         self.status = "completed"
         self.progress_val = 100
         self.progress_bar.setValue(100)
@@ -287,6 +300,11 @@ class DownloadCardWidget(QFrame):
         self.btn_retry.setVisible(False)
 
     def mark_failed(self, error: str):
+        """Exécute l'opération mark failed.
+
+        Args:
+            error: Paramètre error.
+        """
         self.status = "failed"
         self.error_msg = error
         self._update_status_badge_style("failed")
@@ -297,6 +315,7 @@ class DownloadCardWidget(QFrame):
         self.btn_open_folder.setVisible(False)
 
     def mark_cancelled(self):
+        """Exécute l'opération mark cancelled."""
         self.status = "cancelled"
         self._update_status_badge_style("cancelled")
         self.details_label.setText("Téléchargement annulé par l'utilisateur.")
@@ -327,6 +346,7 @@ class DownloadsView(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 20, 24, 20)
         main_layout.setSpacing(16)
@@ -539,6 +559,7 @@ class DownloadsView(QWidget):
         self._update_counters()
 
     def open_mods_directory(self):
+        """Exécute l'opération open mods directory."""
         try:
             config = AppConfig.load()
             mods_dir = config.mods_folder
@@ -553,6 +574,11 @@ class DownloadsView(QWidget):
             logger.error(f"Erreur ouverture dossier mods: {e}")
 
     def open_mod_folder(self, folder_name: str):
+        """Exécute l'opération open mod folder.
+
+        Args:
+            folder_name: Paramètre folder_name.
+        """
         self.open_folder_requested.emit(folder_name)
         try:
             config = AppConfig.load()
@@ -569,6 +595,7 @@ class DownloadsView(QWidget):
             logger.error(f"Erreur ouverture dossier du mod: {e}")
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.title_label.setText(tr("downloads.title"))
         self.subtitle_label.setText(tr("downloads.subtitle"))
         self.btn_clear_history.setText(tr("downloads.clear_history"))

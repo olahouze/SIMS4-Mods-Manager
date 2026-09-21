@@ -72,7 +72,7 @@ class SessionManager:
         if provider_name.lower() == "patreon":
             return bool(cookies.get("session_id") or cookies.get("patreon_session_id") or cookies.get("api_session_id"))
 
-        return acc.is_authenticated
+        return bool(acc.is_authenticated)
 
     @classmethod
     def is_session_ready(cls, provider_name: str) -> bool:
@@ -228,7 +228,7 @@ class SessionManager:
                 if key in cls._http_sessions:
                     return cls._http_sessions[key]
 
-        http_session = cffi_requests.Session(impersonate="chrome120")
+        http_session: cffi_requests.Session = cffi_requests.Session(impersonate="chrome120")
         http_session.headers.update(
             {
                 "User-Agent": cls.DEFAULT_USER_AGENT,

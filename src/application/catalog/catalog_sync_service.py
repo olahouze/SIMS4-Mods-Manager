@@ -10,17 +10,38 @@ from src.database.manager import DatabaseManager
 from src.database.models import CatalogMod, InstalledMod
 from src.core.shutdown_manager import ShutdownManager
 from src.providers import ProviderRegistry
-from src.services.dependency_resolver import resolve_mod_dependencies
+from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
 from src.utils.logger import logger
 
 
-from src.services.sync_tracker import SyncTracker
+from src.application.catalog.sync_tracker import SyncTracker
 
 __all__ = [
+    "CatalogSyncService",
     "SyncTracker",
     "run_catalog_sync",
     "check_catalog_dependencies",
 ]
+
+
+class CatalogSyncService:
+    """Service applicatif pour la synchronisation et la gestion des dépendances du catalogue."""
+
+    @classmethod
+    def run_sync(cls, max_pages: int = -1) -> None:
+        """Lance la synchronisation du catalogue."""
+        run_catalog_sync(max_pages)
+
+    @classmethod
+    def check_dependencies(
+        cls,
+        mod_title: str,
+        page_url: Optional[str] = None,
+        source: str = "loverslab",
+        cat_mod: Optional[CatalogMod] = None,
+    ) -> DependenciesCheckResponse:
+        """Vérifie les dépendances d'un mod."""
+        return check_catalog_dependencies(mod_title, page_url, source, cat_mod)
 
 
 def run_catalog_sync(max_pages: int) -> None:
@@ -73,7 +94,10 @@ def run_catalog_sync(max_pages: int) -> None:
                     if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
                         break
                     try:
-                        mods, detected_pages = ll_provider.scrape_category_page(cat, page=p)
+                        if ll_provider and hasattr(ll_provider, "scrape_category_page"):
+                            mods, detected_pages = ll_provider.scrape_category_page(cat, page=p)
+                        else:
+                            mods, detected_pages = [], 0
                         scrape_success = True
                         if p == 1 and detected_pages and detected_pages > 0:
                             if max_pages <= 0:
@@ -223,14 +247,17 @@ def check_catalog_dependencies(
                 if provider:
                     logger.info(f"Vérification temps réel des dépendances pour {mod_title} ({page_url})...")
                     det = provider.get_mod_details(page_url)
-                    if det.get("requirements_text") is not None or det.get("requirements_status"):
-                        cat_mod.requirements_text = det.get("requirements_text")
-                        cat_mod.requirements_status = det.get("requirements_status", "NONE")
-                        cat_mod.set_requirements_mods_list(det.get("requirements_mods", []))
-                    if det.get("download_urls"):
-                        cat_mod.set_download_urls_list(det.get("download_urls", []))
-                    if det.get("external_links"):
-                        cat_mod.set_external_links_list(det.get("external_links", []))
+                    det_dict: dict[str, Any] = (
+                        det.model_dump() if hasattr(det, "model_dump") else (det if isinstance(det, dict) else {})
+                    )
+                    if det_dict.get("requirements_text") is not None or det_dict.get("requirements_status"):
+                        cat_mod.requirements_text = det_dict.get("requirements_text")
+                        cat_mod.requirements_status = det_dict.get("requirements_status", "NONE")
+                        cat_mod.set_requirements_mods_list(det_dict.get("requirements_mods", []))
+                    if det_dict.get("download_urls"):
+                        cat_mod.set_download_urls_list(det_dict.get("download_urls", []))
+                    if det_dict.get("external_links"):
+                        cat_mod.set_external_links_list(det_dict.get("external_links", []))
                     session.commit()
             except Exception as e:
                 logger.debug(f"Erreur vérification requirements pour {mod_title}: {e}")
@@ -241,7 +268,7 @@ def check_catalog_dependencies(
 
         # Check installed dependencies & resolve statuses
         all_inst = session.query(InstalledMod).all()
-        installed_by_remote = {(im.source, im.remote_id): im for im in all_inst if im.remote_id}
+        installed_by_remote = {(im.source or "unknown", im.remote_id): im for im in all_inst if im.remote_id}
         installed_by_title = {im.title.lower(): im for im in all_inst if im.title}
 
         overrides = cat_mod.get_requirements_overrides() if cat_mod else {}

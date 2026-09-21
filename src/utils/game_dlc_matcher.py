@@ -289,7 +289,7 @@ class GameDlcMatcher:
             return None
 
         try:
-            from src.services.game_service import GameService
+            from src.application.game.game_service import GameService
 
             game_exe = GameService.get_game_exe_path()
             if not game_exe or not game_exe.exists():

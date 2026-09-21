@@ -228,6 +228,11 @@ class LoversLabDrawerCard(QFrame):
         self.drawer_status_pill.setStyleSheet(DrawerStyles.status_pill(state))
 
     def update_status(self, status: Dict[str, Any]):
+        """Exécute l'opération update status.
+
+        Args:
+            status: Paramètre status.
+        """
         is_running = status.get("is_running", False)
         is_paused = status.get("is_paused", False)
         is_stopped = status.get("is_stopped", False)
@@ -331,6 +336,7 @@ class LoversLabDrawerCard(QFrame):
                 row_widget.set_status("Attente", "#64748b")
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.lbl_subcats.setText(tr("drawer.subcats_title"))
         self._style_status_pill("OK", tr("drawer.status_ready"))
         self.ll_collapsed_summary_lbl.setText(tr("drawer.summary", count=0))

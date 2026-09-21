@@ -12,16 +12,24 @@ class ModelMapper:
 
     @staticmethod
     def catalog_to_entity(model: CatalogMod) -> CatalogModEntity:
+        """Exécute l'opération catalog to entity.
+
+        Args:
+            model: Paramètre model.
+
+        Returns:
+            Résultat de l'opération catalog_to_entity.
+        """
         return CatalogModEntity(
             id=model.id,
-            source=model.source,
-            remote_id=model.remote_id,
-            title=model.title,
+            source=str(model.source or "unknown"),
+            remote_id=str(model.remote_id or ""),
+            title=str(model.title or "Untitled"),
             author=model.author or "",
             category=model.category or "",
             tags=model.get_tags_list(),
             description=model.description or "",
-            page_url=model.page_url,
+            page_url=str(model.page_url or ""),
             thumbnail_url=model.thumbnail_url or "",
             download_urls=model.get_download_urls_list(),
             external_links=model.get_external_links_list(),
@@ -39,6 +47,15 @@ class ModelMapper:
 
     @staticmethod
     def catalog_to_model(entity: CatalogModEntity, model: CatalogMod | None = None) -> CatalogMod:
+        """Exécute l'opération catalog to model.
+
+        Args:
+            entity: Paramètre entity.
+            model: Paramètre model.
+
+        Returns:
+            Résultat de l'opération catalog_to_model.
+        """
         target = model or CatalogMod()
         target.source = entity.source
         target.remote_id = entity.remote_id
@@ -66,14 +83,24 @@ class ModelMapper:
 
     @staticmethod
     def installed_to_entity(model: InstalledMod) -> InstalledModEntity:
-        catalog_ent = ModelMapper.catalog_to_entity(model.catalog_mod) if model.catalog_mod else None
+        """Exécute l'opération installed to entity.
+
+        Args:
+            model: Paramètre model.
+
+        Returns:
+            Résultat de l'opération installed_to_entity.
+        """
+        catalog_ent = (
+            ModelMapper.catalog_to_entity(model.catalog_mod) if isinstance(model.catalog_mod, CatalogMod) else None
+        )
         return InstalledModEntity(
             id=model.id,
             catalog_mod_id=model.catalog_mod_id,
-            source=model.source,
+            source=str(model.source or "unknown"),
             remote_id=model.remote_id or "",
-            title=model.title,
-            folder_name=model.folder_name,
+            title=str(model.title or "Untitled"),
+            folder_name=str(model.folder_name or ""),
             installed_files=model.get_installed_files_list(),
             installed_date=model.installed_date,
             version_date=model.version_date,
@@ -85,6 +112,15 @@ class ModelMapper:
 
     @staticmethod
     def installed_to_model(entity: InstalledModEntity, model: InstalledMod | None = None) -> InstalledMod:
+        """Exécute l'opération installed to model.
+
+        Args:
+            entity: Paramètre entity.
+            model: Paramètre model.
+
+        Returns:
+            Résultat de l'opération installed_to_model.
+        """
         target = model or InstalledMod()
         target.catalog_mod_id = entity.catalog_mod_id
         target.source = entity.source
@@ -102,8 +138,16 @@ class ModelMapper:
 
     @staticmethod
     def account_to_entity(model: AccountSession) -> AccountSessionEntity:
+        """Exécute l'opération account to entity.
+
+        Args:
+            model: Paramètre model.
+
+        Returns:
+            Résultat de l'opération account_to_entity.
+        """
         return AccountSessionEntity(
-            provider_name=model.provider_name,
+            provider_name=str(model.provider_name or "unknown"),
             is_authenticated=bool(model.is_authenticated),
             user_display_name=model.user_display_name or "",
             cookies_data=model.get_cookies_dict(),
@@ -113,6 +157,15 @@ class ModelMapper:
 
     @staticmethod
     def account_to_model(entity: AccountSessionEntity, model: AccountSession | None = None) -> AccountSession:
+        """Exécute l'opération account to model.
+
+        Args:
+            entity: Paramètre entity.
+            model: Paramètre model.
+
+        Returns:
+            Résultat de l'opération account_to_model.
+        """
         target = model or AccountSession()
         target.provider_name = entity.provider_name
         target.is_authenticated = entity.is_authenticated

@@ -67,33 +67,98 @@ class CatalogMod(Base):
     )
 
     def get_tags_list(self) -> List[str]:
+        """Exécute l'opération get tags list.
+
+        Returns:
+            Résultat de l'opération get_tags_list.
+        """
         return _get_json_data(self.tags, list)
 
     def set_tags_list(self, tags_list: List[str]) -> None:
+        """Exécute l'opération set tags list.
+
+        Args:
+            tags_list: Paramètre tags_list.
+
+        Returns:
+            Résultat de l'opération set_tags_list.
+        """
         self.tags = _set_json_data(tags_list, list)
 
     def get_download_urls_list(self) -> List[Dict[str, Any]]:
+        """Exécute l'opération get download urls list.
+
+        Returns:
+            Résultat de l'opération get_download_urls_list.
+        """
         return _get_json_data(self.download_urls, list)
 
     def set_download_urls_list(self, urls: List[Dict[str, Any]]) -> None:
+        """Exécute l'opération set download urls list.
+
+        Args:
+            urls: Paramètre urls.
+
+        Returns:
+            Résultat de l'opération set_download_urls_list.
+        """
         self.download_urls = _set_json_data(urls, list)
 
     def get_external_links_list(self) -> List[str]:
+        """Exécute l'opération get external links list.
+
+        Returns:
+            Résultat de l'opération get_external_links_list.
+        """
         return _get_json_data(self.external_links, list)
 
     def set_external_links_list(self, links: List[str]) -> None:
+        """Exécute l'opération set external links list.
+
+        Args:
+            links: Paramètre links.
+
+        Returns:
+            Résultat de l'opération set_external_links_list.
+        """
         self.external_links = _set_json_data(links, list)
 
     def get_requirements_mods_list(self) -> List[Dict[str, Any]]:
+        """Exécute l'opération get requirements mods list.
+
+        Returns:
+            Résultat de l'opération get_requirements_mods_list.
+        """
         return _get_json_data(self.requirements_mods_json, list)
 
     def set_requirements_mods_list(self, reqs: List[Dict[str, Any]]) -> None:
+        """Exécute l'opération set requirements mods list.
+
+        Args:
+            reqs: Paramètre reqs.
+
+        Returns:
+            Résultat de l'opération set_requirements_mods_list.
+        """
         self.requirements_mods_json = _set_json_data(reqs, list)
 
     def get_requirements_overrides(self) -> Dict[str, str]:
+        """Exécute l'opération get requirements overrides.
+
+        Returns:
+            Résultat de l'opération get_requirements_overrides.
+        """
         return _get_json_data(self.requirements_overrides_json, dict)
 
     def set_requirements_overrides(self, overrides: Dict[str, str]) -> None:
+        """Exécute l'opération set requirements overrides.
+
+        Args:
+            overrides: Paramètre overrides.
+
+        Returns:
+            Résultat de l'opération set_requirements_overrides.
+        """
         self.requirements_overrides_json = _set_json_data(overrides, dict)
 
 
@@ -124,9 +189,22 @@ class InstalledMod(Base):
     )
 
     def get_installed_files_list(self) -> List[str]:
+        """Exécute l'opération get installed files list.
+
+        Returns:
+            Résultat de l'opération get_installed_files_list.
+        """
         return _get_json_data(self.installed_files, list)
 
     def set_installed_files_list(self, files: List[str]) -> None:
+        """Exécute l'opération set installed files list.
+
+        Args:
+            files: Paramètre files.
+
+        Returns:
+            Résultat de l'opération set_installed_files_list.
+        """
         self.installed_files = _set_json_data(files, list)
 
 
@@ -143,7 +221,20 @@ class AccountSession(Base):
     last_verified = Column(DateTime, default=datetime.now)
 
     def get_cookies_dict(self) -> Dict[str, str]:
+        """Exécute l'opération get cookies dict.
+
+        Returns:
+            Résultat de l'opération get_cookies_dict.
+        """
         return _get_json_data(self.cookies_data, dict)
 
     def set_cookies_dict(self, cookies: Dict[str, str]) -> None:
+        """Exécute l'opération set cookies dict.
+
+        Args:
+            cookies: Paramètre cookies.
+
+        Returns:
+            Résultat de l'opération set_cookies_dict.
+        """
         self.cookies_data = _set_json_data(cookies, dict)

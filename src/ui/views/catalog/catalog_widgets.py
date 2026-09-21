@@ -57,16 +57,29 @@ class CatalogSyncBannerWidget(QFrame):
         b_layout.addWidget(self.sync_bar, stretch=3)
 
     def set_running(self, message: str, percent: int, is_paused: bool = False):
+        """Exécute l'opération set running.
+
+        Args:
+            message: Paramètre message.
+            percent: Paramètre percent.
+            is_paused: Paramètre is_paused.
+        """
         self.setVisible(True)
         prefix = "⏸️" if is_paused else "🔄"
         self.sync_banner_lbl.setText(f"{prefix} {message}")
         self.sync_bar.setValue(percent)
 
     def set_error(self, err_msg: str):
+        """Exécute l'opération set error.
+
+        Args:
+            err_msg: Paramètre err_msg.
+        """
         self.setVisible(True)
         self.sync_banner_lbl.setText(f"⚠️ Erreur scraping : {err_msg}")
 
     def set_idle(self):
+        """Exécute l'opération set idle."""
         self.setVisible(False)
 
 
@@ -100,6 +113,13 @@ class CatalogPaginationBar(QWidget):
         layout.addWidget(self.btn_next)
 
     def update_pagination(self, current_page: int, total_pages: int, total_items: int):
+        """Exécute l'opération update pagination.
+
+        Args:
+            current_page: Paramètre current_page.
+            total_pages: Paramètre total_pages.
+            total_items: Paramètre total_items.
+        """
         self.btn_prev.setEnabled(current_page > 1)
         self.btn_next.setEnabled(current_page < total_pages)
         self.lbl_page_info.setText(
@@ -107,5 +127,6 @@ class CatalogPaginationBar(QWidget):
         )
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.btn_prev.setText(tr("catalog.pagination_prev"))
         self.btn_next.setText(tr("catalog.pagination_next"))

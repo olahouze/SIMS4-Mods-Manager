@@ -1,5 +1,5 @@
-from src.services.dependency_noise_rules import is_likely_comment_or_noise
-from src.services.dependency_resolver import resolve_mod_dependencies
+from src.application.dependencies.dependency_noise_rules import is_likely_comment_or_noise
+from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
 
 
 def test_is_likely_comment_or_noise_game_options():

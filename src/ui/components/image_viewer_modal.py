@@ -19,6 +19,8 @@ from src.i18n import tr
 
 
 class FullImageFetchWorker(BaseWorker):
+    """Classe FullImageFetchWorker : assure la gestion et l'orchestration de Fullimagefetchworker."""
+
     loaded = Signal(str, str)  # url, local_path
     failed = Signal(str, str)
 
@@ -28,6 +30,7 @@ class FullImageFetchWorker(BaseWorker):
         self.cache_dir = cache_dir
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         try:
             if self._is_cancelled:
@@ -263,6 +266,11 @@ class ImageViewerModal(QDialog):
             self._load_current_image()
 
     def keyPressEvent(self, event: QKeyEvent):
+        """Exécute l'opération keypressevent.
+
+        Args:
+            event: Paramètre event.
+        """
         if event.key() == Qt.Key.Key_Left:
             self._on_prev()
         elif event.key() == Qt.Key.Key_Right:
@@ -273,22 +281,34 @@ class ImageViewerModal(QDialog):
             super().keyPressEvent(event)
 
     def showEvent(self, event):
+        """Exécute l'opération showevent.
+
+        Args:
+            event: Paramètre event.
+        """
         super().showEvent(event)
         self._load_current_image()
 
     def closeEvent(self, event):
+        """Exécute l'opération closeevent.
+
+        Args:
+            event: Paramètre event.
+        """
         if self.fetch_worker:
             safe_stop_thread(self.fetch_worker)
             self.fetch_worker = None
         super().closeEvent(event)
 
     def reject(self):
+        """Exécute l'opération reject."""
         if self.fetch_worker:
             safe_stop_thread(self.fetch_worker)
             self.fetch_worker = None
         super().reject()
 
     def accept(self):
+        """Exécute l'opération accept."""
         if self.fetch_worker:
             safe_stop_thread(self.fetch_worker)
             self.fetch_worker = None

@@ -43,6 +43,7 @@ class ModCard(BaseModCard):
 
     def init_ui(self):
         # Specific card border if installed
+        """Exécute l'opération init ui."""
         if self.is_installed:
             self.setStyleSheet("""
                 QFrame#ModCard {
@@ -298,6 +299,11 @@ class ModCard(BaseModCard):
         self._load_thumbnail_async()
 
     def mousePressEvent(self, event):
+        """Exécute l'opération mousepressevent.
+
+        Args:
+            event: Paramètre event.
+        """
         if event.button() == Qt.MouseButton.LeftButton:
             child = self.childAt(event.pos())
             if hasattr(self, "action_btn") and (child == self.action_btn or self.action_btn.isAncestorOf(child)):

@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class DependencyItem(BaseModel):
+    """Classe DependencyItem : assure la gestion et l'orchestration de Dependencyitem."""
+
     source: str = "loverslab"
     remote_id: str = ""
     title: str
@@ -17,6 +19,8 @@ class DependencyItem(BaseModel):
 
 
 class DependenciesCheckResponse(BaseModel):
+    """Classe DependenciesCheckResponse : assure la gestion et l'orchestration de Dependenciescheckresponse."""
+
     mod_title: str
     requirements_status: str
     requirements_text: Optional[str] = None
@@ -31,6 +35,8 @@ class DependenciesCheckResponse(BaseModel):
 
 
 class RequirementsOverrideRequest(BaseModel):
+    """Classe RequirementsOverrideRequest : assure la gestion et l'orchestration de Requirementsoverriderequest."""
+
     catalog_mod_id: Optional[int] = None
     source: Optional[str] = "loverslab"
     remote_id: Optional[str] = None
@@ -38,6 +44,8 @@ class RequirementsOverrideRequest(BaseModel):
 
 
 class CatalogModItem(BaseModel):
+    """Classe CatalogModItem : assure la gestion et l'orchestration de Catalogmoditem."""
+
     id: int
     source: str
     remote_id: str
@@ -59,6 +67,8 @@ class CatalogModItem(BaseModel):
 
 
 class CatalogListResponse(BaseModel):
+    """Classe CatalogListResponse : assure la gestion et l'orchestration de Cataloglistresponse."""
+
     total: int
     page: int
     limit: int
@@ -66,10 +76,14 @@ class CatalogListResponse(BaseModel):
 
 
 class CatalogSyncRequest(BaseModel):
+    """Classe CatalogSyncRequest : assure la gestion et l'orchestration de Catalogsyncrequest."""
+
     max_pages: int = Field(default=0, ge=0, le=1000, description="0 = toutes les pages disponibles")
 
 
 class SubCategoryProgress(BaseModel):
+    """Classe SubCategoryProgress : assure la gestion et l'orchestration de Subcategoryprogress."""
+
     id: str
     name: str
     pages_completed: int = 0
@@ -79,6 +93,8 @@ class SubCategoryProgress(BaseModel):
 
 
 class CatalogSyncStatusResponse(BaseModel):
+    """Classe CatalogSyncStatusResponse : assure la gestion et l'orchestration de Catalogsyncstatusresponse."""
+
     is_running: bool
     is_paused: bool = False
     is_stopped: bool = False
@@ -97,6 +113,8 @@ class CatalogSyncStatusResponse(BaseModel):
 
 
 class CatalogInstallRequest(BaseModel):
+    """Classe CatalogInstallRequest : assure la gestion et l'orchestration de Cataloginstallrequest."""
+
     catalog_mod_id: Optional[int] = None
     source: Optional[str] = "loverslab"
     remote_id: Optional[str] = None
@@ -109,6 +127,14 @@ class CatalogInstallRequest(BaseModel):
     @field_validator("updated_date", mode="before")
     @classmethod
     def parse_updated_date(cls, v):
+        """Exécute l'opération parse updated date.
+
+        Args:
+            v: Paramètre v.
+
+        Returns:
+            Résultat de l'opération parse_updated_date.
+        """
         if not v:
             return None
         if isinstance(v, datetime):
@@ -130,12 +156,16 @@ class CatalogInstallRequest(BaseModel):
 
 
 class CatalogInstallResponse(BaseModel):
+    """Classe CatalogInstallResponse : assure la gestion et l'orchestration de Cataloginstallresponse."""
+
     success: bool
     message: str
     installed_dependencies: List[str] = []
 
 
 class ModDetailsResponse(BaseModel):
+    """Classe ModDetailsResponse : assure la gestion et l'orchestration de Moddetailsresponse."""
+
     id: Optional[int] = None
     source: str
     remote_id: str
@@ -157,6 +187,8 @@ class ModDetailsResponse(BaseModel):
 
 
 class CheckMissingReportRequest(BaseModel):
+    """Classe CheckMissingReportRequest : assure la gestion et l'orchestration de Checkmissingreportrequest."""
+
     catalog_mod_id: Optional[int] = None
     source: str = "loverslab"
     remote_id: str = ""
@@ -168,6 +200,8 @@ class CheckMissingReportRequest(BaseModel):
 
 
 class CheckMissingReportResponse(BaseModel):
+    """Classe CheckMissingReportResponse : assure la gestion et l'orchestration de Checkmissingreportresponse."""
+
     can_report: bool
     already_reported: bool
     reported_at: Optional[str] = None
@@ -178,6 +212,8 @@ class CheckMissingReportResponse(BaseModel):
 
 
 class SubmitMissingReportRequest(BaseModel):
+    """Classe SubmitMissingReportRequest : assure la gestion et l'orchestration de Submitmissingreportrequest."""
+
     catalog_mod_id: Optional[int] = None
     source: str = "loverslab"
     remote_id: str = ""
@@ -190,6 +226,8 @@ class SubmitMissingReportRequest(BaseModel):
 
 
 class SubmitMissingReportResponse(BaseModel):
+    """Classe SubmitMissingReportResponse : assure la gestion et l'orchestration de Submitmissingreportresponse."""
+
     success: bool
     message: str
     already_reported: bool = False

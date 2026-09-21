@@ -99,6 +99,11 @@ class LanguageCardWidget(QFrame):
         layout.addLayout(lang_btn_h)
 
     def retranslate_ui(self, current_lang: str):
+        """Exécute l'opération retranslate ui.
+
+        Args:
+            current_lang: Paramètre current_lang.
+        """
         self.title_lbl.setText(tr("settings.language_section"))
         self.desc_lbl.setText(tr("settings.language_desc"))
         for code, btn in self.lang_buttons.items():
@@ -139,11 +144,21 @@ class PathsCardWidget(QFrame):
         layout.addWidget(self.mods_status_lbl)
 
     def retranslate_ui(self, is_valid: bool):
+        """Exécute l'opération retranslate ui.
+
+        Args:
+            is_valid: Paramètre is_valid.
+        """
         self.title_lbl.setText(tr("settings.mods_folder_section"))
         self.browse_mods_btn.setText(tr("settings.browse"))
         self.update_status(is_valid)
 
     def update_status(self, is_valid: bool):
+        """Exécute l'opération update status.
+
+        Args:
+            is_valid: Paramètre is_valid.
+        """
         self.mods_status_lbl.setText(tr("settings.folder_valid") if is_valid else tr("settings.folder_invalid"))
         self.mods_status_lbl.setStyleSheet("color: #34d399;" if is_valid else "color: #f87171;")
 
@@ -195,6 +210,7 @@ class GameLauncherCardWidget(QFrame):
         layout.addLayout(exe_h)
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.title_lbl.setText(tr("settings.game_exe_section"))
         self.browse_exe_btn.setText(tr("settings.browse"))
         self.launch_btn.setText(tr("nav.launch_game"))
@@ -238,6 +254,11 @@ class PreferencesCardWidget(QFrame):
         layout.addLayout(cache_h)
 
     def retranslate_ui(self, backups_dir: str):
+        """Exécute l'opération retranslate ui.
+
+        Args:
+            backups_dir: Paramètre backups_dir.
+        """
         self.title_lbl.setText(tr("settings.options_section"))
         self.backup_chk.setText(tr("settings.auto_backup"))
         self.adult_chk.setText(tr("settings.adult_content"))
@@ -294,6 +315,7 @@ class DatabaseCardWidget(QFrame):
         layout.addLayout(db_actions_h)
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.title_lbl.setText(tr("settings.db_section"))
         self.db_desc_lbl.setText(tr("settings.db_purge_desc"))
         self.purge_db_btn.setText(tr("settings.purge_db_btn"))

@@ -126,8 +126,8 @@ def main():
     QTimer.singleShot(50, _async_startup_tasks)
 
     # Démarrage de la vérification des dossiers du jeu et des mods installés en tâche de fond
-    from src.services.game_service import GameDetector
-    from src.services.mod_installer_service import ModInstaller
+    from src.application.game.game_service import GameDetector
+    from src.application.mods.mod_installer_service import ModInstaller
 
     GameDetector.start_background_detection_refresh()
     ModInstaller.start_background_installed_mods_verifier()

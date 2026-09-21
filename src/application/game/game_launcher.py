@@ -20,6 +20,11 @@ class GameLauncher:
 
     @classmethod
     def clear_cache(cls) -> None:
+        """Exécute l'opération clear cache.
+
+        Returns:
+            Résultat de l'opération clear_cache.
+        """
         cls._cached_game_exe = None
 
     @classmethod

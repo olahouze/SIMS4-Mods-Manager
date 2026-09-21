@@ -13,6 +13,8 @@ from src.utils.thread_utils import BaseWorker
 
 
 class SyncTriggerWorker(BaseWorker):
+    """Classe SyncTriggerWorker : assure la gestion et l'orchestration de Synctriggerworker."""
+
     finished_signal = Signal(bool, str)
 
     def __init__(self, api_client, max_pages: int = 0):
@@ -21,6 +23,7 @@ class SyncTriggerWorker(BaseWorker):
         self.max_pages = max_pages
 
     def run(self):
+        """Exécute l'opération run."""
         try:
             self._is_running = True
             if self._is_cancelled:
@@ -48,6 +51,7 @@ class CatalogFetchWorker(BaseWorker):
         self.fetch_id = fetch_id
 
     def run(self):
+        """Exécute l'opération run."""
         try:
             self._is_running = True
             if self._is_cancelled:
@@ -67,6 +71,8 @@ class CatalogFetchWorker(BaseWorker):
 
 
 class InstallWorker(BaseWorker):
+    """Classe InstallWorker : assure la gestion et l'orchestration de Installworker."""
+
     progress = Signal(int, str, str)  # percent, status, details
     finished = Signal(bool, str)
 
@@ -75,6 +81,7 @@ class InstallWorker(BaseWorker):
         self.mod_data = mod_data
 
     def run(self):
+        """Exécute l'opération run."""
         client = get_api_client()
         try:
             self._is_running = True

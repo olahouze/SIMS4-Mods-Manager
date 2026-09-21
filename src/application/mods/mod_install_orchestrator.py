@@ -4,13 +4,13 @@ Orchestrator for downloading and installing catalog mods and their dependency gr
 
 from pathlib import Path
 import tempfile
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 
 from src.api.schemas.catalog import CatalogInstallRequest, CatalogInstallResponse, DependencyItem
 from src.database.models import CatalogMod, InstalledMod
 from src.database.manager import DatabaseManager
 from src.providers import ProviderRegistry
-from src.services.dependency_resolver import resolve_mod_dependencies
+from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
 from src.utils.logger import logger
 
 
@@ -19,7 +19,7 @@ def perform_mod_install(
     progress_callback: Optional[Callable[[int, str, str], None]] = None,
 ) -> CatalogInstallResponse:
     """Orchestrates downloading and installing a mod and its required dependencies."""
-    from src.services.mod_installer_service import ModInstaller
+    from src.application.mods.mod_installer_service import ModInstaller
 
     db = DatabaseManager.get_instance()
     cat_mod = None
@@ -29,7 +29,7 @@ def perform_mod_install(
         elif payload.source and payload.remote_id:
             cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
 
-    source = cat_mod.source if cat_mod else (payload.source or "loverslab")
+    source: str = str(cat_mod.source if (cat_mod and cat_mod.source) else (payload.source or "loverslab"))
     page_url = cat_mod.page_url if cat_mod else payload.page_url
     mod_title = cat_mod.title if cat_mod else (payload.title or "Mod")
     remote_id = cat_mod.remote_id if cat_mod else (payload.remote_id or "unknown")
@@ -50,13 +50,16 @@ def perform_mod_install(
                 if provider:
                     logger.info(f"[INSTALL-DEP] Analyse préalable des dépendances pour '{mod_title}' ({page_url})...")
                     det = provider.get_mod_details(page_url)
-                    req_mods = det.get("requirements_mods", [])
-                    req_status = det.get("requirements_status", "NONE")
+                    det_dict: dict[str, Any] = (
+                        det.model_dump() if hasattr(det, "model_dump") else (det if isinstance(det, dict) else {})
+                    )
+                    req_mods = det_dict.get("requirements_mods", [])
+                    req_status = det_dict.get("requirements_status", "NONE")
                     if cat_mod:
                         with db.get_session() as s:
                             cm = s.query(CatalogMod).filter_by(id=cat_mod.id).first()
                             if cm:
-                                cm.requirements_text = det.get("requirements_text")
+                                cm.requirements_text = det_dict.get("requirements_text")
                                 cm.requirements_status = req_status
                                 cm.set_requirements_mods_list(req_mods)
                                 s.commit()
@@ -65,7 +68,7 @@ def perform_mod_install(
 
         with db.get_session() as session:
             all_inst = session.query(InstalledMod).all()
-            installed_by_remote = {(im.source, im.remote_id): im for im in all_inst if im.remote_id}
+            installed_by_remote = {(im.source or "unknown", im.remote_id): im for im in all_inst if im.remote_id}
             installed_by_title = {im.title.lower(): im for im in all_inst if im.title}
 
             resolved_deps = resolve_mod_dependencies(
@@ -178,9 +181,12 @@ def perform_mod_install(
         progress_callback(2, "Analyse de la page du mod...", f"Source : {source}")
 
     details = provider.get_mod_details(page_url)
-    download_urls = details.get("download_urls", [])
+    details_dict: dict[str, Any] = (
+        details.model_dump() if hasattr(details, "model_dump") else (details if isinstance(details, dict) else {})
+    )
+    download_urls = details_dict.get("download_urls", [])
     if not download_urls:
-        ext_links = details.get("external_links", [])
+        ext_links = details_dict.get("external_links", [])
         if ext_links:
             return CatalogInstallResponse(
                 success=False, message=f"Téléchargement externe requis : {', '.join(ext_links[:2])}"
@@ -226,13 +232,17 @@ def perform_mod_install(
     except Exception as e:
         logger.debug(f"Vérification de format binaire échouée pour {file_to_install}: {e}")
 
+    from datetime import datetime
+
+    v_date = version_date if isinstance(version_date, datetime) else None
+
     install_ok, install_msg = ModInstaller.install_mod_from_file(
         file_path=file_to_install,
         catalog_mod=cat_mod,
         source=source,
         custom_title=mod_title,
-        version_date=version_date,
-        version_str=details.get("version_str", ""),
+        version_date=v_date,
+        version_str=str(details_dict.get("version_str", "") or ""),
         progress_callback=progress_callback,
     )
 

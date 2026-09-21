@@ -1,4 +1,5 @@
 import tempfile
+from typing import Any
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
@@ -11,8 +12,8 @@ from src.api.schemas.updates import (
 )
 from src.database.models import InstalledMod, CatalogMod
 from src.database.manager import DatabaseManager
-from src.services.mod_installer_service import ModInstaller
-from src.services.mod_update_service import check_has_update, resolve_catalog_mod
+from src.application.mods.mod_installer_service import ModInstaller
+from src.application.mods.mod_update_service import check_has_update, resolve_catalog_mod
 from src.providers import ProviderRegistry
 from src.utils.logger import logger
 
@@ -34,15 +35,20 @@ def _update_one_mod(installed_id: int) -> tuple[bool, str]:
                 try:
                     fallback_url = f"https://www.loverslab.com/files/file/{im.remote_id}-mod/"
                     details = provider.get_mod_details(fallback_url)
+                    det_dict: dict[str, Any] = (
+                        details.model_dump()
+                        if hasattr(details, "model_dump")
+                        else (details if isinstance(details, dict) else {})
+                    )
                     cat_mod = CatalogMod(
                         source=im.source,
                         remote_id=im.remote_id,
-                        title=details.get("title") or im.title,
-                        author=details.get("author") or "",
+                        title=det_dict.get("title") or im.title,
+                        author=det_dict.get("author") or "",
                         page_url=fallback_url,
-                        thumbnail_url=details.get("thumbnail_url") or "",
-                        version_str=details.get("version_str", ""),
-                        updated_date=details.get("updated_date"),
+                        thumbnail_url=det_dict.get("thumbnail_url") or "",
+                        version_str=det_dict.get("version_str", ""),
+                        updated_date=det_dict.get("updated_date"),
                     )
                     session.add(cat_mod)
                     session.commit()
@@ -54,10 +60,10 @@ def _update_one_mod(installed_id: int) -> tuple[bool, str]:
         if not cat_mod:
             return False, f"Aucune information catalogue associée au mod '{im.title}'."
 
-        source = cat_mod.source
-        page_url = cat_mod.page_url
-        title = cat_mod.title
-        remote_id = cat_mod.remote_id
+        source = str(cat_mod.source or "loverslab")
+        page_url = str(cat_mod.page_url or "")
+        title = str(cat_mod.title or "Mod")
+        remote_id = str(cat_mod.remote_id or "")
         version_date = cat_mod.updated_date
 
     provider = ProviderRegistry.get_provider(source)
@@ -65,7 +71,10 @@ def _update_one_mod(installed_id: int) -> tuple[bool, str]:
         return False, f"Fournisseur '{source}' introuvable."
 
     details = provider.get_mod_details(page_url)
-    download_urls = details.get("download_urls", [])
+    det_dict = (
+        details.model_dump() if hasattr(details, "model_dump") else (details if isinstance(details, dict) else {})
+    )
+    download_urls = det_dict.get("download_urls", [])
     if not download_urls:
         return False, f"Aucun lien de téléchargement disponible pour '{title}'."
 
@@ -86,7 +95,7 @@ def _update_one_mod(installed_id: int) -> tuple[bool, str]:
         source=source,
         custom_title=title,
         version_date=version_date,
-        version_str=details.get("version_str", ""),
+        version_str=str(det_dict.get("version_str", "") or ""),
     )
 
     try:
@@ -170,10 +179,10 @@ def get_updates():
 
             items.append(
                 UpdateModItem(
-                    installed_id=im.id,
-                    title=im.title,
-                    source=im.source or "manual",
-                    folder_name=im.folder_name,
+                    installed_id=int(im.id or 0),
+                    title=str(im.title or "Untitled"),
+                    source=str(im.source or "manual"),
+                    folder_name=str(im.folder_name or ""),
                     current_version=cur_ver,
                     new_version=new_ver,
                     has_update=has_update,
@@ -266,14 +275,10 @@ def update_all_mods():
             details=[],
         )
 
-    from src.api.routes import updates as legacy_updates
-
-    updater = getattr(legacy_updates, "_update_one_mod", _update_one_mod)
-
     updated_count = 0
     details = []
     for mod_id, title in updatable_ids:
-        ok, msg = updater(mod_id)
+        ok, msg = _update_one_mod(int(mod_id or 0))
         if ok:
             updated_count += 1
         details.append({"id": mod_id, "title": title, "success": ok, "message": msg})
@@ -290,10 +295,7 @@ def update_all_mods():
 @router.post("/{installed_id}", response_model=UpdateModResponse)
 def update_mod(installed_id: int):
     """Updates a single installed mod to the latest version found in catalog."""
-    from src.api.routes import updates as legacy_updates
-
-    updater = getattr(legacy_updates, "_update_one_mod", _update_one_mod)
-    ok, msg = updater(installed_id)
+    ok, msg = _update_one_mod(installed_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return UpdateModResponse(success=True, message=msg)

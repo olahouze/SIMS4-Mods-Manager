@@ -28,11 +28,11 @@ from src.infrastructure.database.repositories.sqlalchemy_catalog_repository impo
 from src.infrastructure.database.repositories.sqlalchemy_installed_mod_repository import (
     SqlAlchemyInstalledModRepository,
 )
-from src.services.dependency_resolver import find_dependent_installed_mods
-from src.services.game_service import GameDetector
-from src.services.mod_installer_service import ModInstaller
-from src.services.mod_toggle_service import ModToggleManager
-from src.services.mod_update_service import ModUpdateService
+from src.application.dependencies.dependency_resolver import find_dependent_installed_mods
+from src.application.game.game_service import GameDetector
+from src.application.mods.mod_installer_service import ModInstaller
+from src.application.mods.mod_toggle_service import ModToggleManager
+from src.application.mods.mod_update_service import ModUpdateService
 
 
 class InstalledModsService:
@@ -52,18 +52,38 @@ class InstalledModsService:
 
     @property
     def installed_repo(self) -> IInstalledModRepository:
+        """Exécute l'opération installed repo.
+
+        Returns:
+            Résultat de l'opération installed_repo.
+        """
         return self._installed_repo or SqlAlchemyInstalledModRepository()
 
     @property
     def catalog_repo(self) -> ICatalogRepository:
+        """Exécute l'opération catalog repo.
+
+        Returns:
+            Résultat de l'opération catalog_repo.
+        """
         return self._catalog_repo or SqlAlchemyCatalogRepository()
 
     @property
     def update_service(self) -> ModUpdateService:
+        """Exécute l'opération update service.
+
+        Returns:
+            Résultat de l'opération update_service.
+        """
         return self._update_service or ModUpdateService(self.installed_repo, self.catalog_repo)
 
     @property
     def toggle_manager(self) -> ModToggleManager:
+        """Exécute l'opération toggle manager.
+
+        Returns:
+            Résultat de l'opération toggle_manager.
+        """
         return self._toggle_manager or ModToggleManager(self.installed_repo)
 
     def list_installed_mods(self, search: Optional[str] = None) -> InstalledListResponse:
@@ -180,7 +200,7 @@ class InstalledModsService:
 
             return ModDependentsResponse(
                 mod_id=mod_id,
-                mod_title=target.title,
+                mod_title=target.title or "",
                 has_dependents=len(items) > 0,
                 count=len(items),
                 dependents=items,

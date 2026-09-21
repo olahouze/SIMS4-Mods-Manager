@@ -47,13 +47,24 @@ class UpdatesView(QWidget):
 
     @property
     def worker(self) -> Optional[UpdateWorker]:
+        """Exécute l'opération worker.
+
+        Returns:
+            Résultat de l'opération worker.
+        """
         return self.controller.worker
 
     @property
     def progress_dlg(self):
+        """Exécute l'opération progress dlg.
+
+        Returns:
+            Résultat de l'opération progress_dlg.
+        """
         return self.controller.progress_dlg
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
@@ -103,6 +114,7 @@ class UpdatesView(QWidget):
             self.counter_label.setText(tr("updates.up_to_date_title"))
 
     def refresh_updates(self):
+        """Exécute l'opération refresh updates."""
         try:
             res = self.api_client.get_updates()
             self.all_mods = res.get("items", [])
@@ -180,27 +192,38 @@ class UpdatesView(QWidget):
             self.update_selected_btn.setEnabled(False)
 
     def select_all(self):
+        """Exécute l'opération select all."""
         for _, _, cb, _ in self.checkbox_items:
             cb.setChecked(True)
 
     def deselect_all(self):
+        """Exécute l'opération deselect all."""
         for _, _, cb, _ in self.checkbox_items:
             cb.setChecked(False)
 
     def select_updates_only(self):
+        """Exécute l'opération select updates only."""
         for _, _, cb, has_update in self.checkbox_items:
             cb.setChecked(has_update)
 
     def update_single_mod(self, installed_id: int, title: str):
+        """Exécute l'opération update single mod.
+
+        Args:
+            installed_id: Paramètre installed_id.
+            title: Paramètre title.
+        """
         self.controller.update_single_mod(installed_id, title, self._on_finished)
 
     def update_selected_mods(self):
+        """Exécute l'opération update selected mods."""
         selected_updatable = [mid for mid, _, cb, has_up in self.checkbox_items if cb.isChecked() and has_up]
         selected_all = [mid for mid, _, cb, _ in self.checkbox_items if cb.isChecked()]
         target_ids = selected_updatable if selected_updatable else selected_all
         self.controller.update_selected_mods(target_ids, self._on_finished)
 
     def update_all_mods(self):
+        """Exécute l'opération update all mods."""
         self.controller.update_all_mods(self.all_mods, self._on_finished)
 
     def _on_finished(self, success: bool, msg: str):
@@ -224,6 +247,7 @@ class UpdatesView(QWidget):
         )
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.main_title.setText(tr("updates.title"))
         self.refresh_btn.setText(tr("updates.refresh_btn"))
         self.update_all_btn.setText(tr("updates.update_all_btn"))

@@ -1,7 +1,7 @@
-from src.services.mod_toggle_service import ModToggleManager
+from src.application.mods.mod_toggle_service import ModToggleManager
 from src.database.manager import DatabaseManager
 from src.database.models import InstalledMod
-from src.services.game_service import GameDetector
+from src.application.game.game_service import GameDetector
 
 
 def test_mod_toggle_enable_disable_lifecycle(tmp_path, monkeypatch):

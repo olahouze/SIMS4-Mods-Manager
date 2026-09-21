@@ -1,0 +1,61 @@
+site_name: SIMS 4 Mods Manager - Documentation Technique
+site_description: Documentation technique et architecture logicielle de SIMS 4 Mods Manager
+docs_dir: documentation
+site_dir: site
+
+theme:
+  name: material
+  language: fr
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Passer au mode sombre
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Passer au mode clair
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_source: true
+
+nav:
+  - Accueil: index.md
+  - Architecture:
+      - Vue d'Ensemble: architecture.md
+      - Architecture Détaillée: architecture/ARCHITECTURE.md
+      - APIs Internes: architecture/INTERNAL_APIS.md
+      - Modules & Classes: modules_and_classes.md
+  - Cas d'Usage Métier:
+      - Services & Providers: services_and_providers.md
+      - Classification Dépendances: dependency_classification_and_noise.md
+  - API REST:
+      - Spécification REST: api/REST_API.md
+      - Référence des Endpoints: api_reference.md
+  - Référence Code Python:
+      - Application - Catalog: reference/application_catalog.md
+      - Application - Mods: reference/application_mods.md
+      - Application - Dépendances: reference/application_dependencies.md
+      - Application - Jeu Sims 4: reference/application_game.md
+      - Infrastructure: reference/infrastructure.md
+      - API REST & Client: reference/api.md

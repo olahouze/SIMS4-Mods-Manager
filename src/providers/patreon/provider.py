@@ -161,9 +161,26 @@ class PatreonProvider(BaseSourceProvider):
     def scrape_catalog(self, page: int = 1, limit: int = 25) -> List[Dict[str, Any]]:
         # Patreon does not have a global public category catalog like LoversLab,
         # it is resolved via links extracted from LoversLab or user campaigns.
+        """Exécute l'opération scrape catalog.
+
+        Args:
+            page: Paramètre page.
+            limit: Paramètre limit.
+
+        Returns:
+            Résultat de l'opération scrape_catalog.
+        """
         return []
 
     def get_mod_details(self, mod_url: str) -> Dict[str, Any]:
+        """Exécute l'opération get mod details.
+
+        Args:
+            mod_url: Paramètre mod_url.
+
+        Returns:
+            Résultat de l'opération get_mod_details.
+        """
         return self.check_post_access(mod_url)
 
     def download_mod_file(
@@ -172,6 +189,16 @@ class PatreonProvider(BaseSourceProvider):
         dest_path: Path,
         progress_callback: Optional[Callable[[int, str, str], None]] = None,
     ) -> Tuple[bool, str]:
+        """Exécute l'opération download mod file.
+
+        Args:
+            download_url: Paramètre download_url.
+            dest_path: Paramètre dest_path.
+            progress_callback: Paramètre progress_callback.
+
+        Returns:
+            Résultat de l'opération download_mod_file.
+        """
         session = SessionManager.get_http_session("patreon")
         is_auth = SessionManager.is_member_authenticated("patreon")
 
@@ -233,13 +260,39 @@ class PatreonProvider(BaseSourceProvider):
             return False, f"Exception lors du téléchargement: {e}"
 
     def check_access(self, mod_data: Dict[str, Any]) -> str:
+        """Exécute l'opération check access.
+
+        Args:
+            mod_data: Paramètre mod_data.
+
+        Returns:
+            Résultat de l'opération check_access.
+        """
         page_url = mod_data.get("page_url", "")
         res = self.check_post_access(page_url)
         return res.get("status", "UNKNOWN")
 
     def check_user_already_commented(self, page_url: str, required_keywords: List[str]) -> Tuple[bool, Optional[str]]:
         # Patreon does not support public forum thread commenting in the same way as LoversLab
+        """Exécute l'opération check user already commented.
+
+        Args:
+            page_url: Paramètre page_url.
+            required_keywords: Paramètre required_keywords.
+
+        Returns:
+            Résultat de l'opération check_user_already_commented.
+        """
         return False, None
 
     def post_mod_comment(self, page_url: str, message: str) -> Tuple[bool, str]:
+        """Exécute l'opération post mod comment.
+
+        Args:
+            page_url: Paramètre page_url.
+            message: Paramètre message.
+
+        Returns:
+            Résultat de l'opération post_mod_comment.
+        """
         return False, "Commentaires directs non supportés pour le fournisseur Patreon."

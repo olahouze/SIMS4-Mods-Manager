@@ -94,7 +94,7 @@ def test_cascade_dependency_installation_flow(monkeypatch):
     installed_calls = []
 
     from src.providers.loverslab import LoversLabProvider
-    from src.services.mod_installer_service import ModInstaller
+    from src.application.mods.mod_installer_service import ModInstaller
 
     def mock_get_mod_details(self, url):
         return {

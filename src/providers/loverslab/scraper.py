@@ -142,6 +142,15 @@ class LoversLabProvider(BaseSourceProvider):
         self.current_category_info: str = "WickedWhims"
 
     def update_category_detected_pages(self, cat_id: str, detected_pages: int) -> None:
+        """Exécute l'opération update category detected pages.
+
+        Args:
+            cat_id: Paramètre cat_id.
+            detected_pages: Paramètre detected_pages.
+
+        Returns:
+            Résultat de l'opération update_category_detected_pages.
+        """
         if detected_pages > 0:
             self._category_pages_cache[cat_id] = detected_pages
 
@@ -149,6 +158,11 @@ class LoversLabProvider(BaseSourceProvider):
         return [(cat, self._category_pages_cache.get(cat["id"], cat["default_pages"])) for cat in self.CATEGORIES]
 
     def get_total_pages(self) -> int:
+        """Exécute l'opération get total pages.
+
+        Returns:
+            Résultat de l'opération get_total_pages.
+        """
         return sum(pages for _, pages in self._get_category_page_counts())
 
     def _resolve_category_page(self, global_page: int) -> Tuple[Dict[str, Any], int, int]:
@@ -164,6 +178,16 @@ class LoversLabProvider(BaseSourceProvider):
     def scrape_category_page(
         self, category: Dict[str, Any], page: int = 1, limit: int = 25
     ) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+        """Exécute l'opération scrape category page.
+
+        Args:
+            category: Paramètre category.
+            page: Paramètre page.
+            limit: Paramètre limit.
+
+        Returns:
+            Résultat de l'opération scrape_category_page.
+        """
         cat_url = category["url"].rstrip("/") + "/"
         url = cat_url if page == 1 else f"{cat_url}page/{page}/"
         session = SessionManager.get_http_session("loverslab")
@@ -235,12 +259,29 @@ class LoversLabProvider(BaseSourceProvider):
         return results, detected_pages
 
     def scrape_catalog(self, page: int = 1, limit: int = 25) -> List[Dict[str, Any]]:
+        """Exécute l'opération scrape catalog.
+
+        Args:
+            page: Paramètre page.
+            limit: Paramètre limit.
+
+        Returns:
+            Résultat de l'opération scrape_catalog.
+        """
         cat, local_page, total_cat_pages = self._resolve_category_page(page)
         self.current_category_info = f"{cat['name']} (p. {local_page}/{total_cat_pages})"
         results, _ = self.scrape_category_page(cat, local_page, limit)
         return results
 
     def get_mod_details(self, mod_url: str) -> Dict[str, Any]:
+        """Exécute l'opération get mod details.
+
+        Args:
+            mod_url: Paramètre mod_url.
+
+        Returns:
+            Résultat de l'opération get_mod_details.
+        """
         session = SessionManager.get_http_session("loverslab")
         details: Dict[str, Any] = {
             "description": "",
@@ -388,17 +429,42 @@ class LoversLabProvider(BaseSourceProvider):
         return details
 
     def extract_download_candidates(self, soup: BeautifulSoup, base_url: str = "") -> List[Dict[str, Any]]:
+        """Exécute l'opération extract download candidates.
+
+        Args:
+            soup: Paramètre soup.
+            base_url: Paramètre base_url.
+
+        Returns:
+            Résultat de l'opération extract_download_candidates.
+        """
         return _ext_dl_candidates(soup, base_url or self.base_url)
 
     def _extract_download_candidates(self, soup: BeautifulSoup, base_url: str = "") -> List[Dict[str, Any]]:
         return self.extract_download_candidates(soup, base_url)
 
     def extract_requirements(self, soup: BeautifulSoup) -> Tuple[Optional[str], str, List[Dict[str, Any]]]:
+        """Exécute l'opération extract requirements.
+
+        Args:
+            soup: Paramètre soup.
+
+        Returns:
+            Résultat de l'opération extract_requirements.
+        """
         return extract_loverslab_requirements(soup, self.KNOWN_MOD_ALIASES)
 
     _extract_requirements = extract_requirements
 
     def fetch_mod_by_id(self, remote_id: str) -> Optional[Dict[str, Any]]:
+        """Exécute l'opération fetch mod by id.
+
+        Args:
+            remote_id: Paramètre remote_id.
+
+        Returns:
+            Résultat de l'opération fetch_mod_by_id.
+        """
         session = SessionManager.get_http_session(self.provider_name)
         target_url = f"{self.base_url}/files/file/{remote_id}/"
         try:
@@ -427,6 +493,16 @@ class LoversLabProvider(BaseSourceProvider):
         progress_callback: Optional[Callable[[int, str, str], None]] = None,
         **kwargs,
     ) -> Tuple[bool, str]:
+        """Exécute l'opération download mod file.
+
+        Args:
+            download_url: Paramètre download_url.
+            dest_path: Paramètre dest_path.
+            progress_callback: Paramètre progress_callback.
+
+        Returns:
+            Résultat de l'opération download_mod_file.
+        """
         target_url = download_url or kwargs.get("mod_url", "")
         target_path = dest_path or kwargs.get("dest_folder") or kwargs.get("dest_path")
         return download_loverslab_file(
@@ -438,6 +514,14 @@ class LoversLabProvider(BaseSourceProvider):
         )
 
     def check_access(self, mod_data: Dict[str, Any]) -> str:
+        """Exécute l'opération check access.
+
+        Args:
+            mod_data: Paramètre mod_data.
+
+        Returns:
+            Résultat de l'opération check_access.
+        """
         external_links = mod_data.get("external_links", [])
         for link in external_links:
             if "patreon.com" in link.lower():
@@ -445,7 +529,25 @@ class LoversLabProvider(BaseSourceProvider):
         return "PUBLIC"
 
     def check_user_already_commented(self, page_url: str, required_keywords: List[str]) -> Tuple[bool, Optional[str]]:
+        """Exécute l'opération check user already commented.
+
+        Args:
+            page_url: Paramètre page_url.
+            required_keywords: Paramètre required_keywords.
+
+        Returns:
+            Résultat de l'opération check_user_already_commented.
+        """
         return LoversLabForumService.check_user_already_commented(page_url, required_keywords)
 
     def post_mod_comment(self, page_url: str, message: str) -> Tuple[bool, str]:
+        """Exécute l'opération post mod comment.
+
+        Args:
+            page_url: Paramètre page_url.
+            message: Paramètre message.
+
+        Returns:
+            Résultat de l'opération post_mod_comment.
+        """
         return LoversLabForumService.post_mod_comment(page_url, message)

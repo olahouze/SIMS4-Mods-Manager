@@ -61,6 +61,7 @@ class CatalogView(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         main_h_layout = QHBoxLayout(self)
         main_h_layout.setContentsMargins(18, 18, 18, 18)
         main_h_layout.setSpacing(12)
@@ -162,26 +163,56 @@ class CatalogView(QWidget):
     # Backward compatible attributes
     @property
     def sync_banner(self):
+        """Exécute l'opération sync banner.
+
+        Returns:
+            Résultat de l'opération sync_banner.
+        """
         return self.sync_banner_widget
 
     @property
     def sync_banner_lbl(self):
+        """Exécute l'opération sync banner lbl.
+
+        Returns:
+            Résultat de l'opération sync_banner_lbl.
+        """
         return self.sync_banner_widget.sync_banner_lbl
 
     @property
     def sync_bar(self):
+        """Exécute l'opération sync bar.
+
+        Returns:
+            Résultat de l'opération sync_bar.
+        """
         return self.sync_banner_widget.sync_bar
 
     @property
     def btn_prev(self):
+        """Exécute l'opération btn prev.
+
+        Returns:
+            Résultat de l'opération btn_prev.
+        """
         return self.pagination_bar.btn_prev
 
     @property
     def btn_next(self):
+        """Exécute l'opération btn next.
+
+        Returns:
+            Résultat de l'opération btn_next.
+        """
         return self.pagination_bar.btn_next
 
     @property
     def lbl_page_info(self):
+        """Exécute l'opération lbl page info.
+
+        Returns:
+            Résultat de l'opération lbl_page_info.
+        """
         return self.pagination_bar.lbl_page_info
 
     def _on_filters_changed(self):
@@ -205,6 +236,7 @@ class CatalogView(QWidget):
                 self.scroll_area.verticalScrollBar().setValue(0)
 
     def refresh_catalog(self):
+        """Exécute l'opération refresh catalog."""
         filter_state = self.filter_bar.get_filter_state()
         params = build_catalog_api_params(filter_state, self.current_page, self.page_size)
 
@@ -296,6 +328,11 @@ class CatalogView(QWidget):
             logger.error(f"Erreur arrêt {provider}: {e}")
 
     def start_sync(self, max_pages: int = 0):
+        """Exécute l'opération start sync.
+
+        Args:
+            max_pages: Paramètre max_pages.
+        """
         self.sync_banner_widget.set_running("Lancement de la synchronisation en arrière-plan...", 0)
         self._page1_displayed = False
         self._last_pages_completed = 0
@@ -312,6 +349,7 @@ class CatalogView(QWidget):
             self._check_sync_status()
 
     def start_sync_monitoring(self):
+        """Exécute l'opération start sync monitoring."""
         if not self.monitor_timer.isActive():
             self.monitor_timer.start()
 
@@ -359,6 +397,11 @@ class CatalogView(QWidget):
             logger.debug(f"Erreur vérification statut sync: {e}")
 
     def install_mod(self, mod_data: dict):
+        """Exécute l'opération install mod.
+
+        Args:
+            mod_data: Paramètre mod_data.
+        """
         mod_id = mod_data.get("id")
         try:
             payload = {
@@ -419,6 +462,7 @@ class CatalogView(QWidget):
         self.details_requested.emit(data_copy)
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.title_lbl.setText(tr("catalog.title"))
         self.filter_bar.retranslate_ui()
         self.provider_drawer.retranslate_ui()

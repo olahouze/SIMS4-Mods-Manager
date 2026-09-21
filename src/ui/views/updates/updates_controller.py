@@ -19,6 +19,13 @@ class UpdatesActionController:
         self.progress_dlg: Optional[ProgressDialog] = None
 
     def update_single_mod(self, installed_id: int, title: str, on_finished_callback: Callable[[bool, str], None]):
+        """Exécute l'opération update single mod.
+
+        Args:
+            installed_id: Paramètre installed_id.
+            title: Paramètre title.
+            on_finished_callback: Paramètre on_finished_callback.
+        """
         self.progress_dlg = ProgressDialog(tr("updates.update_progress", name=title), self.parent)
         self.progress_dlg.set_status(tr("updates.update_single_progress"))
         self.progress_dlg.set_indeterminate(True)
@@ -29,6 +36,12 @@ class UpdatesActionController:
         self.worker.start()
 
     def update_selected_mods(self, target_ids: List[int], on_finished_callback: Callable[[bool, str], None]):
+        """Exécute l'opération update selected mods.
+
+        Args:
+            target_ids: Paramètre target_ids.
+            on_finished_callback: Paramètre on_finished_callback.
+        """
         if not target_ids:
             QMessageBox.information(self.parent, tr("dialogs.info_title"), tr("updates.select_at_least_one"))
             return
@@ -52,6 +65,12 @@ class UpdatesActionController:
             self.worker.start()
 
     def update_all_mods(self, all_mods: List[Dict[str, Any]], on_finished_callback: Callable[[bool, str], None]):
+        """Exécute l'opération update all mods.
+
+        Args:
+            all_mods: Paramètre all_mods.
+            on_finished_callback: Paramètre on_finished_callback.
+        """
         updatable_mods = [item for item in all_mods if item.get("has_update")]
         if not updatable_mods:
             QMessageBox.information(self.parent, tr("updates.all_confirm_title"), tr("updates.already_up_to_date_msg"))

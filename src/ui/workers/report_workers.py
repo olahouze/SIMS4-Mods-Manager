@@ -19,6 +19,7 @@ class SubmitReportWorker(BaseWorker):
         self.payload = payload
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         client = get_api_client()
         try:
@@ -48,6 +49,7 @@ class CheckReportStatusWorker(BaseWorker):
         self.payload = payload
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         try:
             if self._is_cancelled:

@@ -7,13 +7,13 @@ Re-exports GameDetector and GameLauncher to maintain backwards compatibility.
 from typing import Optional
 from pathlib import Path
 
-from src.services.game_detector import (
+from src.application.game.game_detector import (
     LOCALIZED_SIMS4_FOLDERS,
     normalize_folder_name,
     is_sims4_folder,
     GameDetector,
 )
-from src.services.game_launcher import GameLauncher
+from src.application.game.game_launcher import GameLauncher
 
 
 def launch_game(exe_path: Optional[Path] = None) -> bool:

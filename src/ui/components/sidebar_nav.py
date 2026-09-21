@@ -100,10 +100,21 @@ class SidebarNavWidget(QFrame):
         return btn
 
     def set_active_page(self, index: int):
+        """Exécute l'opération set active page.
+
+        Args:
+            index: Paramètre index.
+        """
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
 
     def update_game_status(self, success: bool, mods_detected: bool):
+        """Exécute l'opération update game status.
+
+        Args:
+            success: Paramètre success.
+            mods_detected: Paramètre mods_detected.
+        """
         if success:
             if mods_detected:
                 self.game_status.setText(tr("nav.game_detected"))
@@ -116,18 +127,29 @@ class SidebarNavWidget(QFrame):
             self.game_status.setStyleSheet("font-size: 11px; color: #f87171; font-weight: 600; padding: 4px 0;")
 
     def update_badge_count(self, count: int):
+        """Exécute l'opération update badge count.
+
+        Args:
+            count: Paramètre count.
+        """
         if count > 0:
             self.btn_updates.setText(tr("nav.updates_with_count", count=count))
         else:
             self.btn_updates.setText(tr("nav.updates"))
 
     def update_downloads_badge(self, count: int):
+        """Exécute l'opération update downloads badge.
+
+        Args:
+            count: Paramètre count.
+        """
         if count > 0:
             self.btn_downloads.setText(tr("nav.downloads_with_count", count=count))
         else:
             self.btn_downloads.setText(tr("nav.downloads"))
 
     def retranslate_ui(self):
+        """Exécute l'opération retranslate ui."""
         self.btn_accounts.setText(tr("nav.accounts"))
         self.btn_catalog.setText(tr("nav.catalog"))
         self.btn_installed.setText(tr("nav.installed"))

@@ -31,6 +31,14 @@ class ZipArchiveHandler(BaseArchiveHandler):
     """Gestionnaire des archives standard ZIP."""
 
     def can_handle(self, path: Path) -> bool:
+        """Exécute l'opération can handle.
+
+        Args:
+            path: Paramètre path.
+
+        Returns:
+            Résultat de l'opération can_handle.
+        """
         if not path.is_file():
             return False
         try:
@@ -48,9 +56,18 @@ class ZipArchiveHandler(BaseArchiveHandler):
         return False
 
     def extract(self, path: Path, dest_dir: Path) -> list[Path]:
+        """Exécute l'opération extract.
+
+        Args:
+            path: Paramètre path.
+            dest_dir: Paramètre dest_dir.
+
+        Returns:
+            Résultat de l'opération extract.
+        """
         with zipfile.ZipFile(path, "r") as z:
             try:
-                z.extractall(dest_dir, filter="data")
+                z.extractall(dest_dir, filter="data")  # type: ignore[call-arg]
             except TypeError:
                 z.extractall(dest_dir)
         return [p for p in dest_dir.rglob("*") if p.is_file()]
@@ -60,6 +77,14 @@ class SevenZipArchiveHandler(BaseArchiveHandler):
     """Gestionnaire des archives 7Z via py7zr."""
 
     def can_handle(self, path: Path) -> bool:
+        """Exécute l'opération can handle.
+
+        Args:
+            path: Paramètre path.
+
+        Returns:
+            Résultat de l'opération can_handle.
+        """
         if not path.is_file():
             return False
         try:
@@ -79,6 +104,15 @@ class SevenZipArchiveHandler(BaseArchiveHandler):
         return False
 
     def extract(self, path: Path, dest_dir: Path) -> list[Path]:
+        """Exécute l'opération extract.
+
+        Args:
+            path: Paramètre path.
+            dest_dir: Paramètre dest_dir.
+
+        Returns:
+            Résultat de l'opération extract.
+        """
         import py7zr
 
         with py7zr.SevenZipFile(path, mode="r") as z:
@@ -90,6 +124,14 @@ class RarArchiveHandler(BaseArchiveHandler):
     """Gestionnaire des archives RAR via rarfile."""
 
     def can_handle(self, path: Path) -> bool:
+        """Exécute l'opération can handle.
+
+        Args:
+            path: Paramètre path.
+
+        Returns:
+            Résultat de l'opération can_handle.
+        """
         if not path.is_file():
             return False
         try:
@@ -109,6 +151,15 @@ class RarArchiveHandler(BaseArchiveHandler):
         return False
 
     def extract(self, path: Path, dest_dir: Path) -> list[Path]:
+        """Exécute l'opération extract.
+
+        Args:
+            path: Paramètre path.
+            dest_dir: Paramètre dest_dir.
+
+        Returns:
+            Résultat de l'opération extract.
+        """
         import rarfile
 
         with rarfile.RarFile(path) as rf:

@@ -116,14 +116,14 @@ class BrowserLoginHelper:
                     }
                     if ch:
                         kwargs["channel"] = ch
-                    context = p.chromium.launch_persistent_context(**kwargs)
+                    context = p.chromium.launch_persistent_context(**kwargs)  # type: ignore[arg-type]
                     logger.info(f"Navigateur ouvert avec succès (moteur={ch or 'playwright-chromium'}).")
                     break
                 except Exception as e:
                     logger.warning(f"Échec du lancement avec le canal {ch}: {e}")
 
             if context is None:
-                from src.services.browser_updater_service import BrowserUpdaterService
+                from src.infrastructure.network.browser_updater_service import BrowserUpdaterService
 
                 logger.info("Tentative d'installation automatique de Chromium pour Playwright...")
                 ok_install, install_msg = BrowserUpdaterService.install_chromium_stream()
@@ -137,7 +137,7 @@ class BrowserLoginHelper:
                             "user_agent": effective_ua,
                             "viewport": None,
                         }
-                        context = p.chromium.launch_persistent_context(**kwargs)
+                        context = p.chromium.launch_persistent_context(**kwargs)  # type: ignore[arg-type]
                         logger.info("Navigateur ouvert avec succès après installation de Chromium.")
                     except Exception as e:
                         return False, f"Impossible de lancer le navigateur après installation (Erreur: {e}).", {}

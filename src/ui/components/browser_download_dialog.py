@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-from src.services.browser_updater_service import BrowserUpdaterService
+from src.infrastructure.network.browser_updater_service import BrowserUpdaterService
 from src.i18n import tr
 from src.utils.logger import logger
 from src.utils.thread_utils import BaseWorker, safe_stop_thread
@@ -29,10 +29,12 @@ class BrowserInstallWorker(BaseWorker):
         self._cancel_event = threading.Event()
 
     def cancel(self):
+        """Exécute l'opération cancel."""
         super().cancel()
         self._cancel_event.set()
 
     def run(self):
+        """Exécute l'opération run."""
         self._is_running = True
         try:
 
@@ -147,6 +149,7 @@ class BrowserDownloadDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def start_install(self):
+        """Exécute l'opération start install."""
         self.worker = BrowserInstallWorker(self)
         self.worker.progress_updated.connect(self._on_progress_updated)
         self.worker.install_finished.connect(self._on_install_finished)
@@ -180,6 +183,11 @@ class BrowserDownloadDialog(QDialog):
             self.reject()
 
     def closeEvent(self, event):
+        """Exécute l'opération closeevent.
+
+        Args:
+            event: Paramètre event.
+        """
         if self.worker:
             safe_stop_thread(self.worker)
             self.worker = None

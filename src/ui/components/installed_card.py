@@ -32,6 +32,7 @@ class InstalledCard(BaseModCard):
         self.init_ui()
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         self.setStyleSheet("""
             QFrame#InstalledCard {
                 background-color: #131726;
@@ -166,6 +167,11 @@ class InstalledCard(BaseModCard):
         self._load_thumbnail_async()
 
     def mousePressEvent(self, event):
+        """Exécute l'opération mousepressevent.
+
+        Args:
+            event: Paramètre event.
+        """
         if event.button() == Qt.MouseButton.LeftButton:
             child = self.childAt(event.pos())
             if (hasattr(self, "btn_folder") and (child == self.btn_folder or self.btn_folder.isAncestorOf(child))) or (

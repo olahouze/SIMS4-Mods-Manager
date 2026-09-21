@@ -22,14 +22,36 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
 
     @property
     def db_manager(self) -> DatabaseManager:
+        """Exécute l'opération db manager.
+
+        Returns:
+            Résultat de l'opération db_manager.
+        """
         return self._custom_db_manager or DatabaseManager.get_instance()
 
     def get_by_id(self, mod_id: int) -> Optional[CatalogModEntity]:
+        """Exécute l'opération get by id.
+
+        Args:
+            mod_id: Paramètre mod_id.
+
+        Returns:
+            Résultat de l'opération get_by_id.
+        """
         with self.db_manager.get_session() as session:
             model = session.query(CatalogMod).filter(CatalogMod.id == mod_id).first()
             return ModelMapper.catalog_to_entity(model) if model else None
 
     def get_by_source_and_remote_id(self, source: str, remote_id: str) -> Optional[CatalogModEntity]:
+        """Exécute l'opération get by source and remote id.
+
+        Args:
+            source: Paramètre source.
+            remote_id: Paramètre remote_id.
+
+        Returns:
+            Résultat de l'opération get_by_source_and_remote_id.
+        """
         with self.db_manager.get_session() as session:
             model = (
                 session.query(CatalogMod).filter(CatalogMod.source == source, CatalogMod.remote_id == remote_id).first()
@@ -51,6 +73,25 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
         sort_by: str = "updated_date",
         sort_order: str = "desc",
     ) -> tuple[list[CatalogModEntity], int]:
+        """Exécute l'opération search.
+
+        Args:
+            query: Paramètre query.
+            category: Paramètre category.
+            author: Paramètre author.
+            source: Paramètre source.
+            access: Paramètre access.
+            status: Paramètre status.
+            mod_type: Paramètre mod_type.
+            sort: Paramètre sort.
+            limit: Paramètre limit.
+            offset: Paramètre offset.
+            sort_by: Paramètre sort_by.
+            sort_order: Paramètre sort_order.
+
+        Returns:
+            Résultat de l'opération search.
+        """
         with self.db_manager.get_session() as session:
             q = build_catalog_query(
                 session=session,
@@ -71,6 +112,15 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
             return [ModelMapper.catalog_to_entity(m) for m in models], total_count
 
     def get_all(self, limit: Optional[int] = None, offset: int = 0) -> list[CatalogModEntity]:
+        """Exécute l'opération get all.
+
+        Args:
+            limit: Paramètre limit.
+            offset: Paramètre offset.
+
+        Returns:
+            Résultat de l'opération get_all.
+        """
         with self.db_manager.get_session() as session:
             q = session.query(CatalogMod).order_by(CatalogMod.title.asc())
             if offset > 0:
@@ -81,6 +131,14 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
             return [ModelMapper.catalog_to_entity(m) for m in models]
 
     def save(self, entity: CatalogModEntity) -> CatalogModEntity:
+        """Exécute l'opération save.
+
+        Args:
+            entity: Paramètre entity.
+
+        Returns:
+            Résultat de l'opération save.
+        """
         with self.db_manager.get_session() as session:
             model: Optional[CatalogMod] = None
             if entity.id is not None:
@@ -103,6 +161,14 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
             return ModelMapper.catalog_to_entity(model)
 
     def save_batch(self, entities: list[CatalogModEntity]) -> int:
+        """Exécute l'opération save batch.
+
+        Args:
+            entities: Paramètre entities.
+
+        Returns:
+            Résultat de l'opération save_batch.
+        """
         if not entities:
             return 0
         saved_count = 0
@@ -123,6 +189,15 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
         return saved_count
 
     def update_requirements_overrides(self, mod_id: int, overrides: dict[str, str]) -> bool:
+        """Exécute l'opération update requirements overrides.
+
+        Args:
+            mod_id: Paramètre mod_id.
+            overrides: Paramètre overrides.
+
+        Returns:
+            Résultat de l'opération update_requirements_overrides.
+        """
         with self.db_manager.get_session() as session:
             model = session.query(CatalogMod).filter(CatalogMod.id == mod_id).first()
             if not model:
@@ -134,6 +209,11 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
             return True
 
     def get_categories(self) -> list[str]:
+        """Exécute l'opération get categories.
+
+        Returns:
+            Résultat de l'opération get_categories.
+        """
         with self.db_manager.get_session() as session:
             results = (
                 session.query(distinct(CatalogMod.category))
@@ -143,5 +223,10 @@ class SqlAlchemyCatalogRepository(ICatalogRepository):
             return sorted([r[0] for r in results if r[0]])
 
     def count(self) -> int:
+        """Exécute l'opération count.
+
+        Returns:
+            Résultat de l'opération count.
+        """
         with self.db_manager.get_session() as session:
             return session.query(CatalogMod).count()

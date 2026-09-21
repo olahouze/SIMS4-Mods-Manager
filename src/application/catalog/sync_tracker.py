@@ -49,6 +49,16 @@ class SyncTracker:
         categories_list: Optional[List[Dict[str, Any]]] = None,
         max_pages_per_cat: int = 0,
     ) -> None:
+        """Exécute l'opération start.
+
+        Args:
+            max_pages: Paramètre max_pages.
+            categories_list: Paramètre categories_list.
+            max_pages_per_cat: Paramètre max_pages_per_cat.
+
+        Returns:
+            Résultat de l'opération start.
+        """
         with cls._lock:
             cls.is_running = True
             cls.is_paused = False
@@ -121,6 +131,16 @@ class SyncTracker:
 
     @classmethod
     def update_progress(cls, percent: int, message: str, current_category: Optional[str] = None) -> None:
+        """Exécute l'opération update progress.
+
+        Args:
+            percent: Paramètre percent.
+            message: Paramètre message.
+            current_category: Paramètre current_category.
+
+        Returns:
+            Résultat de l'opération update_progress.
+        """
         with cls._lock:
             cls.progress_percent = max(0, min(100, percent))
             cls.message = message
@@ -129,6 +149,15 @@ class SyncTracker:
 
     @classmethod
     def record_page(cls, new_count: int, is_first_page: bool = False) -> None:
+        """Exécute l'opération record page.
+
+        Args:
+            new_count: Paramètre new_count.
+            is_first_page: Paramètre is_first_page.
+
+        Returns:
+            Résultat de l'opération record_page.
+        """
         with cls._lock:
             cls.pages_completed += 1
             cls.total_scraped += new_count
@@ -139,6 +168,18 @@ class SyncTracker:
 
     @classmethod
     def update_category(cls, cat_id: str, pages_completed: int, total_pages: int, mods_count: int, status: str) -> None:
+        """Exécute l'opération update category.
+
+        Args:
+            cat_id: Paramètre cat_id.
+            pages_completed: Paramètre pages_completed.
+            total_pages: Paramètre total_pages.
+            mods_count: Paramètre mods_count.
+            status: Paramètre status.
+
+        Returns:
+            Résultat de l'opération update_category.
+        """
         with cls._lock:
             if cat_id in cls.categories:
                 cls.categories[cat_id].update(
@@ -161,6 +202,14 @@ class SyncTracker:
 
     @classmethod
     def set_error(cls, message: str) -> None:
+        """Exécute l'opération set error.
+
+        Args:
+            message: Paramètre message.
+
+        Returns:
+            Résultat de l'opération set_error.
+        """
         with cls._lock:
             cls.has_error = True
             cls.error_message = message
@@ -169,6 +218,14 @@ class SyncTracker:
 
     @classmethod
     def finish(cls, total_new: int) -> None:
+        """Exécute l'opération finish.
+
+        Args:
+            total_new: Paramètre total_new.
+
+        Returns:
+            Résultat de l'opération finish.
+        """
         with cls._lock:
             cls.progress_percent = 100
             cls.total_scraped = total_new
@@ -226,6 +283,11 @@ class SyncTracker:
 
     @classmethod
     def to_response(cls) -> CatalogSyncStatusResponse:
+        """Exécute l'opération to response.
+
+        Returns:
+            Résultat de l'opération to_response.
+        """
         with cls._lock:
             now = time.time()
             if not cls.is_running or (now - cls._last_count_time) > 10.0 or cls._cached_db_count == 0:

@@ -42,6 +42,7 @@ class SettingsView(QWidget):
         self.i18n.language_changed.connect(self.retranslate_ui)
 
     def init_ui(self):
+        """Exécute l'opération init ui."""
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
@@ -210,6 +211,7 @@ class SettingsView(QWidget):
             self.db_stats_lbl.setText(tr("settings.db_stats_error"))
 
     def confirm_and_purge_database(self):
+        """Exécute l'opération confirm and purge database."""
         reply = QMessageBox.question(
             self,
             tr("settings.purge_confirm_title"),
@@ -232,17 +234,20 @@ class SettingsView(QWidget):
                 QMessageBox.warning(self, tr("dialogs.error_title"), tr("settings.purge_error", error=str(e)))
 
     def browse_mods_folder(self):
+        """Exécute l'opération browse mods folder."""
         dir_path = QFileDialog.getExistingDirectory(self, tr("settings.select_mods_dir"))
         if dir_path:
             self.mods_path_input.setText(dir_path)
             self._on_mods_path_changed(dir_path)
 
     def browse_game_exe(self):
+        """Exécute l'opération browse game exe."""
         file_path, _ = QFileDialog.getOpenFileName(self, tr("settings.select_game_exe"), "", tr("settings.exe_filter"))
         if file_path:
             self.exe_path_input.setText(file_path)
 
     def launch_game(self):
+        """Exécute l'opération launch game."""
         try:
             res = self.api_client.launch_game()
             QMessageBox.information(
@@ -252,6 +257,7 @@ class SettingsView(QWidget):
             QMessageBox.warning(self, tr("dialogs.error_title"), tr("nav.launch_game_error", error=str(e)))
 
     def clear_cache(self):
+        """Exécute l'opération clear cache."""
         try:
             res = self.api_client.clear_cache()
             count = res.get("deleted_count", 0)
@@ -262,6 +268,7 @@ class SettingsView(QWidget):
             QMessageBox.warning(self, tr("dialogs.error_title"), tr("settings.clear_cache_error", error=str(e)))
 
     def save_settings(self):
+        """Exécute l'opération save settings."""
         current_lang = self.i18n.get_language()
         payload = {
             "custom_mods_dir": self.mods_path_input.text().strip() or None,

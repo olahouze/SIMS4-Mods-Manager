@@ -14,13 +14,15 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 
-from src.services.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
+from src.application.dependencies.dependency_normalizer import clean_dependency_title, detect_game_dlc_or_base_game
 from src.ui.components.dependency_card import DependencyCardWidget
 from src.ui.components.author_interpellate_widget import AuthorInterpellateWidget
 from src.ui.theme import Theme
 
 
 class DetailRequirementsWidget(QWidget):
+    """Classe DetailRequirementsWidget : assure la gestion et l'orchestration de Detailrequirementswidget."""
+
     toggle_comment_requested = Signal(dict, bool)  # dep, to_comment
     override_changed = Signal(str, str)  # module_name, "COMMENT" | "MOD"
     report_sent = Signal(str)
@@ -102,6 +104,11 @@ class DetailRequirementsWidget(QWidget):
 
     @property
     def btn_report_author(self) -> QPushButton:
+        """Exécute l'opération btn report author.
+
+        Returns:
+            Résultat de l'opération btn_report_author.
+        """
         return self.interpellate_widget.btn_report
 
     def _toggle_collapse(self):
@@ -110,6 +117,7 @@ class DetailRequirementsWidget(QWidget):
         self.req_collapse_btn.setText("▼ Développer" if self._is_collapsed else "▲ Réduire")
 
     def set_loading(self):
+        """Exécute l'opération set loading."""
         self._is_collapsed = False
         self.req_frame.setVisible(True)
         self.req_collapse_btn.setVisible(True)

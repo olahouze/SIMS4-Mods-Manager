@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 
 class HealthResponse(BaseModel):
+    """Classe HealthResponse : assure la gestion et l'orchestration de Healthresponse."""
+
     status: str
     version: str
     game_detected: bool
