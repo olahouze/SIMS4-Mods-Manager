@@ -13,19 +13,19 @@ class DrawerStyles:
                 border: 1px solid #dc2626; border-radius: 4px;
                 padding: 2px 6px; font-size: 10px; font-weight: 700;
             """
-        elif state == "PAUSED":
+        if state == "PAUSED":
             return """
                 background-color: #451a03; color: #fde68a;
                 border: 1px solid #d97706; border-radius: 4px;
                 padding: 2px 6px; font-size: 10px; font-weight: 700;
             """
-        elif state == "RUNNING":
+        if state == "RUNNING":
             return """
                 background-color: #1e1b4b; color: #93c5fd;
                 border: 1px solid #3b82f6; border-radius: 4px;
                 padding: 2px 6px; font-size: 10px; font-weight: 700;
             """
-        elif state == "STOPPED":
+        if state == "STOPPED":
             return """
                 background-color: #262626; color: #d4d4d8;
                 border: 1px solid #52525b; border-radius: 4px;
@@ -68,13 +68,13 @@ class DrawerStyles:
                 border: 1px solid #dc2626; border-radius: 6px;
                 padding: 4px 6px; font-size: 11px; font-weight: 700;
             """
-        elif state == "PAUSED":
+        if state == "PAUSED":
             return """
                 background-color: #451a03; color: #fde68a;
                 border: 1px solid #d97706; border-radius: 6px;
                 padding: 4px 6px; font-size: 11px; font-weight: 700;
             """
-        elif state == "RUNNING":
+        if state == "RUNNING":
             return """
                 background-color: #1e1b4b; color: #93c5fd;
                 border: 1px solid #3b82f6; border-radius: 6px;
@@ -96,7 +96,7 @@ class DrawerStyles:
                     font-size: 12px; font-weight: 700;
                 }
             """
-        elif loading:
+        if loading:
             return """
                 QPushButton {
                     background-color: #1e293b; color: #64748b;
@@ -123,7 +123,7 @@ class DrawerStyles:
                     font-size: 11px; font-weight: 600;
                 }
             """
-        elif is_paused:
+        if is_paused:
             return """
                 QPushButton {
                     background-color: #1e3a8a; color: #93c5fd;

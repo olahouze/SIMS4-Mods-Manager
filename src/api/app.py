@@ -55,6 +55,33 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    from src.core.security import verify_internal_token
+    from fastapi.responses import JSONResponse
+
+    @app.middleware("http")
+    async def security_token_middleware(request, call_next):
+        """Vérifie l'origine loopback et le jeton X-Internal-Token pour sécuriser l'API locale."""
+        path = request.url.path
+        public_paths = ("/api/system/ping", "/docs", "/redoc", "/openapi.json")
+        if path.startswith(public_paths) or path == "/":
+            return await call_next(request)
+
+        client_host = request.client.host if request.client else ""
+        if client_host and client_host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Accès restreint à l'environnement local (loopback)."},
+            )
+
+        token = request.headers.get("X-Internal-Token")
+        if not verify_internal_token(token):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Jeton d'autorisation interne (X-Internal-Token) manquant ou invalide."},
+            )
+
+        return await call_next(request)
+
     # Mount API routers
     app.include_router(accounts_router.router, prefix="/api")
     app.include_router(catalog_router.router, prefix="/api")

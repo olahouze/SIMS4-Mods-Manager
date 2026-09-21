@@ -191,10 +191,10 @@ class SessionManager:
                     html = resp.text
                     if "elUserNav" in html or "Sign Out" in html or "Déconnexion" in html:
                         return True, "Session membre connectée et active."
-                    elif "cf_clearance" in str(session.cookies) or "ips4_hasAcceptedAge" in str(session.cookies):
+                    if "cf_clearance" in str(session.cookies) or "ips4_hasAcceptedAge" in str(session.cookies):
                         return True, "Session active (Anti-Bot Cloudflare & +18 ans validés)."
                     return True, "Accès au site vérifié avec succès."
-                elif resp.status_code in [403, 503]:
+                if resp.status_code in [403, 503]:
                     return (
                         False,
                         f"Protection Cloudflare active (Code {resp.status_code}). Veuillez rouvrir le navigateur.",
@@ -208,7 +208,7 @@ class SessionManager:
                     data = resp.json().get("data", {}).get("attributes", {})
                     name = data.get("full_name") or data.get("email") or "Connecté"
                     return True, f"Connecté à Patreon ({name})."
-                elif resp.status_code in [401, 403]:
+                if resp.status_code in [401, 403]:
                     return False, "Non connecté à Patreon ou session expirée."
 
             return False, f"Réponse inattendue (Code {resp.status_code})"

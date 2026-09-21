@@ -57,8 +57,8 @@ import httpx
 from src.api.client import ApiClient
 from src.core.config import AppConfig
 from src.core.session_manager import SessionManager
-from src.database.manager import DatabaseManager
-from src.database.models import CatalogMod
+from src.infrastructure.database.manager import DatabaseManager
+from src.infrastructure.database.models import CatalogMod
 
 # Répertoires clés
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -92,6 +92,10 @@ class SimulationRunner:
         self.limit_audit = -1 if (limit_audit is None or limit_audit <= 0) else limit_audit
         self.fail_on_errors = fail_on_errors
         self.skip_sync = skip_sync
+
+        import os
+
+        os.environ["SIMS4_DISABLE_AUTH"] = "1"
 
         self._lock = threading.Lock()
         self._interrupted = False
@@ -180,12 +184,26 @@ class SimulationRunner:
         if venv_py.exists():
             py_exe = str(venv_py)
 
-        cmd = [py_exe, str(PROJECT_ROOT / "run.py"), "--server", "--port", str(port), "--host", host]
+        import os
+
+        cmd = [
+            py_exe,
+            str(PROJECT_ROOT / "run.py"),
+            "--server",
+            "--port",
+            str(port),
+            "--host",
+            host,
+            "--disable-auth",
+        ]
+        sub_env = dict(os.environ)
+        sub_env["SIMS4_DISABLE_AUTH"] = "1"
         self.server_process = subprocess.Popen(
             cmd,
             cwd=str(PROJECT_ROOT),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=sub_env,
         )
 
         atexit.register(self._cleanup_server)

@@ -6,9 +6,9 @@ import json
 import queue
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy.orm import Session
 
-from src.api.deps import get_db
+from src.api.deps import get_catalog_repo
+from src.domain.interfaces.repositories.catalog_repository_interface import ICatalogRepository
 from src.api.schemas.catalog import (
     CatalogInstallRequest,
     CatalogInstallResponse,
@@ -17,16 +17,12 @@ from src.api.schemas.catalog import (
 from src.core.concurrency.thread_pool_manager import ThreadPoolManager
 from src.core.config import AppConfig
 from src.core.session_manager import SessionManager
-from src.database.manager import DatabaseManager
-from src.infrastructure.database.repositories.sqlalchemy_catalog_repository import (
-    SqlAlchemyCatalogRepository,
-)
+from src.infrastructure.database.manager import DatabaseManager
 from src.application.catalog.catalog_sync_service import check_catalog_dependencies
 from src.application.mods.mod_installer_service import perform_mod_install
 from src.utils.logger import logger
 
 install_router = APIRouter(tags=["Catalog Installation"])
-_catalog_repo = SqlAlchemyCatalogRepository()
 
 
 @install_router.get("/thumbnail")
@@ -75,15 +71,16 @@ def purge_catalog_endpoint():
 
 
 @install_router.post("/check-dependencies", response_model=DependenciesCheckResponse)
-def check_dependencies(payload: CatalogInstallRequest, session: Session = Depends(get_db)):
+def check_dependencies(
+    payload: CatalogInstallRequest,
+    catalog_repo: ICatalogRepository = Depends(get_catalog_repo),
+):
     """Analyse l'arbre de dépendances d'un mod avant son installation."""
-    from src.database.models import CatalogMod
-
     cat_mod = None
     if payload.catalog_mod_id:
-        cat_mod = session.query(CatalogMod).filter_by(id=payload.catalog_mod_id).first()
+        cat_mod = catalog_repo.get_by_id(payload.catalog_mod_id)
     elif payload.source and payload.remote_id:
-        cat_mod = session.query(CatalogMod).filter_by(source=payload.source, remote_id=payload.remote_id).first()
+        cat_mod = catalog_repo.get_by_source_and_remote_id(payload.source, payload.remote_id)
 
     page_url = cat_mod.page_url if cat_mod else payload.page_url
     source = str((cat_mod.source if cat_mod else payload.source) or "loverslab")

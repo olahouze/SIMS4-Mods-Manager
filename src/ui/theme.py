@@ -121,7 +121,7 @@ class Theme:
                 }}
                 QPushButton:hover {{ background-color: {cls.PRIMARY_HOVER}; }}
             """
-        elif variant == "warning":
+        if variant == "warning":
             return f"""
                 QPushButton {{
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #b45309);
@@ -136,7 +136,7 @@ class Theme:
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b45309, stop:1 #92400e);
                 }}
             """
-        elif variant == "danger":
+        if variant == "danger":
             return f"""
                 QPushButton {{
                     background-color: #dc2626;

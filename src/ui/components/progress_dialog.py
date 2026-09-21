@@ -1,6 +1,4 @@
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -8,15 +6,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.ui.components.base_modal_dialog import BaseModalDialog
 
-class ProgressDialog(QDialog):
+
+class ProgressDialog(BaseModalDialog):
     """A premium dark-themed dialog displaying real-time download speed, percentage, and unzip status."""
 
     def __init__(self, title: str = "Opération en cours...", parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setFixedSize(500, 190)
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint)
+        super().__init__(title=title, width=500, height=190, parent=parent, closable=False)
         self.init_ui(title)
 
     def init_ui(self, title: str):

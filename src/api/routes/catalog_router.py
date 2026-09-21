@@ -11,7 +11,7 @@ from src.api.schemas.catalog import (
     CatalogSyncStatusResponse,
     ModDetailsResponse,
 )
-from src.database.models import CatalogMod, InstalledMod
+from src.infrastructure.database.models import CatalogMod, InstalledMod
 from src.api.deps import get_db
 from src.providers import ProviderRegistry
 from src.application.catalog.catalog_sync_service import (

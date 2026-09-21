@@ -39,8 +39,18 @@ def main():
         default="127.0.0.1",
         help="Adresse IP / hôte d'écoute (défaut : 127.0.0.1)",
     )
+    parser.add_argument(
+        "--disable-auth",
+        action="store_true",
+        help="Désactive l'authentification par jeton interne (réservé aux tests et simulations)",
+    )
 
     args = parser.parse_args()
+
+    # Initialisation de la sécurité API locale
+    from src.core.security import init_security
+
+    token = init_security(disable_auth=args.disable_auth)
 
     # 1. Vérification et allocation dynamique de port libre
     initial_port = args.port
@@ -72,7 +82,7 @@ def main():
 
     # Initialisation du client API global pour la GUI
     api_url = f"http://{args.host}:{port}"
-    client = init_api_client(base_url=api_url)
+    client = init_api_client(base_url=api_url, token=token)
     logger.info(f"Client API configuré sur {api_url}")
 
     # Initialisation de Qt (se déroule pendant le démarrage Uvicorn)

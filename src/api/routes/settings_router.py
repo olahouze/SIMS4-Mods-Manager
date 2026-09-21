@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from src.api.schemas.settings import (
     SettingsResponse,
@@ -10,8 +10,10 @@ from src.api.schemas.settings import (
     DatabasePurgeResponse,
 )
 from src.core.config import AppConfig
-from src.database.models import CatalogMod, InstalledMod
-from src.database.manager import DatabaseManager
+from src.api.deps import get_catalog_repo, get_installed_repo
+from src.domain.interfaces.repositories.catalog_repository_interface import ICatalogRepository
+from src.domain.interfaces.repositories.mod_repository_interface import IInstalledModRepository
+from src.infrastructure.database.manager import DatabaseManager
 from src.application.game.game_service import GameDetector
 from src.utils.logger import logger
 
@@ -113,12 +115,14 @@ def launch_game():
 
 
 @router.get("/settings/database/stats", response_model=DatabaseStatsResponse)
-def get_database_stats():
+def get_database_stats(
+    catalog_repo: ICatalogRepository = Depends(get_catalog_repo),
+    installed_repo: IInstalledModRepository = Depends(get_installed_repo),
+):
     """Returns total counts of catalog mods and installed mods in local database."""
     db = DatabaseManager.get_instance()
-    with db.get_session() as session:
-        cat_count = session.query(CatalogMod).count()
-        inst_count = session.query(InstalledMod).count()
+    cat_count = db.get_catalog_mods_count()
+    inst_count = installed_repo.count()
 
     return DatabaseStatsResponse(
         catalog_mods_count=cat_count,

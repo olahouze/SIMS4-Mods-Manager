@@ -132,7 +132,7 @@ class PatreonProvider(BaseSourceProvider):
                     "external_links": external_links,
                     "published_at": post_data.get("published_at"),
                 }
-            elif resp.status_code in [401, 403]:
+            if resp.status_code in [401, 403]:
                 return {
                     "status": "PUBLIC",
                     "can_view": False,
@@ -151,8 +151,7 @@ class PatreonProvider(BaseSourceProvider):
                 html = page_resp.text
                 if "locked" in html.lower() or "unlock this post" in html.lower():
                     return {"status": "LOCKED", "can_view": False, "download_urls": [], "external_links": []}
-                else:
-                    return {"status": "PUBLIC", "can_view": True, "download_urls": [], "external_links": []}
+                return {"status": "PUBLIC", "can_view": True, "download_urls": [], "external_links": []}
         except Exception as e:
             logger.error(f"Fallback page check failed: {e}")
 
@@ -249,13 +248,12 @@ class PatreonProvider(BaseSourceProvider):
                     )
 
                 return stream_download(resp, dest_path, progress_callback, "Téléchargement Patreon")
-            elif resp.status_code == 403:
+            if resp.status_code == 403:
                 return (
                     False,
                     "Accès refusé par Patreon (Erreur HTTP 403). Veuillez connecter votre compte Patreon dans l'onglet 'Comptes & Anti-Bot' pour autoriser ce téléchargement.",
                 )
-            else:
-                return False, f"Erreur HTTP {resp.status_code} lors du téléchargement."
+            return False, f"Erreur HTTP {resp.status_code} lors du téléchargement."
         except Exception as e:
             return False, f"Exception lors du téléchargement: {e}"
 

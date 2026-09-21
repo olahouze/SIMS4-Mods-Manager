@@ -10,8 +10,8 @@ from src.api.schemas.updates import (
     UpdateAllResponse,
     UpdateBatchRequest,
 )
-from src.database.models import InstalledMod, CatalogMod
-from src.database.manager import DatabaseManager
+from src.infrastructure.database.models import InstalledMod, CatalogMod
+from src.infrastructure.database.manager import DatabaseManager
 from src.application.mods.mod_installer_service import ModInstaller
 from src.application.mods.mod_update_service import check_has_update, resolve_catalog_mod
 from src.providers import ProviderRegistry

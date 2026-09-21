@@ -34,6 +34,14 @@ class CatalogModEntity:
     requirements_overrides_json: dict[str, str] = field(default_factory=dict)
     last_scraped_at: Optional[datetime] = None
 
+    def get_requirements_mods_list(self) -> list[dict[str, Any]]:
+        """Retourne la liste des dépendances sous forme de dictionnaires."""
+        return self.requirements_mods_json or []
+
+    def get_requirements_overrides(self) -> dict[str, str]:
+        """Retourne le dictionnaire des classifications manuelles."""
+        return self.requirements_overrides_json or {}
+
 
 @dataclass
 class InstalledModEntity:

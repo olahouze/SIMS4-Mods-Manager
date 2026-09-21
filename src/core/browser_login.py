@@ -222,5 +222,4 @@ class BrowserLoginHelper:
                 user_agent=effective_ua,
             )
             return True, f"Session enregistrée pour {provider_name} ({len(cookies_dict)} cookies).", cookies_dict
-        else:
-            return False, "Aucun cookie récupéré.", {}
+        return False, "Aucun cookie récupéré.", {}

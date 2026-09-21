@@ -216,10 +216,9 @@ class RequirementReporterService:
                 "already_reported": True,
                 "reported_at": "à l'instant",
             }
-        else:
-            return {
-                "success": False,
-                "message": result_msg,
-                "already_reported": False,
-                "reported_at": None,
-            }
+        return {
+            "success": False,
+            "message": result_msg,
+            "already_reported": False,
+            "reported_at": None,
+        }

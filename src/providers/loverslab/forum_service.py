@@ -175,10 +175,9 @@ class LoversLabForumService:
 
                 logger.info(f"Commentaire publié avec succès sur LoversLab ({page_url}).")
                 return True, "Message publié avec succès sur le forum LoversLab."
-            elif post_resp.status_code == 403:
+            if post_resp.status_code == 403:
                 return False, "Accès refusé par LoversLab (Erreur 403 / Protection Cloudflare)."
-            else:
-                return False, f"Erreur HTTP {post_resp.status_code} lors de la publication du message."
+            return False, f"Erreur HTTP {post_resp.status_code} lors de la publication du message."
 
         except Exception as e:
             logger.error(f"Erreur lors de la publication du commentaire sur {page_url}: {e}")

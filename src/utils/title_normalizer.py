@@ -147,7 +147,7 @@ class TitleNormalizer:
         count = len(informative) if informative else len(tokens)
         if count <= 1:
             return max(base_threshold, 0.95)
-        elif count == 2:
+        if count == 2:
             return max(base_threshold, 0.85)
         return base_threshold
 
@@ -157,8 +157,7 @@ class TitleNormalizer:
         if not text:
             return ""
         s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", text)
-        s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
-        return s
+        return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
 
     @classmethod
     def canonical_fingerprint(cls, text: str) -> str:

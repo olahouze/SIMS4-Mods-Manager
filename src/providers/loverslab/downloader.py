@@ -124,11 +124,11 @@ def download_loverslab_file(
             msg = "Accès refusé par LoversLab (Code 403). Le téléchargement exige un compte membre connecté. Veuillez vous connecter dans l'onglet 'Comptes & Anti-Bot'."
             logger.error(msg)
             return False, msg
-        elif resp.status_code in [504, 502]:
+        if resp.status_code in [504, 502]:
             msg = f"Délai d'attente dépassé sur le serveur LoversLab (Code {resp.status_code}). Veuillez réessayer dans quelques instants."
             logger.error(msg)
             return False, msg
-        elif resp.status_code != 200:
+        if resp.status_code != 200:
             return False, f"Code d'erreur HTTP {resp.status_code}"
 
         content_type = resp.headers.get("Content-Type", "").lower()
@@ -217,8 +217,7 @@ def download_loverslab_file(
                         return stream_download(
                             bin_resp, dest_path, progress_callback, f"Téléchargement {cand_title or 'LoversLab'}"
                         )
-                    else:
-                        logger.debug(f"Candidat '{cand_title}' a renvoyé du HTML au lieu d'un binaire.")
+                    logger.debug(f"Candidat '{cand_title}' a renvoyé du HTML au lieu d'un binaire.")
                 else:
                     logger.warning(f"Candidat '{cand_title}' a retourné le code HTTP {bin_resp.status_code}.")
                     last_err = f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
@@ -237,8 +236,7 @@ def download_loverslab_file(
             bin_resp = session.get(att_href, headers=headers, stream=True, timeout=90, allow_redirects=True)
             if bin_resp.status_code == 200:
                 return stream_download(bin_resp, dest_path, progress_callback, "Téléchargement LoversLab")
-            else:
-                return False, f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
+            return False, f"Échec du téléchargement final (Code HTTP {bin_resp.status_code})"
 
         return False, last_err
 

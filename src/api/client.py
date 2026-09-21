@@ -8,10 +8,16 @@ class ApiClient:
     Used by all PySide6 GUI views to guarantee 100% decoupling from core/DB.
     """
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8000"):
+    def __init__(self, base_url: str = "http://127.0.0.1:8000", token: Optional[str] = None):
         self.base_url = base_url.rstrip("/")
+        from src.core.security import get_internal_token
+
+        self.token = token or get_internal_token()
+        headers = {}
+        if self.token:
+            headers["X-Internal-Token"] = self.token
         # High timeout for long-running actions like interactive login, downloads, sync
-        self._client = httpx.Client(base_url=self.base_url, timeout=360.0)
+        self._client = httpx.Client(base_url=self.base_url, headers=headers, timeout=360.0)
 
     def close(self) -> None:
         """Closes the underlying httpx.Client and releases connection resources."""
@@ -570,17 +576,10 @@ class ApiClient:
 _api_client: Optional[ApiClient] = None
 
 
-def init_api_client(base_url: str = "http://127.0.0.1:8000") -> ApiClient:
-    """Exécute l'opération init api client.
-
-    Args:
-        base_url: Paramètre base_url.
-
-    Returns:
-        Résultat de l'opération init_api_client.
-    """
+def init_api_client(base_url: str = "http://127.0.0.1:8000", token: Optional[str] = None) -> ApiClient:
+    """Initialise le client HTTP global avec l'URL de base et le jeton de sécurité interne."""
     global _api_client
-    _api_client = ApiClient(base_url=base_url)
+    _api_client = ApiClient(base_url=base_url, token=token)
     return _api_client
 
 

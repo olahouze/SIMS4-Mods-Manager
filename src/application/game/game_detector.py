@@ -35,8 +35,7 @@ def normalize_folder_name(name: str) -> str:
     """Normalizes whitespace (including non-breaking spaces \\xa0) and removes special symbols."""
     cleaned = name.replace("\xa0", " ").replace("\u202f", " ").replace("™", "").replace("®", "")
     cleaned = unicodedata.normalize("NFKD", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
-    return cleaned
+    return re.sub(r"\s+", " ", cleaned).strip().lower()
 
 
 def is_sims4_folder(name: str) -> bool:

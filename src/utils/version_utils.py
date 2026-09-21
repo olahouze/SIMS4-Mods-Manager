@@ -42,5 +42,4 @@ def normalize_version(version_str: Optional[str]) -> str:
     # Strip common prefixes like 'version', 'ver', 'v' (longest first to avoid partial match)
     s = re.sub(r"^(?:version|ver|v)\.?\s*", "", s, flags=re.IGNORECASE)
     # Strip trailing parentheses or notes
-    s = re.sub(r"\s*\(.*?\)$", "", s).strip()
-    return s
+    return re.sub(r"\s*\(.*?\)$", "", s).strip()

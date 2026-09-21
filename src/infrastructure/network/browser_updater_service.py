@@ -128,11 +128,10 @@ class BrowserUpdaterService:
                     progress_callback(100, "Installation finalisée avec succès.")
                 logger.info("Chromium pour Playwright installé avec succès.")
                 return True, "Installation de Chromium réussie."
-            else:
-                remaining_output = proc.stdout.read() if proc.stdout else ""
-                err_msg = f"Erreur lors de l'installation (code {returncode}): {remaining_output.strip()}"
-                logger.error(err_msg)
-                return False, err_msg
+            remaining_output = proc.stdout.read() if proc.stdout else ""
+            err_msg = f"Erreur lors de l'installation (code {returncode}): {remaining_output.strip()}"
+            logger.error(err_msg)
+            return False, err_msg
 
         except Exception as e:
             logger.error(f"Exception lors du téléchargement de Chromium: {e}")

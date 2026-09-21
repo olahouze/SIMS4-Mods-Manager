@@ -1,13 +1,14 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 from src.api.schemas.catalog import (
     DependenciesCheckResponse,
 )
 from src.database.manager import DatabaseManager
 from src.database.models import CatalogMod, InstalledMod
+from src.domain.models.mod_entity import CatalogModEntity
 from src.core.shutdown_manager import ShutdownManager
 from src.providers import ProviderRegistry
 from src.application.dependencies.dependency_resolver import resolve_mod_dependencies
@@ -229,7 +230,7 @@ def check_catalog_dependencies(
     mod_title: str,
     page_url: Optional[str],
     source: str,
-    cat_mod: Optional[CatalogMod] = None,
+    cat_mod: Optional[Union[CatalogMod, CatalogModEntity]] = None,
 ) -> DependenciesCheckResponse:
     """Vérifie l'état de résolution des dépendances d'un mod catalogue."""
     db = DatabaseManager.get_instance()
@@ -250,15 +251,16 @@ def check_catalog_dependencies(
                     det_dict: dict[str, Any] = (
                         det.model_dump() if hasattr(det, "model_dump") else (det if isinstance(det, dict) else {})
                     )
-                    if det_dict.get("requirements_text") is not None or det_dict.get("requirements_status"):
-                        cat_mod.requirements_text = det_dict.get("requirements_text")
-                        cat_mod.requirements_status = det_dict.get("requirements_status", "NONE")
-                        cat_mod.set_requirements_mods_list(det_dict.get("requirements_mods", []))
-                    if det_dict.get("download_urls"):
-                        cat_mod.set_download_urls_list(det_dict.get("download_urls", []))
-                    if det_dict.get("external_links"):
-                        cat_mod.set_external_links_list(det_dict.get("external_links", []))
-                    session.commit()
+                    if isinstance(cat_mod, CatalogMod):
+                        if det_dict.get("requirements_text") is not None or det_dict.get("requirements_status"):
+                            cat_mod.requirements_text = det_dict.get("requirements_text")
+                            cat_mod.requirements_status = det_dict.get("requirements_status", "NONE")
+                            cat_mod.set_requirements_mods_list(det_dict.get("requirements_mods", []))
+                        if det_dict.get("download_urls"):
+                            cat_mod.set_download_urls_list(det_dict.get("download_urls", []))
+                        if det_dict.get("external_links"):
+                            cat_mod.set_external_links_list(det_dict.get("external_links", []))
+                        session.commit()
             except Exception as e:
                 logger.debug(f"Erreur vérification requirements pour {mod_title}: {e}")
 
@@ -324,7 +326,7 @@ def check_catalog_dependencies(
                 game_dlc_dependencies=game_dlcs,
                 comment_dependencies=comment_deps,
             )
-        elif not_detected_scanning:
+        if not_detected_scanning:
             names = ", ".join(f"'{d.title}'" for d in not_detected_scanning)
             return DependenciesCheckResponse(
                 mod_title=mod_title,
@@ -339,18 +341,17 @@ def check_catalog_dependencies(
                 game_dlc_dependencies=game_dlcs,
                 comment_dependencies=comment_deps,
             )
-        else:
-            final_status = "RESOLVED" if (req_mods or game_dlcs) else (req_status or "NONE")
-            return DependenciesCheckResponse(
-                mod_title=mod_title,
-                requirements_status=final_status,
-                requirements_text=req_text,
-                can_install=True,
-                is_partial=False,
-                unfound_dependencies=[],
-                blocking_reason=None,
-                already_installed_dependencies=already_installed,
-                missing_dependencies=missing,
-                game_dlc_dependencies=game_dlcs,
-                comment_dependencies=comment_deps,
-            )
+        final_status = "RESOLVED" if (req_mods or game_dlcs) else (req_status or "NONE")
+        return DependenciesCheckResponse(
+            mod_title=mod_title,
+            requirements_status=final_status,
+            requirements_text=req_text,
+            can_install=True,
+            is_partial=False,
+            unfound_dependencies=[],
+            blocking_reason=None,
+            already_installed_dependencies=already_installed,
+            missing_dependencies=missing,
+            game_dlc_dependencies=game_dlcs,
+            comment_dependencies=comment_deps,
+        )

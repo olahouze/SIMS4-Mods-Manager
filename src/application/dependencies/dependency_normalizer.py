@@ -23,8 +23,7 @@ def clean_dependency_title(title: str) -> str:
     if not title:
         return ""
     cleaned = STRIP_LEADING_CHARS_REGEX.sub("", title).strip()
-    cleaned = CLEAN_PREFIX_REGEX.sub("", cleaned).strip().strip("'\"`[](){}")
-    return cleaned
+    return CLEAN_PREFIX_REGEX.sub("", cleaned).strip().strip("'\"`[](){}")
 
 
 def detect_game_dlc_or_base_game(clean_title: str) -> Tuple[bool, bool, Optional[str], Optional[str]]:
