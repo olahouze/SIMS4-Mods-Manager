@@ -102,4 +102,3 @@ def test_dlc_formatting_variations():
         is_dlc, name, code = GameDlcMatcher.match_dlc(text)
         assert is_dlc is True, f"Failed for {text}"
         assert code == expected_code, f"Expected {expected_code} for {text}, got {code}"
-

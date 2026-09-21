@@ -2,6 +2,7 @@
 Module de connexion à la base de données SQLite via SQLAlchemy.
 Fournit la création du moteur, la configuration de SessionLocal et l'initialisation des tables.
 """
+
 from typing import Optional
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine

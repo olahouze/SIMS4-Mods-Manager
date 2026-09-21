@@ -42,6 +42,7 @@ def resolve_mod_dependencies(
     """
     if is_syncing is None:
         from src.services.catalog_sync_service import SyncTracker
+
         is_syncing = SyncTracker.is_running
 
     items = []
@@ -61,7 +62,9 @@ def resolve_mod_dependencies(
             c_fp = ModMatcher.canonical_fingerprint(clean_t)
             for ov_key, ov_val in requirements_overrides.items():
                 ov_fp = ModMatcher.canonical_fingerprint(ov_key)
-                if (title == ov_key or clean_t == ov_key or (ov_fp and (ov_fp == t_fp or ov_fp == c_fp))) and ov_val == "COMMENT":
+                if (
+                    title == ov_key or clean_t == ov_key or (ov_fp and (ov_fp == t_fp or ov_fp == c_fp))
+                ) and ov_val == "COMMENT":
                     is_comment = True
                     break
 
@@ -266,7 +269,6 @@ def resolve_mod_dependencies(
     return deduped
 
 
-
 def find_dependent_installed_mods(installed_mod_id: int, session) -> List[Dict[str, Any]]:
     """
     Identifie tous les mods installés qui dépendent du mod cible (installed_mod_id).
@@ -360,11 +362,12 @@ def find_dependent_installed_mods(installed_mod_id: int, session) -> List[Dict[s
                     break
 
         if depends_on_target:
-            dependent_mods.append({
-                "id": other.id,
-                "title": other.title,
-                "folder_name": other.folder_name,
-            })
+            dependent_mods.append(
+                {
+                    "id": other.id,
+                    "title": other.title,
+                    "folder_name": other.folder_name,
+                }
+            )
 
     return dependent_mods
-

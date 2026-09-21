@@ -118,4 +118,3 @@ class ImageCache:
             cls._cache.clear()
             cls._byte_sizes.clear()
             cls._current_bytes = 0
-

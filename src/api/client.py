@@ -112,7 +112,6 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
-
     def install_mod(
         self,
         catalog_mod_id: Optional[int] = None,
@@ -121,6 +120,9 @@ class ApiClient:
         page_url: Optional[str] = None,
         title: Optional[str] = None,
         updated_date: Optional[str] = None,
+        install_dependencies: bool = True,
+        allow_partial: bool = False,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         payload = {
             "catalog_mod_id": catalog_mod_id,
@@ -129,7 +131,10 @@ class ApiClient:
             "page_url": page_url,
             "title": title,
             "updated_date": updated_date,
+            "install_dependencies": install_dependencies,
+            "allow_partial": allow_partial,
         }
+        payload.update(kwargs)
         resp = self._client.post("/api/catalog/install", json=payload)
         resp.raise_for_status()
         return resp.json()
@@ -161,7 +166,6 @@ class ApiClient:
         return resp.json()
 
     def install_mod_stream(self, payload: Dict[str, Any]):
-
         """Streams real-time progress events from the API during mod installation."""
         import json
 

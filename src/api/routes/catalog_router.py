@@ -82,9 +82,7 @@ def get_catalog(
     relevant_installed = session.query(InstalledMod).filter(or_(*conditions)).all() if conditions else []
     installed_by_remote = {(im.source, im.remote_id): im for im in relevant_installed if im.remote_id}
     installed_by_title = {im.title.lower(): im for im in relevant_installed if im.title}
-    installed_by_id = {
-        im.catalog_mod_id: im for im in relevant_installed if im.catalog_mod_id and not im.remote_id
-    }
+    installed_by_id = {im.catalog_mod_id: im for im in relevant_installed if im.catalog_mod_id and not im.remote_id}
 
     # Pre-collect all requirement remote_ids for batch lookup (eliminates N+1 queries)
     needed_remote_ids = set()
@@ -117,7 +115,6 @@ def get_catalog(
             is_syncing=SyncTracker.is_running,
             catalog_remote_ids=catalog_remote_ids,
         )
-
 
         paginated_items.append(
             CatalogModItem(
@@ -166,9 +163,7 @@ def start_sync(payload: CatalogSyncRequest, background_tasks: BackgroundTasks):
         if payload.max_pages <= 0
         else sum(min(payload.max_pages, c.get("default_pages", 1)) for c in categories)
     )
-    page_msg = (
-        "toutes les pages détectées" if payload.max_pages <= 0 else f"{payload.max_pages} pages par source"
-    )
+    page_msg = "toutes les pages détectées" if payload.max_pages <= 0 else f"{payload.max_pages} pages par source"
     SyncTracker.start(initial_pages, categories_list=categories, max_pages_per_cat=payload.max_pages)
     SyncTracker.message = f"Synchronisation démarrée ({page_msg})."
     background_tasks.add_task(_run_catalog_sync, payload.max_pages)

@@ -35,6 +35,7 @@ class BrowserInstallWorker(BaseWorker):
     def run(self):
         self._is_running = True
         try:
+
             def _on_progress(pct: int, msg: str):
                 if not self._is_cancelled:
                     self.progress_updated.emit(pct, msg)

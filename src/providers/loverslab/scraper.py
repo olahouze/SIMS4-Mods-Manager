@@ -5,7 +5,10 @@ from bs4 import BeautifulSoup
 
 from src.providers.base import BaseSourceProvider
 from src.providers.patreon import PatreonProvider
-from src.providers.loverslab.downloader import download_loverslab_file, extract_download_candidates as _ext_dl_candidates
+from src.providers.loverslab.downloader import (
+    download_loverslab_file,
+    extract_download_candidates as _ext_dl_candidates,
+)
 from src.providers.loverslab.parsers import extract_gallery_screenshots, sanitize_description_html
 from src.providers.loverslab.requirements_extractor import (
     extract_loverslab_requirements,
@@ -30,20 +33,104 @@ class LoversLabProvider(BaseSourceProvider):
     category_url = "https://www.loverslab.com/files/category/161-the-sims-4/"
 
     CATEGORIES = [
-        {"id": "174", "name": "WickedWhims", "slug": "174-wickedwhims", "url": "https://www.loverslab.com/files/category/174-wickedwhims/", "default_pages": 16},
-        {"id": "201", "name": "Animations - WickedWhims", "slug": "201-animations-wickedwhims", "url": "https://www.loverslab.com/files/category/201-animations-wickedwhims/", "default_pages": 7},
-        {"id": "215", "name": "Translations - WickedWhims", "slug": "215-translations-wickedwhims", "url": "https://www.loverslab.com/files/category/215-translations-wickedwhims/", "default_pages": 5},
-        {"id": "202", "name": "Animations - Other", "slug": "202-animations-other", "url": "https://www.loverslab.com/files/category/202-animations-other/", "default_pages": 7},
-        {"id": "200", "name": "Extensions", "slug": "200-extensions", "url": "https://www.loverslab.com/files/category/200-extensions/", "default_pages": 3},
-        {"id": "203", "name": "Clothing", "slug": "203-clothing", "url": "https://www.loverslab.com/files/category/203-clothing/", "default_pages": 128},
-        {"id": "204", "name": "Accessories & Makeup", "slug": "204-accessories-makeup", "url": "https://www.loverslab.com/files/category/204-accessories-makeup/", "default_pages": 16},
-        {"id": "205", "name": "Body Parts", "slug": "205-body-parts", "url": "https://www.loverslab.com/files/category/205-body-parts/", "default_pages": 12},
-        {"id": "206", "name": "Objects", "slug": "206-objects", "url": "https://www.loverslab.com/files/category/206-objects/", "default_pages": 86},
-        {"id": "404", "name": "Paintings & Posters", "slug": "404-paintings-posters", "url": "https://www.loverslab.com/files/category/404-paintings-posters/", "default_pages": 14},
-        {"id": "207", "name": "Lots", "slug": "207-lots", "url": "https://www.loverslab.com/files/category/207-lots/", "default_pages": 18},
-        {"id": "209", "name": "Translations", "slug": "209-translations", "url": "https://www.loverslab.com/files/category/209-translations/", "default_pages": 35},
-        {"id": "210", "name": "Other", "slug": "210-other", "url": "https://www.loverslab.com/files/category/210-other/", "default_pages": 23},
-        {"id": "216", "name": "Uncategorized", "slug": "216-uncategorized", "url": "https://www.loverslab.com/files/category/216-uncategorized/", "default_pages": 27},
+        {
+            "id": "174",
+            "name": "WickedWhims",
+            "slug": "174-wickedwhims",
+            "url": "https://www.loverslab.com/files/category/174-wickedwhims/",
+            "default_pages": 16,
+        },
+        {
+            "id": "201",
+            "name": "Animations - WickedWhims",
+            "slug": "201-animations-wickedwhims",
+            "url": "https://www.loverslab.com/files/category/201-animations-wickedwhims/",
+            "default_pages": 7,
+        },
+        {
+            "id": "215",
+            "name": "Translations - WickedWhims",
+            "slug": "215-translations-wickedwhims",
+            "url": "https://www.loverslab.com/files/category/215-translations-wickedwhims/",
+            "default_pages": 5,
+        },
+        {
+            "id": "202",
+            "name": "Animations - Other",
+            "slug": "202-animations-other",
+            "url": "https://www.loverslab.com/files/category/202-animations-other/",
+            "default_pages": 7,
+        },
+        {
+            "id": "200",
+            "name": "Extensions",
+            "slug": "200-extensions",
+            "url": "https://www.loverslab.com/files/category/200-extensions/",
+            "default_pages": 3,
+        },
+        {
+            "id": "203",
+            "name": "Clothing",
+            "slug": "203-clothing",
+            "url": "https://www.loverslab.com/files/category/203-clothing/",
+            "default_pages": 128,
+        },
+        {
+            "id": "204",
+            "name": "Accessories & Makeup",
+            "slug": "204-accessories-makeup",
+            "url": "https://www.loverslab.com/files/category/204-accessories-makeup/",
+            "default_pages": 16,
+        },
+        {
+            "id": "205",
+            "name": "Body Parts",
+            "slug": "205-body-parts",
+            "url": "https://www.loverslab.com/files/category/205-body-parts/",
+            "default_pages": 12,
+        },
+        {
+            "id": "206",
+            "name": "Objects",
+            "slug": "206-objects",
+            "url": "https://www.loverslab.com/files/category/206-objects/",
+            "default_pages": 86,
+        },
+        {
+            "id": "404",
+            "name": "Paintings & Posters",
+            "slug": "404-paintings-posters",
+            "url": "https://www.loverslab.com/files/category/404-paintings-posters/",
+            "default_pages": 14,
+        },
+        {
+            "id": "207",
+            "name": "Lots",
+            "slug": "207-lots",
+            "url": "https://www.loverslab.com/files/category/207-lots/",
+            "default_pages": 18,
+        },
+        {
+            "id": "209",
+            "name": "Translations",
+            "slug": "209-translations",
+            "url": "https://www.loverslab.com/files/category/209-translations/",
+            "default_pages": 35,
+        },
+        {
+            "id": "210",
+            "name": "Other",
+            "slug": "210-other",
+            "url": "https://www.loverslab.com/files/category/210-other/",
+            "default_pages": 23,
+        },
+        {
+            "id": "216",
+            "name": "Uncategorized",
+            "slug": "216-uncategorized",
+            "url": "https://www.loverslab.com/files/category/216-uncategorized/",
+            "default_pages": 27,
+        },
     ]
 
     KNOWN_MOD_ALIASES: Dict[str, Dict[str, str]] = KNOWN_MOD_ALIASES
@@ -101,6 +188,7 @@ class LoversLabProvider(BaseSourceProvider):
                 self.update_category_detected_pages(category["id"], detected_pages)
 
             if results:
+
                 def _inspect_item_target(entry: Dict[str, Any]) -> Dict[str, Any]:
                     p_url = entry["page_url"]
                     dl_chk = p_url.rstrip("/") + "/?do=download"
@@ -183,7 +271,11 @@ class LoversLabProvider(BaseSourceProvider):
                 except Exception:
                     r_chk = None
 
-                if r_chk is None or not isinstance(getattr(r_chk, "status_code", None), int) or r_chk.status_code == 405:
+                if (
+                    r_chk is None
+                    or not isinstance(getattr(r_chk, "status_code", None), int)
+                    or r_chk.status_code == 405
+                ):
                     r_chk = session.get(direct_dl_url, allow_redirects=False, timeout=3.0)
 
                 if r_chk.status_code in [301, 302, 303, 307, 308]:
@@ -194,11 +286,13 @@ class LoversLabProvider(BaseSourceProvider):
                         details["external_links"].append(loc)
                 elif r_chk.status_code in [200, 403]:
                     is_direct_download = True
-                    details["download_urls"].append({
-                        "name": "Téléchargement LoversLab (Direct)",
-                        "url": direct_dl_url,
-                        "size": 0,
-                    })
+                    details["download_urls"].append(
+                        {
+                            "name": "Téléchargement LoversLab (Direct)",
+                            "url": direct_dl_url,
+                            "size": 0,
+                        }
+                    )
             except Exception as e:
                 logger.debug(f"Redirect check error for {direct_dl_url}: {e}")
 
@@ -224,11 +318,13 @@ class LoversLabProvider(BaseSourceProvider):
                     if dl_urls:
                         details["download_urls"].extend(dl_urls)
                     else:
-                        details["download_urls"].append({
-                            "name": "Post Patreon (Téléchargement)",
-                            "url": patreon_redirect_url,
-                            "size": 0,
-                        })
+                        details["download_urls"].append(
+                            {
+                                "name": "Post Patreon (Téléchargement)",
+                                "url": patreon_redirect_url,
+                                "size": 0,
+                            }
+                        )
 
             gallery_screenshots: List[str] = extract_gallery_screenshots(soup, self.base_url)
             content_elem = soup.select_one(
@@ -250,13 +346,17 @@ class LoversLabProvider(BaseSourceProvider):
                                     details["patreon_tier"] = pat_info.get("tier_str", "")
                                 if pat_info.get("download_urls"):
                                     details["download_urls"].extend(pat_info["download_urls"])
-                    elif any(d in href.lower() for d in ["mega.nz", "mediafire.com", "drive.google.com", "simfileshare.net", "dropbox.com"]):
+                    elif any(
+                        d in href.lower()
+                        for d in ["mega.nz", "mediafire.com", "drive.google.com", "simfileshare.net", "dropbox.com"]
+                    ):
                         if href not in details["external_links"]:
                             details["external_links"].append(href)
 
                 clean_body_html, body_imgs = sanitize_description_html(content_elem, self.base_url)
                 unique_gallery = [
-                    g for g in gallery_screenshots
+                    g
+                    for g in gallery_screenshots
                     if not any(g.split("/")[-1].replace(".thumb.", ".") in b for b in body_imgs) and g not in body_imgs
                 ]
 
@@ -293,9 +393,7 @@ class LoversLabProvider(BaseSourceProvider):
     def _extract_download_candidates(self, soup: BeautifulSoup, base_url: str = "") -> List[Dict[str, Any]]:
         return self.extract_download_candidates(soup, base_url)
 
-    def extract_requirements(
-        self, soup: BeautifulSoup
-    ) -> Tuple[Optional[str], str, List[Dict[str, Any]]]:
+    def extract_requirements(self, soup: BeautifulSoup) -> Tuple[Optional[str], str, List[Dict[str, Any]]]:
         return extract_loverslab_requirements(soup, self.KNOWN_MOD_ALIASES)
 
     _extract_requirements = extract_requirements
@@ -346,9 +444,7 @@ class LoversLabProvider(BaseSourceProvider):
                 return self.patreon_provider.check_post_access(link).get("status", "UNKNOWN")
         return "PUBLIC"
 
-    def check_user_already_commented(
-        self, page_url: str, required_keywords: List[str]
-    ) -> Tuple[bool, Optional[str]]:
+    def check_user_already_commented(self, page_url: str, required_keywords: List[str]) -> Tuple[bool, Optional[str]]:
         return LoversLabForumService.check_user_already_commented(page_url, required_keywords)
 
     def post_mod_comment(self, page_url: str, message: str) -> Tuple[bool, str]:

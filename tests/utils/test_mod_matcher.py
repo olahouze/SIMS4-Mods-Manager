@@ -210,6 +210,3 @@ def test_hyphens_underscores_and_glued_words():
     assert ModMatcher.match_score("xml-injector", "XML_Injector") == 1.0
     assert ModMatcher.match_score("XMLInjector", "xml injector") == 1.0
     assert ModMatcher.match_score("XML_Injector_v4", "XML Injector") == 1.0
-
-
-

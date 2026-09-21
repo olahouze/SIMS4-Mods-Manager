@@ -171,4 +171,3 @@ def test_patreon_download_403_error(tmp_path, monkeypatch):
     ok, msg = provider.download_mod_file("https://patreon.com/direct_file.zip", dest)
     assert ok is False
     assert "Accès refusé par Patreon (Erreur HTTP 403)" in msg
-

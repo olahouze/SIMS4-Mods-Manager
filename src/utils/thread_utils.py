@@ -3,6 +3,7 @@ Thread utilities for PySide6 QRunnable/QThreadPool lifecycle management.
 Replaces fragile QThread subclasses with QRunnable executed on QThreadPool,
 completely eliminating 'QThread: Destroyed while thread is still running' crashes.
 """
+
 from typing import Optional, Any
 import warnings
 from PySide6.QtCore import QObject, QRunnable, QThreadPool

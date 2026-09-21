@@ -2,6 +2,7 @@
 Unified DependencyCardWidget used across ModDetailView and DependenciesDialog.
 Eliminates duplicated styling and layout code for requirements items.
 """
+
 from typing import Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton

@@ -262,6 +262,7 @@ class SessionManager:
     def is_browser_available(cls) -> bool:
         """Checks if a browser engine is available for Playwright via BrowserLoginHelper."""
         from src.core.browser_login import BrowserLoginHelper
+
         return BrowserLoginHelper.is_browser_available()
 
     @classmethod
@@ -274,6 +275,7 @@ class SessionManager:
     ) -> Tuple[bool, str, Dict[str, str]]:
         """Launches a visible browser window via Playwright to log in and capture cookies."""
         from src.core.browser_login import BrowserLoginHelper
+
         return BrowserLoginHelper.launch_interactive_login(
             provider_name=provider_name,
             target_url=target_url,

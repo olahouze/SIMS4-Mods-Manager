@@ -2,6 +2,7 @@
 LoversLabForumService: Verification of previous comments and submission of comments
 on LoversLab mod topics.
 """
+
 import re
 from typing import List, Tuple, Optional
 from bs4 import BeautifulSoup
@@ -15,9 +16,7 @@ class LoversLabForumService:
     """Service handling interactions with the LoversLab forum/comments system."""
 
     @staticmethod
-    def check_user_already_commented(
-        page_url: str, required_keywords: List[str]
-    ) -> Tuple[bool, Optional[str]]:
+    def check_user_already_commented(page_url: str, required_keywords: List[str]) -> Tuple[bool, Optional[str]]:
         """
         Scrapes the live LoversLab file or topic page to check if the authenticated user
         has already posted a comment referencing the missing requirements.
@@ -64,16 +63,12 @@ class LoversLabForumService:
                         continue
 
                     content_node = (
-                        node.select_one("[data-role='commentContent']")
-                        or node.select_one(".ipsType_richText")
-                        or node
+                        node.select_one("[data-role='commentContent']") or node.select_one(".ipsType_richText") or node
                     )
                     content_text = content_node.get_text(separator=" ", strip=True).lower()
 
                     has_signature = (
-                        "requirement" in content_text
-                        or "not identified" in content_text
-                        or "not found" in content_text
+                        "requirement" in content_text or "not identified" in content_text or "not found" in content_text
                     )
                     if not has_signature:
                         continue

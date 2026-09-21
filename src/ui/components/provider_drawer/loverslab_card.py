@@ -1,6 +1,7 @@
 """
 LoversLabDrawerCard: Encapsulates detailed scraping controls, subcategories, and progress for LoversLab.
 """
+
 from typing import Dict, Any, Tuple, Optional
 from PySide6.QtWidgets import (
     QWidget,
@@ -260,7 +261,9 @@ class LoversLabDrawerCard(QFrame):
             self.drawer_lbl_last_sync.setText(tr("drawer.last_scan", time=last_completed))
 
         self.ll_collapsed_summary_lbl.setText(
-            f"{cur_cat} • {pct}% ({total_scraped} mods)" if is_running or is_paused else tr("drawer.summary", count=total_scraped)
+            f"{cur_cat} • {pct}% ({total_scraped} mods)"
+            if is_running or is_paused
+            else tr("drawer.summary", count=total_scraped)
         )
 
         if is_running:
@@ -303,9 +306,17 @@ class LoversLabDrawerCard(QFrame):
             if not row_widget:
                 continue
 
-            status_val = cat_info.get("status") if isinstance(cat_info, dict) else getattr(cat_info, "status", "PENDING")
-            p_done = cat_info.get("pages_completed", 0) if isinstance(cat_info, dict) else getattr(cat_info, "pages_completed", 0)
-            p_total = cat_info.get("total_pages", 0) if isinstance(cat_info, dict) else getattr(cat_info, "total_pages", 0)
+            status_val = (
+                cat_info.get("status") if isinstance(cat_info, dict) else getattr(cat_info, "status", "PENDING")
+            )
+            p_done = (
+                cat_info.get("pages_completed", 0)
+                if isinstance(cat_info, dict)
+                else getattr(cat_info, "pages_completed", 0)
+            )
+            p_total = (
+                cat_info.get("total_pages", 0) if isinstance(cat_info, dict) else getattr(cat_info, "total_pages", 0)
+            )
             m_cnt = cat_info.get("mods_count", 0) if isinstance(cat_info, dict) else getattr(cat_info, "mods_count", 0)
 
             if status_val == "COMPLETED":

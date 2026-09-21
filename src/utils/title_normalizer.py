@@ -1,6 +1,7 @@
 """
 Title normalization rules, regex extractors, accent strippers, and token utilities for Sims 4 mod titles.
 """
+
 import re
 import unicodedata
 from typing import Optional, List, Tuple
@@ -104,8 +105,35 @@ class TitleNormalizer:
 
     # Common English & French grammatical stop words to ignore during token prioritization
     STOP_WORDS = {
-        "the", "a", "an", "and", "or", "of", "for", "with", "in", "on", "at", "by", "from", "to",
-        "le", "la", "les", "un", "une", "des", "du", "de", "d", "et", "ou", "pour", "avec", "dans", "par",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "for",
+        "with",
+        "in",
+        "on",
+        "at",
+        "by",
+        "from",
+        "to",
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "d",
+        "et",
+        "ou",
+        "pour",
+        "avec",
+        "dans",
+        "par",
     }
 
     @classmethod

@@ -72,6 +72,7 @@ def download_loverslab_file(
         dest_path = kwargs.get("dest_folder") or kwargs.get("dest_path")
     if patreon_provider is None:
         from src.providers import ProviderRegistry
+
         patreon_provider = ProviderRegistry.get_provider("patreon")
 
     if not download_url or not dest_path:
@@ -89,9 +90,7 @@ def download_loverslab_file(
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         logger.info(f"Lancement du téléchargement LoversLab: {download_url} (Compte membre={is_member})")
         if progress_callback:
-            progress_callback(
-                5, "Connexion aux serveurs LoversLab...", "Résolution de la page de téléchargement..."
-            )
+            progress_callback(5, "Connexion aux serveurs LoversLab...", "Résolution de la page de téléchargement...")
 
         resp = session.get(download_url, stream=False, timeout=300, allow_redirects=False)
         logger.info(
@@ -102,9 +101,7 @@ def download_loverslab_file(
             target = resp.headers.get("Location", "")
             logger.info(f"Redirection détectée lors du téléchargement: {target}")
             if "patreon.com" in target.lower():
-                return patreon_provider.download_mod_file(
-                    target, dest_path, progress_callback=progress_callback
-                )
+                return patreon_provider.download_mod_file(target, dest_path, progress_callback=progress_callback)
 
             matched_host = is_external_hosted(target)
             if matched_host:
@@ -114,9 +111,7 @@ def download_loverslab_file(
 
             resp = session.get(target, stream=False, timeout=300, allow_redirects=True)
 
-        logger.info(
-            f"Réponse LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}"
-        )
+        logger.info(f"Réponse LoversLab -> Code HTTP {resp.status_code}, Type: {resp.headers.get('Content-Type', '')}")
 
         final_url = str(getattr(resp, "url", ""))
         matched_host = is_external_hosted(final_url)
@@ -203,9 +198,7 @@ def download_loverslab_file(
                     loc = bin_resp.headers.get("Location", "")
                     logger.info(f"Candidat '{cand_title}' redirige vers: {loc}")
                     if "patreon.com" in loc.lower():
-                        return patreon_provider.download_mod_file(
-                            loc, dest_path, progress_callback=progress_callback
-                        )
+                        return patreon_provider.download_mod_file(loc, dest_path, progress_callback=progress_callback)
 
                     ext_host = is_external_hosted(loc)
                     if ext_host:

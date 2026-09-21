@@ -2,11 +2,11 @@
 GameDetector: Detects Sims 4 user documents directory, Mods directory,
 and handles Resource.cfg and background path updates.
 """
+
 import os
 import re
 import winreg
 import unicodedata
-import threading
 import time
 from pathlib import Path
 from typing import Optional, List
@@ -246,5 +246,6 @@ class GameDetector:
             except Exception as e:
                 logger.debug(f"Erreur lors de l'actualisation des chemins en tâche de fond : {e}")
 
-        t = threading.Thread(target=_worker, daemon=True, name="GameDetectorRefreshThread")
-        t.start()
+        from src.core.concurrency.thread_pool_manager import ThreadPoolManager
+
+        ThreadPoolManager.get_instance().submit_io(_worker)

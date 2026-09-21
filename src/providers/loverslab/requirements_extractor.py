@@ -2,6 +2,7 @@
 RequirementsExtractor: Heuristic and regex-based extraction of prerequisites
 and dependencies for LoversLab mods.
 """
+
 import copy
 import re
 import urllib.parse
@@ -55,9 +56,7 @@ KNOWN_MOD_ALIASES: Dict[str, Dict[str, str]] = {
     },
 }
 
-HEADER_RE = re.compile(
-    r"(?i)^(requirements?|pr[ée]requis|prerequisites?|needs?|required\s*mods?)\s*:?$"
-)
+HEADER_RE = re.compile(r"(?i)^(requirements?|pr[ée]requis|prerequisites?|needs?|required\s*mods?)\s*:?$")
 
 
 def extract_loverslab_requirements(
@@ -121,12 +120,14 @@ def extract_loverslab_requirements(
                 t_name = a.get_text(strip=True) or urllib.parse.unquote(slug).replace("-", " ").title()
                 seen_titles.add(t_name.lower())
                 clean_slug = urllib.parse.unquote(slug)
-                req_mods.append({
-                    "source": "loverslab",
-                    "remote_id": r_id,
-                    "title": t_name,
-                    "url": f"https://www.loverslab.com/files/file/{r_id}-{clean_slug}/",
-                })
+                req_mods.append(
+                    {
+                        "source": "loverslab",
+                        "remote_id": r_id,
+                        "title": t_name,
+                        "url": f"https://www.loverslab.com/files/file/{r_id}-{clean_slug}/",
+                    }
+                )
 
     for m in re.finditer(r"https?://(?:www\.)?loverslab\.com/files/file/(\d+)-?([^/\s\"'>]*)", str(data_el)):
         r_id = m.group(1)
@@ -136,12 +137,14 @@ def extract_loverslab_requirements(
             clean_slug = urllib.parse.unquote(slug)
             t_name = clean_slug.replace("-", " ").title()
             seen_titles.add(t_name.lower())
-            req_mods.append({
-                "source": "loverslab",
-                "remote_id": r_id,
-                "title": t_name,
-                "url": f"https://www.loverslab.com/files/file/{r_id}-{clean_slug}/",
-            })
+            req_mods.append(
+                {
+                    "source": "loverslab",
+                    "remote_id": r_id,
+                    "title": t_name,
+                    "url": f"https://www.loverslab.com/files/file/{r_id}-{clean_slug}/",
+                }
+            )
 
     # 2. Extract textual candidates
     text_without_urls = re.sub(r"https?://\S+", "", raw_text)
@@ -164,7 +167,9 @@ def extract_loverslab_requirements(
         ).strip()
 
         has_delimiters = bool(re.search(r"[,;+/|]|\s+[-–—]\s*|\s+(?:and|et)\s+", unprefixed_line))
-        is_sentence = bool(re.search(r"(?i)\b(is|are|does|do|will|have|has|enabled)\b", unprefixed_line)) and not has_delimiters
+        is_sentence = (
+            bool(re.search(r"(?i)\b(is|are|does|do|will|have|has|enabled)\b", unprefixed_line)) and not has_delimiters
+        )
 
         if is_sentence:
             line_tokens = [unprefixed_line]
@@ -197,7 +202,7 @@ def extract_loverslab_requirements(
                     line_tokens.append(pt_str)
 
         for lt in line_tokens:
-            lt_clean = lt.strip().strip('"\'`').rstrip(".")
+            lt_clean = lt.strip().strip("\"'`").rstrip(".")
             if lt_clean and len(lt_clean) >= 2:
                 candidate_tokens.append(lt_clean)
 
@@ -217,46 +222,55 @@ def extract_loverslab_requirements(
             continue
 
         # Check if candidate refers to base game
-        is_cand_bg = (
-            GameDlcMatcher.is_base_game_only(cand_clean)
-            or bool(re.search(r"(?i)\bthe\s+sims\s+4\b", cand_clean) and re.search(r"(?i)\b(?:pc|mac|base\s*game|jeu\s*de\s*base)\b", cand_clean))
+        is_cand_bg = GameDlcMatcher.is_base_game_only(cand_clean) or bool(
+            re.search(r"(?i)\bthe\s+sims\s+4\b", cand_clean)
+            and re.search(r"(?i)\b(?:pc|mac|base\s*game|jeu\s*de\s*base)\b", cand_clean)
         )
         if is_cand_bg:
             bg_title = "The Sims 4 (Jeu de base)"
             if "the sims 4" not in [x.get("title", "").lower() for x in req_mods]:
                 seen_titles.add(bg_title.lower())
-                req_mods.append({
-                    "source": "game_dlc",
-                    "remote_id": "BASE_GAME",
-                    "title": bg_title,
-                    "url": "",
-                    "is_game_dlc": True,
-                    "dlc_name": "Jeu de base",
-                    "is_installed": True,
-                })
+                req_mods.append(
+                    {
+                        "source": "game_dlc",
+                        "remote_id": "BASE_GAME",
+                        "title": bg_title,
+                        "url": "",
+                        "is_game_dlc": True,
+                        "dlc_name": "Jeu de base",
+                        "is_installed": True,
+                    }
+                )
             continue
 
         c_starts_sims4 = bool(SIMS4_PREFIX_REGEX.match(cand_clean.strip()))
         is_dlc, pack_name, pack_code = GameDlcMatcher.match_dlc(cand_clean)
         if is_dlc or c_starts_sims4:
-            pack_name = pack_name or re.sub(
-                r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\s*[:\-–—]?\s*",
-                "",
-                cand_clean,
-                flags=re.IGNORECASE,
-            ).strip()
+            pack_name = (
+                pack_name
+                or re.sub(
+                    r"^(?:(?:the|les|die|los|i|gli|de|os)\s*)?sims(?:™|®)?\s*4\s*[:\-–—]?\s*",
+                    "",
+                    cand_clean,
+                    flags=re.IGNORECASE,
+                ).strip()
+            )
             dlc_key = (pack_code or pack_name or cand_clean).lower()
             if dlc_key not in seen_titles:
                 seen_titles.add(dlc_key)
-                req_mods.append({
-                    "source": "game_dlc",
-                    "remote_id": pack_code or "",
-                    "title": f"The Sims 4 : {pack_name}" if not cand_clean.lower().startswith("the sims 4") else cand_clean,
-                    "url": "",
-                    "is_game_dlc": True,
-                    "dlc_name": pack_name,
-                    "dlc_code": pack_code,
-                })
+                req_mods.append(
+                    {
+                        "source": "game_dlc",
+                        "remote_id": pack_code or "",
+                        "title": f"The Sims 4 : {pack_name}"
+                        if not cand_clean.lower().startswith("the sims 4")
+                        else cand_clean,
+                        "url": "",
+                        "is_game_dlc": True,
+                        "dlc_name": pack_name,
+                        "dlc_code": pack_code,
+                    }
+                )
             continue
 
         c_lower = candidate.lower()
@@ -282,12 +296,14 @@ def extract_loverslab_requirements(
             if r_id not in seen_ids:
                 seen_ids.add(r_id)
                 seen_titles.add(alias_info["title"].lower())
-                req_mods.append({
-                    "source": "loverslab",
-                    "remote_id": r_id,
-                    "title": alias_info["title"],
-                    "url": alias_info["url"],
-                })
+                req_mods.append(
+                    {
+                        "source": "loverslab",
+                        "remote_id": r_id,
+                        "title": alias_info["title"],
+                        "url": alias_info["url"],
+                    }
+                )
             continue
 
         is_duplicate = False
@@ -304,12 +320,14 @@ def extract_loverslab_requirements(
 
         if c_lower not in seen_titles:
             seen_titles.add(c_lower)
-            req_mods.append({
-                "source": "loverslab",
-                "remote_id": "",
-                "title": candidate,
-                "url": "",
-            })
+            req_mods.append(
+                {
+                    "source": "loverslab",
+                    "remote_id": "",
+                    "title": candidate,
+                    "url": "",
+                }
+            )
 
     if req_mods:
         if all((bool(m.get("remote_id")) and m.get("remote_id") != "") or m.get("is_game_dlc") for m in req_mods):

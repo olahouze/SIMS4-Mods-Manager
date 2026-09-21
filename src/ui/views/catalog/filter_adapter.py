@@ -1,6 +1,7 @@
 """
 Filter adapter converting UI filter state into REST API query parameters for catalog endpoints.
 """
+
 from typing import Dict, Any, Optional
 
 __all__ = ["build_catalog_api_params"]

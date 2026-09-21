@@ -2,6 +2,7 @@
 Utility for scoring similarity between mod dependency requirements and catalog / installed mods.
 Uses TitleNormalizer for regex stripping, tokenization, and accent removal.
 """
+
 import difflib
 import re
 from typing import Optional, List, Tuple, Any
@@ -91,7 +92,11 @@ class ModMatcher(TitleNormalizer):
             ratio = len(q_set) / max(len(c_set), 1)
             extra = diff_c - {"mod", "mods"}
             extracted_author, _ = cls.extract_author_and_version(candidate_title)
-            if not extra or (candidate_author and extra <= {candidate_author.lower()}) or (extracted_author and extra <= {extracted_author.lower()}):
+            if (
+                not extra
+                or (candidate_author and extra <= {candidate_author.lower()})
+                or (extracted_author and extra <= {extracted_author.lower()})
+            ):
                 return 0.95
             # Guard against 1-token generic queries matching long mod titles
             if len(q_set) == 1 and ratio < 0.5:
@@ -168,6 +173,7 @@ class ModMatcher(TitleNormalizer):
         candidate_query = session.query(CatalogMod)
         if informative_tokens:
             from sqlalchemy import or_
+
             token_filters = [CatalogMod.title.ilike(f"%{tok}%") for tok in informative_tokens[:3]]
             candidates = candidate_query.filter(or_(*token_filters)).limit(100).all()
         else:

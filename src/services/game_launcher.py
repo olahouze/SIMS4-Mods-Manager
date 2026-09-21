@@ -2,6 +2,7 @@
 GameLauncher: Locates Sims 4 game executable via common paths, EA app, Origin, Steam,
 and Windows registry, and handles process execution.
 """
+
 import os
 import winreg
 import subprocess

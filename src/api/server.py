@@ -36,7 +36,6 @@ class ApiServer:
         )
         cls._server_instance = uvicorn.Server(config)
 
-
         def _run():
             try:
                 cls._server_instance.run()

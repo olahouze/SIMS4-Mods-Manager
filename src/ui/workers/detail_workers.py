@@ -5,6 +5,7 @@ Workers d'arrière-plan (BaseWorker / QThreadPool) pour la vue détaillée d'un 
 - Rétrocompatibilité unitaire (GalleryThumbWorker)
 - Téléchargement et mise en cache des images inline HTML (DescriptionImageLoaderWorker)
 """
+
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
@@ -68,11 +69,13 @@ class FetchDetailsWorker(BaseWorker):
                 if found_id:
                     data = api_client.get_catalog_mod_details(found_id)
                 else:
-                    chk = api_client.check_dependencies({
-                        "source": self.source,
-                        "remote_id": self.remote_id,
-                        "page_url": self.page_url,
-                    })
+                    chk = api_client.check_dependencies(
+                        {
+                            "source": self.source,
+                            "remote_id": self.remote_id,
+                            "page_url": self.page_url,
+                        }
+                    )
                     data = {
                         "source": self.source,
                         "remote_id": self.remote_id,
@@ -105,6 +108,7 @@ class GalleryBatchWorker(BaseWorker):
     3. Téléchargement concurrent via ThreadPoolExecutor(max_workers=4) réutilisant une session HTTP unique
     4. Annulation coopérative lors d'un changement de mod
     """
+
     thumb_ready = Signal(int, QPixmap)
 
     def __init__(self, urls: List[str], cache_dir: Path, load_id: int = 0):
@@ -196,6 +200,7 @@ class GalleryBatchWorker(BaseWorker):
 
 class GalleryThumbWorker(BaseWorker):
     """Worker unitaire (rétrocompatibilité pour tests ou téléchargement ponctuel)."""
+
     thumb_ready = Signal(int, QPixmap)
 
     def __init__(self, index: int, url: str, cache_dir: Path):

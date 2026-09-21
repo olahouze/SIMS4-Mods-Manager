@@ -38,7 +38,10 @@ def test_api_check_missing_report_already_reported(client):
         "reason": "Message déjà posté sur le forum le 12/09/2026 à 14:32.",
     }
 
-    with patch("src.services.requirement_reporter_service.RequirementReporterService.check_report_status", return_value=mock_status):
+    with patch(
+        "src.services.requirement_reporter_service.RequirementReporterService.check_report_status",
+        return_value=mock_status,
+    ):
         resp = client.post(
             "/api/catalog/check-missing-report",
             json={
@@ -76,7 +79,10 @@ def test_api_report_missing_requirements_submit(client):
         "reported_at": "à l'instant",
     }
 
-    with patch("src.services.requirement_reporter_service.RequirementReporterService.submit_report", return_value=mock_submit_res):
+    with patch(
+        "src.services.requirement_reporter_service.RequirementReporterService.submit_report",
+        return_value=mock_submit_res,
+    ):
         resp = client.post(
             "/api/catalog/report-missing-requirements",
             json={

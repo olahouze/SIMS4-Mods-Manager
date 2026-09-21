@@ -1,6 +1,5 @@
 import re
 import shutil
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -259,8 +258,9 @@ class ModInstaller:
             except Exception as e:
                 logger.debug(f"Erreur vérification mods installés en tâche de fond : {e}")
 
-        t = threading.Thread(target=_worker, daemon=True, name="InstalledModsVerifierThread")
-        t.start()
+        from src.core.concurrency.thread_pool_manager import ThreadPoolManager
+
+        ThreadPoolManager.get_instance().submit_io(_worker)
 
     @classmethod
     def scan_existing_mods(cls) -> List[Dict[str, Any]]:

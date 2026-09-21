@@ -1,33 +1,37 @@
-"""
-Endpoints for catalog mod installation, streaming progress, dependencies verification, thumbnails, and maintenance.
-"""
+"""Endpoints pour l'installation des mods du catalogue, streaming de progression et vignettes."""
+
+from __future__ import annotations
+
 import json
 import queue
-import threading
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
+from src.api.deps import get_db
 from src.api.schemas.catalog import (
     CatalogInstallRequest,
     CatalogInstallResponse,
     DependenciesCheckResponse,
 )
+from src.core.concurrency.thread_pool_manager import ThreadPoolManager
 from src.core.config import AppConfig
 from src.core.session_manager import SessionManager
-from src.database.models import CatalogMod
 from src.database.manager import DatabaseManager
-from src.api.deps import get_db
+from src.infrastructure.database.repositories.sqlalchemy_catalog_repository import (
+    SqlAlchemyCatalogRepository,
+)
 from src.services.catalog_sync_service import check_catalog_dependencies
 from src.services.mod_installer_service import perform_mod_install
 from src.utils.logger import logger
 
 install_router = APIRouter(tags=["Catalog Installation"])
+_catalog_repo = SqlAlchemyCatalogRepository()
 
 
 @install_router.get("/thumbnail")
 def get_thumbnail(source: str, remote_id: str, url: str):
-    """Fetches and caches thumbnail image for catalog mod, returning the file."""
+    """Récupère et met en cache l'image vignette d'un mod."""
     cache_dir = AppConfig.get_thumbnails_cache_dir()
     dest_path = cache_dir / f"thumb_{source}_{remote_id}.jpg"
 
@@ -64,7 +68,7 @@ def get_thumbnail(source: str, remote_id: str, url: str):
 
 @install_router.post("/purge")
 def purge_catalog_endpoint():
-    """Purges all catalog mods to restart from a clean catalog."""
+    """Purge l'intégralité du catalogue pour repartir d'une base saine."""
     db = DatabaseManager.get_instance()
     deleted = db.purge_catalog()
     return {"success": True, "deleted": deleted, "message": f"{deleted} mod(s) supprimé(s) du catalogue."}
@@ -72,7 +76,9 @@ def purge_catalog_endpoint():
 
 @install_router.post("/check-dependencies", response_model=DependenciesCheckResponse)
 def check_dependencies(payload: CatalogInstallRequest, session: Session = Depends(get_db)):
-    """Analyzes the dependency tree for a mod before installation."""
+    """Analyse l'arbre de dépendances d'un mod avant son installation."""
+    from src.database.models import CatalogMod
+
     cat_mod = None
     if payload.catalog_mod_id:
         cat_mod = session.query(CatalogMod).filter_by(id=payload.catalog_mod_id).first()
@@ -93,8 +99,9 @@ def check_dependencies(payload: CatalogInstallRequest, session: Session = Depend
 
 @install_router.post("/install", response_model=CatalogInstallResponse)
 def install_mod(payload: CatalogInstallRequest):
-    """Downloads and installs a mod given its catalog id or source and remote_id/page_url."""
+    """Télécharge et installe un mod via l'orchestrateur."""
     from src.api.routes import catalog_router
+
     perform_fn = getattr(catalog_router, "_perform_install", perform_mod_install)
     res = perform_fn(payload)
     if not res.success and "introuvable" in res.message:
@@ -104,10 +111,11 @@ def install_mod(payload: CatalogInstallRequest):
 
 @install_router.post("/install-stream")
 def install_mod_stream(payload: CatalogInstallRequest):
-    """Downloads and installs a mod while streaming real-time progress events as newline-delimited JSON."""
+    """Installe un mod en diffusant les événements de progression en flux NDJSON via le ThreadPoolManager."""
     from src.api.routes import catalog_router
+
     perform_fn = getattr(catalog_router, "_perform_install", perform_mod_install)
-    q = queue.Queue()
+    q: queue.Queue = queue.Queue()
 
     def progress_cb(pct: int, status: str, details: str = ""):
         q.put({"type": "progress", "percent": pct, "status": status, "details": details})
@@ -121,7 +129,8 @@ def install_mod_stream(payload: CatalogInstallRequest):
         finally:
             q.put(None)
 
-    threading.Thread(target=run_worker, daemon=True).start()
+    # Exécution via le ThreadPoolManager centralisé au lieu d'un thread sauvage
+    ThreadPoolManager.get_instance().submit_io(run_worker)
 
     def event_generator():
         while True:

@@ -3,6 +3,7 @@ DependencySectionBuilder: Factory functions to render dependency sections
 (DLCs, unfound requirements, comments/notes, already installed, missing).
 Used across DependenciesDialog and detail views for uniform UI and DRY code.
 """
+
 from typing import List, Callable
 from PySide6.QtWidgets import (
     QVBoxLayout,

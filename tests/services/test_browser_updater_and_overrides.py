@@ -58,9 +58,7 @@ def test_dependency_resolver_with_requirements_overrides():
 
     installed_by_remote = {}
     mock_mod = MagicMock(id=1, title="XML Injector", folder_name="XML_Injector", source="loverslab", remote_id="123")
-    installed_by_title = {
-        "xml injector": mock_mod
-    }
+    installed_by_title = {"xml injector": mock_mod}
 
     # 1. Without overrides: XML-Injector matches XML Injector via canonical fingerprint
     deps = resolve_mod_dependencies(
@@ -81,9 +79,7 @@ def test_dependency_resolver_with_requirements_overrides():
     assert note_item.status == "NOT_DETECTED_FINISHED"
 
     # 2. With override: Note is marked as COMMENT
-    overrides = {
-        "You must enable script mods in game options": "COMMENT"
-    }
+    overrides = {"You must enable script mods in game options": "COMMENT"}
     deps_override = resolve_mod_dependencies(
         raw_deps=raw_deps,
         session=mock_session,
@@ -114,7 +110,14 @@ def test_catalog_mod_requirements_overrides_model():
 
 def test_dependency_resolver_with_conversation_lock_mod():
     raw_deps = [
-        {"source": "game_dlc", "remote_id": "BASE_GAME", "title": "The Sims 4 (Jeu de base)", "is_game_dlc": True, "dlc_name": "Jeu de base", "is_installed": True},
+        {
+            "source": "game_dlc",
+            "remote_id": "BASE_GAME",
+            "title": "The Sims 4 (Jeu de base)",
+            "is_game_dlc": True,
+            "dlc_name": "Jeu de base",
+            "is_installed": True,
+        },
         {"source": "loverslab", "remote_id": "", "title": "Script Mods enabled in Game Options."},
         {"source": "loverslab", "remote_id": "", "title": "No third-party library or framework is required."},
     ]

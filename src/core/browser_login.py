@@ -2,6 +2,7 @@
 Interactive browser management and Playwright automation helper for logins,
 age gates, and Cloudflare clearance.
 """
+
 import os
 import time
 from pathlib import Path
@@ -123,6 +124,7 @@ class BrowserLoginHelper:
 
             if context is None:
                 from src.services.browser_updater_service import BrowserUpdaterService
+
                 logger.info("Tentative d'installation automatique de Chromium pour Playwright...")
                 ok_install, install_msg = BrowserUpdaterService.install_chromium_stream()
                 if ok_install:
@@ -140,7 +142,11 @@ class BrowserLoginHelper:
                     except Exception as e:
                         return False, f"Impossible de lancer le navigateur après installation (Erreur: {e}).", {}
                 else:
-                    return False, f"Impossible de lancer le navigateur et échec du téléchargement de Chromium ({install_msg}).", {}
+                    return (
+                        False,
+                        f"Impossible de lancer le navigateur et échec du téléchargement de Chromium ({install_msg}).",
+                        {},
+                    )
 
             page = context.pages[0] if context.pages else context.new_page()
 

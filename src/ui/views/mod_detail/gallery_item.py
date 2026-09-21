@@ -1,6 +1,7 @@
 """
 Individual gallery thumbnail item widget for ModDetailView.
 """
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QCursor
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel

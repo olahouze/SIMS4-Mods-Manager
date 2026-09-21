@@ -3,6 +3,7 @@ DrawerStyles: Centralized stylesheets and status-based style generators
 for ProviderDrawer components.
 """
 
+
 class DrawerStyles:
     @staticmethod
     def status_pill(state: str) -> str:

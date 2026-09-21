@@ -1,6 +1,7 @@
 """
 PageParser: Pure HTML parsing functions for LoversLab category listings and file pages.
 """
+
 import re
 import urllib.parse
 from typing import Dict, List, Any, Tuple, Optional

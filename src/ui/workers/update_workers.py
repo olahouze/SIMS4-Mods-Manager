@@ -1,6 +1,7 @@
 """
 Update-related asynchronous background workers for Qt UI.
 """
+
 from typing import Optional, List
 from PySide6.QtCore import Signal
 

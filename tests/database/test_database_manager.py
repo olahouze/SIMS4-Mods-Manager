@@ -150,4 +150,3 @@ def test_clean_and_repair_catalog(tmp_path, monkeypatch):
         assert repaired is not None
         assert "Frissons" in repaired.title
         assert repaired.title != ""
-

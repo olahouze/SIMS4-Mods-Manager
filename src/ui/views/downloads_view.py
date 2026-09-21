@@ -2,6 +2,7 @@
 DownloadsView: Dedicated background download and installation manager.
 Allows concurrent or queued mod installations while users freely navigate the catalog.
 """
+
 from typing import Dict, Any
 import os
 import subprocess
@@ -520,9 +521,7 @@ class DownloadsView(QWidget):
 
     def clear_finished_downloads(self):
         """Removes completed, cancelled, or failed cards from view."""
-        to_remove = [
-            tid for tid, t in self.tasks.items() if t.get("status") in ["completed", "failed", "cancelled"]
-        ]
+        to_remove = [tid for tid, t in self.tasks.items() if t.get("status") in ["completed", "failed", "cancelled"]]
         for tid in to_remove:
             card = self.card_widgets.pop(tid, None)
             if card:

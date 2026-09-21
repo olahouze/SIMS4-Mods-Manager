@@ -91,7 +91,11 @@ class ReportPreviewDialog(QDialog):
         # Subtitle info
         author_display = self.author if self.author.startswith("@") else f"@{self.author}"
         info_lbl = QLabel(
-            tr("report_dialog.info", author=author_display, count=len(self.missing_modules) or len(self.unnecessary_modules))
+            tr(
+                "report_dialog.info",
+                author=author_display,
+                count=len(self.missing_modules) or len(self.unnecessary_modules),
+            )
         )
         info_lbl.setStyleSheet("font-size: 12px; color: #94a3b8; line-height: 1.4;")
         info_lbl.setWordWrap(True)
@@ -148,18 +152,21 @@ class ReportPreviewDialog(QDialog):
                 def _handler(name, override_val):
                     self.requirements_overrides[name] = override_val
                     self.override_changed.emit(name, override_val)
+
                 return _handler
 
             row_widget.override_changed.connect(_make_override_handler(mod_name))
 
             rows_layout.addWidget(row_widget)
             self.module_checkboxes.append(row_widget.cb)
-            self.module_items.append({
-                "name": mod_name,
-                "cb": row_widget.cb,
-                "rb_missing": row_widget.rb_missing,
-                "rb_unnecessary": row_widget.rb_unnecessary,
-            })
+            self.module_items.append(
+                {
+                    "name": mod_name,
+                    "cb": row_widget.cb,
+                    "rb_missing": row_widget.rb_missing,
+                    "rb_unnecessary": row_widget.rb_unnecessary,
+                }
+            )
 
         modules_scroll = QScrollArea()
         modules_scroll.setWidgetResizable(True)
@@ -269,9 +276,7 @@ class ReportPreviewDialog(QDialog):
             self.send_btn.setEnabled(True)
             self.send_btn.setToolTip("")
 
-        new_msg = RequirementReporterService.build_english_message(
-            self.mod_title, self.author, missing, unnecessary
-        )
+        new_msg = RequirementReporterService.build_english_message(self.mod_title, self.author, missing, unnecessary)
         self.text_edit.setPlainText(new_msg)
 
     def _on_send_clicked(self):
@@ -316,10 +321,12 @@ class ReportPreviewDialog(QDialog):
                     missing, unnecessary = self._get_categorized_modules()
                     overrides = {m: "MOD" for m in missing}
                     overrides.update({u: "COMMENT" for u in unnecessary})
-                    get_api_client().save_requirements_override({
-                        "catalog_mod_id": self.catalog_mod_id,
-                        "overrides": overrides,
-                    })
+                    get_api_client().save_requirements_override(
+                        {
+                            "catalog_mod_id": self.catalog_mod_id,
+                            "overrides": overrides,
+                        }
+                    )
                 except Exception as e:
                     logger.debug(f"Erreur enregistrement automatique des overrides après rapport: {e}")
 

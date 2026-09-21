@@ -9,7 +9,7 @@ from src.core.config import AppConfig
 
 def hash_url(url: str) -> str:
     """Returns a deterministic MD5 hex digest for an image or resource URL."""
-    return hashlib.md5(url.encode("utf-8")).hexdigest()
+    return hashlib.md5(url.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def infer_extension(url: str, content_type: Optional[str] = None) -> str:

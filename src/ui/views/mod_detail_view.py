@@ -2,7 +2,7 @@
 ModDetailView: Orchestrator view for displaying full mod details,
 composed of specialized sub-components in src/ui/views/mod_detail/.
 """
-import threading
+
 from typing import Optional, Dict, Any
 
 from PySide6.QtWidgets import (
@@ -70,7 +70,9 @@ class ModDetailView(QWidget, ModDetailCompatMixin):
         self.header_widget.back_requested.connect(self.back_requested.emit)
         self.header_widget.install_requested.connect(lambda: self.install_requested.emit(self.mod_data))
         self.header_widget.uninstall_requested.connect(lambda: self.uninstall_requested.emit(self.mod_data))
-        self.header_widget.open_folder_requested.connect(lambda: self.open_folder_requested.emit(self.mod_data.get("folder_name", "")))
+        self.header_widget.open_folder_requested.connect(
+            lambda: self.open_folder_requested.emit(self.mod_data.get("folder_name", ""))
+        )
         self.header_widget.open_web_requested.connect(self._on_web_clicked)
         self.c_layout.addWidget(self.header_widget)
 
@@ -194,55 +196,70 @@ class ModDetailView(QWidget, ModDetailCompatMixin):
 
     def _on_toggle_comment(self, dep: dict, to_comment: bool):
         title = dep.get("title") or ""
-        if "requirements_overrides" not in self.mod_data or not isinstance(self.mod_data["requirements_overrides"], dict):
+        if "requirements_overrides" not in self.mod_data or not isinstance(
+            self.mod_data["requirements_overrides"], dict
+        ):
             self.mod_data["requirements_overrides"] = {}
         self.mod_data["requirements_overrides"][title] = "COMMENT" if to_comment else "MOD"
         dep["is_comment"] = to_comment
 
         cat_id = self.mod_data.get("id") or self.mod_data.get("catalog_mod_id")
         if cat_id:
+            from src.ui.workers.generic_runnable import run_async_ui_task
+
             def _async_save():
                 try:
                     client = get_api_client()
-                    client.save_requirements_override({
-                        "catalog_mod_id": cat_id,
-                        "overrides": {title: "COMMENT" if to_comment else "MOD"},
-                    })
+                    client.save_requirements_override(
+                        {
+                            "catalog_mod_id": cat_id,
+                            "overrides": {title: "COMMENT" if to_comment else "MOD"},
+                        }
+                    )
                 except Exception as e:
                     logger.debug(f"Erreur enregistrement override dans ModDetailView: {e}")
-            threading.Thread(target=_async_save, daemon=True).start()
+
+            run_async_ui_task(_async_save)
 
         self._render_requirements(self.mod_data)
 
     def _on_override_changed(self, module_title: str, override_type: str):
         if not module_title:
             return
-        if "requirements_overrides" not in self.mod_data or not isinstance(self.mod_data["requirements_overrides"], dict):
+        if "requirements_overrides" not in self.mod_data or not isinstance(
+            self.mod_data["requirements_overrides"], dict
+        ):
             self.mod_data["requirements_overrides"] = {}
         self.mod_data["requirements_overrides"][module_title] = override_type
 
         for dep in self.mod_data.get("dependencies", []):
             t = (dep.get("title") or f"Mod #{dep.get('remote_id')}").strip()
             if t == module_title.strip():
-                dep["is_comment"] = (override_type == "COMMENT")
+                dep["is_comment"] = override_type == "COMMENT"
 
         cat_id = self.mod_data.get("id") or self.mod_data.get("catalog_mod_id")
         if cat_id:
+            from src.ui.workers.generic_runnable import run_async_ui_task
+
             def _async_save():
                 try:
                     client = get_api_client()
-                    client.save_requirements_override({
-                        "catalog_mod_id": cat_id,
-                        "overrides": {module_title: override_type},
-                    })
+                    client.save_requirements_override(
+                        {
+                            "catalog_mod_id": cat_id,
+                            "overrides": {module_title: override_type},
+                        }
+                    )
                 except Exception as e:
                     logger.debug(f"Erreur sync override dans ModDetailView: {e}")
-            threading.Thread(target=_async_save, daemon=True).start()
+
+            run_async_ui_task(_async_save)
 
         self._render_requirements(self.mod_data)
 
     def _on_web_clicked(self):
         import webbrowser
+
         url = self.mod_data.get("page_url", "")
         if url:
             webbrowser.open(url)

@@ -3,6 +3,7 @@ Unified AuthorInterpellateWidget managing the creator interpellation button,
 asynchronous status checking, dynamic styling, and opening ReportPreviewDialog.
 Shared between ModDetailView and DependenciesDialog.
 """
+
 from typing import Optional, List
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMessageBox
@@ -33,13 +34,15 @@ class CheckReportStatusWorker(BaseWorker):
         except Exception as e:
             logger.debug(f"CheckReportStatusWorker error: {e}")
             if not self._is_cancelled:
-                self.status_ready.emit({
-                    "can_report": True,
-                    "already_reported": False,
-                    "formatted_message": "",
-                    "author": self.payload.get("author", ""),
-                    "is_authenticated": True,
-                })
+                self.status_ready.emit(
+                    {
+                        "can_report": True,
+                        "already_reported": False,
+                        "formatted_message": "",
+                        "author": self.payload.get("author", ""),
+                        "is_authenticated": True,
+                    }
+                )
         finally:
             self._is_running = False
 
@@ -49,6 +52,7 @@ class AuthorInterpellateWidget(QWidget):
     Reusable button component for creator interpellation with live status checking
     and bidirectional override synchronization.
     """
+
     override_changed = Signal(str, str)
     report_sent = Signal(str)
 

@@ -31,10 +31,11 @@ def test_loverslab_check_user_already_commented_found():
     mock_acc.user_display_name = "MyUser"
     mock_acc.get_cookies_dict.return_value = {"ips4_member_id": "999888"}
 
-    with patch("src.core.session_manager.SessionManager.get_saved_session", return_value=mock_acc), \
-         patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.core.session_manager.SessionManager.get_http_session", return_value=mock_session):
-
+    with (
+        patch("src.core.session_manager.SessionManager.get_saved_session", return_value=mock_acc),
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.core.session_manager.SessionManager.get_http_session", return_value=mock_session),
+    ):
         found, date_str = provider.check_user_already_commented(
             page_url="https://www.loverslab.com/files/file/3169-test/",
             required_keywords=["WW Core Package"],
@@ -74,10 +75,11 @@ def test_loverslab_check_user_already_commented_other_user():
     mock_acc.user_display_name = "MyUser"
     mock_acc.get_cookies_dict.return_value = {"ips4_member_id": "999888"}
 
-    with patch("src.core.session_manager.SessionManager.get_saved_session", return_value=mock_acc), \
-         patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.core.session_manager.SessionManager.get_http_session", return_value=mock_session):
-
+    with (
+        patch("src.core.session_manager.SessionManager.get_saved_session", return_value=mock_acc),
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.core.session_manager.SessionManager.get_http_session", return_value=mock_session),
+    ):
         found, date_str = provider.check_user_already_commented(
             page_url="https://www.loverslab.com/files/file/3169-test/",
             required_keywords=["WW Core Package"],
@@ -112,9 +114,10 @@ def test_loverslab_post_mod_comment_success():
     mock_session.get.return_value = mock_get_resp
     mock_session.post.return_value = mock_post_resp
 
-    with patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.core.session_manager.SessionManager.get_http_session", return_value=mock_session):
-
+    with (
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.core.session_manager.SessionManager.get_http_session", return_value=mock_session),
+    ):
         success, msg = provider.post_mod_comment(
             page_url="https://www.loverslab.com/files/file/3169-test/",
             message="Hi @Author, please check requirements.",

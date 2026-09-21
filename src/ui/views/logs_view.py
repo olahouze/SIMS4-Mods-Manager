@@ -182,9 +182,7 @@ class LogsView(QWidget):
         for line in self.all_logs:
             if self._matches_filter(line):
                 self._append_formatted_line(line)
-        self.info_label.setText(
-            f"{self.log_text.document().blockCount() - 1} / {len(self.all_logs)}"
-        )
+        self.info_label.setText(f"{self.log_text.document().blockCount() - 1} / {len(self.all_logs)}")
 
     def copy_all_logs(self):
         text = self.log_text.toPlainText()

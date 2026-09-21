@@ -1,6 +1,7 @@
 """
 Row cells builder for UpdatesView table.
 """
+
 from typing import Callable, Tuple
 from PySide6.QtWidgets import (
     QWidget,

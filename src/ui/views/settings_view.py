@@ -2,6 +2,7 @@
 Settings page for language, paths, game launcher, backups, and preferences via REST API.
 Composed of specialized card sections for maximum modularity and visual polish.
 """
+
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget,
@@ -237,9 +238,7 @@ class SettingsView(QWidget):
             self._on_mods_path_changed(dir_path)
 
     def browse_game_exe(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, tr("settings.select_game_exe"), "", tr("settings.exe_filter")
-        )
+        file_path, _ = QFileDialog.getOpenFileName(self, tr("settings.select_game_exe"), "", tr("settings.exe_filter"))
         if file_path:
             self.exe_path_input.setText(file_path)
 

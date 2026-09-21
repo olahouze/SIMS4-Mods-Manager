@@ -1,6 +1,7 @@
 """
 AccountsView: Manages site sessions, interactive Cloudflare solving, tests and resets via API.
 """
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -108,7 +109,11 @@ class AccountsView(QWidget):
                 is_ready = acc.get("is_ready", False)
                 display = acc.get("user_display_name", "")
 
-                card = self.loverslab_card if p_name == "loverslab" else (self.patreon_card if p_name == "patreon" else None)
+                card = (
+                    self.loverslab_card
+                    if p_name == "loverslab"
+                    else (self.patreon_card if p_name == "patreon" else None)
+                )
                 if card:
                     card.update_badge(is_member, is_ready, display)
         except Exception as e:
@@ -190,9 +195,7 @@ class AccountsView(QWidget):
             except Exception as e:
                 logger.error(f"Impossible de lancer la synchronisation automatique: {e}")
 
-            QMessageBox.information(
-                self, tr("accounts.login_success_title"), tr("accounts.login_success_msg", msg=msg)
-            )
+            QMessageBox.information(self, tr("accounts.login_success_title"), tr("accounts.login_success_msg", msg=msg))
             self.login_successful.emit(p_name)
         else:
             QMessageBox.warning(self, tr("dialogs.info_title"), msg)

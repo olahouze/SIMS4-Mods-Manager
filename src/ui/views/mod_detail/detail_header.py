@@ -1,6 +1,7 @@
 """
 DetailHeaderWidget: Top metadata banner, tags, and action buttons for ModDetailView.
 """
+
 from typing import Any, Dict
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (

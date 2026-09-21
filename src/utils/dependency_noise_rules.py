@@ -2,6 +2,7 @@
 Centralized registry and classification heuristics for non-mod dependency text,
 author commentary, configuration instructions, and false positives in Sims 4 mod requirements.
 """
+
 import re
 from typing import List
 

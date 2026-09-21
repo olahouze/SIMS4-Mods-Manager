@@ -24,6 +24,7 @@ def parse_flexible_date(date_val: Optional[str]) -> Optional[datetime]:
     # Fast robust heuristic parser via python-dateutil
     try:
         from dateutil import parser as date_parser
+
         return date_parser.parse(clean_val)
     except (ValueError, OverflowError, TypeError):
         return None

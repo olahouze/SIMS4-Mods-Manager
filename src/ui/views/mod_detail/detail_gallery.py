@@ -2,6 +2,7 @@
 DetailGalleryWidget: Horizontal scrollable strip of screenshots thumbnails
 with batch background loading and fullscreen viewer integration.
 """
+
 from typing import List, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap

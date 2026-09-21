@@ -1,6 +1,7 @@
 """
 Thread-safe tracker for catalog synchronization progress with pause and stop support.
 """
+
 import threading
 import time
 from datetime import datetime
@@ -137,17 +138,17 @@ class SyncTracker:
                 cls.progress_percent = int((cls.pages_completed / cls.total_pages) * 100)
 
     @classmethod
-    def update_category(
-        cls, cat_id: str, pages_completed: int, total_pages: int, mods_count: int, status: str
-    ) -> None:
+    def update_category(cls, cat_id: str, pages_completed: int, total_pages: int, mods_count: int, status: str) -> None:
         with cls._lock:
             if cat_id in cls.categories:
-                cls.categories[cat_id].update({
-                    "pages_completed": pages_completed,
-                    "total_pages": total_pages,
-                    "mods_count": mods_count,
-                    "status": status,
-                })
+                cls.categories[cat_id].update(
+                    {
+                        "pages_completed": pages_completed,
+                        "total_pages": total_pages,
+                        "mods_count": mods_count,
+                        "status": status,
+                    }
+                )
             else:
                 cls.categories[cat_id] = {
                     "id": cat_id,

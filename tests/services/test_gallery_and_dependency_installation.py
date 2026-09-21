@@ -35,7 +35,9 @@ def test_mod_details_response_has_screenshots():
 
 def test_image_viewer_modal_instantiation():
     from PySide6.QtWidgets import QApplication
+
     _app = QApplication.instance() or QApplication(["test", "-platform", "offscreen"])
+    assert _app is not None
     images = [
         "https://static.loverslab.com/screenshots/1.jpg",
         "https://static.loverslab.com/screenshots/2.jpg",
@@ -73,14 +75,16 @@ def test_cascade_dependency_installation_flow(monkeypatch):
             page_url="https://loverslab.com/files/file/parent_mod_1/",
             requirements_status="RESOLVED",
         )
-        parent_mod.set_requirements_mods_list([
-            {
-                "source": "loverslab",
-                "remote_id": "child_dep_1",
-                "title": "Child Dependency Mod",
-                "url": "https://loverslab.com/files/file/child_dep_1/",
-            }
-        ])
+        parent_mod.set_requirements_mods_list(
+            [
+                {
+                    "source": "loverslab",
+                    "remote_id": "child_dep_1",
+                    "title": "Child Dependency Mod",
+                    "url": "https://loverslab.com/files/file/child_dep_1/",
+                }
+            ]
+        )
         session.add(parent_mod)
         session.commit()
         parent_id = parent_mod.id
@@ -185,9 +189,16 @@ def test_dependency_failure_aborts_main_installation(monkeypatch):
             page_url="https://loverslab.com/files/file/fail_parent/",
             requirements_status="RESOLVED",
         )
-        parent_mod.set_requirements_mods_list([
-            {"source": "loverslab", "remote_id": "fail_dep", "title": "Failing Dependency Mod", "url": "https://loverslab.com/files/file/fail_dep/"}
-        ])
+        parent_mod.set_requirements_mods_list(
+            [
+                {
+                    "source": "loverslab",
+                    "remote_id": "fail_dep",
+                    "title": "Failing Dependency Mod",
+                    "url": "https://loverslab.com/files/file/fail_dep/",
+                }
+            ]
+        )
         session.add_all([dep_mod, parent_mod])
         session.commit()
         parent_id = parent_mod.id
@@ -228,6 +239,7 @@ def test_dependencies_dialog_partial_installation():
     from src.ui.components.dependencies_dialog import DependenciesDialog
 
     _app = QApplication.instance() or QApplication(["test", "-platform", "offscreen"])
+    assert _app is not None
     unfound = [{"title": "Unfound External Mod", "remote_id": ""}]
     already = [{"title": "Installed Mod A", "remote_id": "100"}]
     missing = [{"title": "Found Mod B", "remote_id": "200"}]
@@ -244,6 +256,7 @@ def test_dependencies_dialog_partial_installation():
 
     # Find the confirm button
     from PySide6.QtWidgets import QPushButton
+
     buttons = dlg.findChildren(QPushButton)
     confirm_btn = next((b for b in buttons if "Partielle" in b.text()), None)
     assert confirm_btn is not None

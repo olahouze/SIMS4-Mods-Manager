@@ -37,7 +37,6 @@ class RequirementsOverrideRequest(BaseModel):
     overrides: Dict[str, str] = {}  # { "raw_title": "MOD" | "COMMENT" }
 
 
-
 class CatalogModItem(BaseModel):
     id: int
     source: str
@@ -120,6 +119,7 @@ class CatalogInstallRequest(BaseModel):
                 return None
             try:
                 from dateutil import parser as date_parser
+
                 return date_parser.parse(v_str, dayfirst=True)
             except Exception:
                 try:
@@ -127,7 +127,6 @@ class CatalogInstallRequest(BaseModel):
                 except Exception:
                     return None
         return None
-
 
 
 class CatalogInstallResponse(BaseModel):
@@ -195,4 +194,3 @@ class SubmitMissingReportResponse(BaseModel):
     message: str
     already_reported: bool = False
     reported_at: Optional[str] = None
-

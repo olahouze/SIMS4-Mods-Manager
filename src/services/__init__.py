@@ -66,4 +66,3 @@ __all__ = [
     "LOCALIZED_SIMS4_FOLDERS",
     "RequirementReporterService",
 ]
-

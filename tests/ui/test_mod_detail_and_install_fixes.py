@@ -96,6 +96,7 @@ def test_detail_requirements_widget_no_synthetic_duplicate(qapp):
 
 def test_dialog_helper_information_and_success(qapp):
     from src.ui.utils.dialog_helper import DialogHelper
+
     with patch("PySide6.QtWidgets.QMessageBox.exec") as mock_exec:
         # 1. DialogHelper.information
         DialogHelper.information(None, "Info Title", "Info Message")
@@ -124,20 +125,22 @@ def test_installed_view_delete_mod_scenarios(qapp):
         mock_api.uninstall_mod.assert_not_called()
 
     # 2. User confirms deletion without dependents -> uninstall_mod called and success shown
-    with patch.object(DialogHelper, "confirm", return_value=True), \
-         patch.object(DialogHelper, "success") as mock_success:
+    with (
+        patch.object(DialogHelper, "confirm", return_value=True),
+        patch.object(DialogHelper, "success") as mock_success,
+    ):
         view._on_delete_mod({"id": 1, "title": "Test Mod", "folder_name": "mod_1"})
         mock_api.uninstall_mod.assert_called_once_with(1)
         mock_success.assert_called_once()
 
     # 3. Deletion with dependent mods detected -> warning dialog shown, user confirms
     mock_api.uninstall_mod.reset_mock()
-    mock_api.get_mod_dependents.return_value = {
-        "dependents": [{"title": "Dependent Mod", "folder_name": "mod_dep"}]
-    }
+    mock_api.get_mod_dependents.return_value = {"dependents": [{"title": "Dependent Mod", "folder_name": "mod_dep"}]}
 
-    with patch.object(DialogHelper, "confirm", return_value=True) as mock_confirm, \
-         patch.object(DialogHelper, "success") as mock_success:
+    with (
+        patch.object(DialogHelper, "confirm", return_value=True) as mock_confirm,
+        patch.object(DialogHelper, "success") as mock_success,
+    ):
         view._on_delete_mod({"id": 2, "title": "Base Mod", "folder_name": "mod_base"})
         mock_confirm.assert_called_once()
         assert mock_confirm.call_args[1].get("is_destructive") is True

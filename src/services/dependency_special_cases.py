@@ -1,6 +1,7 @@
 """
 Special dependency cases registry (e.g. WickedWhims, XML Injector) with aliases and hardcoded remote URLs.
 """
+
 import re
 from typing import List, Dict, Any, Optional
 
@@ -39,9 +40,7 @@ SPECIAL_DEPENDENCY_CASES: List[Dict[str, Any]] = [
     },
 ]
 
-SPECIAL_DEPENDENCY_REMOTE_IDS = {
-    case["remote_id"] for case in SPECIAL_DEPENDENCY_CASES if "remote_id" in case
-}
+SPECIAL_DEPENDENCY_REMOTE_IDS = {case["remote_id"] for case in SPECIAL_DEPENDENCY_CASES if "remote_id" in case}
 
 
 def find_special_dependency_case(name: str) -> Optional[Dict[str, Any]]:

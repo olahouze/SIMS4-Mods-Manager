@@ -2,6 +2,7 @@
 SubcategoryRowWidget: Progress row for a single LoversLab / provider subcategory
 in the ProviderDrawer.
 """
+
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel
 from PySide6.QtCore import Qt
 

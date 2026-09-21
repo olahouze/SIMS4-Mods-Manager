@@ -2,6 +2,7 @@
 Spacious modern view displaying all installed mods with current and new versions,
 individual update buttons, selection checkboxes, and batch update capabilities.
 """
+
 from typing import List, Dict, Any, Optional
 from PySide6.QtWidgets import (
     QWidget,
@@ -117,7 +118,8 @@ class UpdatesView(QWidget):
     def _render_table(self):
         query = self.search_input.text().lower().strip()
         filtered = [
-            item for item in self.all_mods
+            item
+            for item in self.all_mods
             if not query or query in item.get("title", "").lower() or query in item.get("source", "").lower()
         ]
 
@@ -141,7 +143,9 @@ class UpdatesView(QWidget):
 
             self.table.setCellWidget(row, 1, UpdatesRowBuilder.create_title_cell(title, source, folder_name))
             self.table.setCellWidget(row, 2, UpdatesRowBuilder.create_version_pill(item.get("current_version", "")))
-            self.table.setCellWidget(row, 3, UpdatesRowBuilder.create_new_version_pill(item.get("new_version", ""), has_update))
+            self.table.setCellWidget(
+                row, 3, UpdatesRowBuilder.create_new_version_pill(item.get("new_version", ""), has_update)
+            )
 
             has_link = bool(item.get("catalog_mod_id") or item.get("remote_id"))
             self.table.setCellWidget(row, 4, UpdatesRowBuilder.create_status_cell(has_update, has_link))

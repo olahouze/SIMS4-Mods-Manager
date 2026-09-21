@@ -263,9 +263,7 @@ class CatalogView(QWidget):
                 is_loverslab_auth=is_loverslab_auth,
             )
             card.install_requested.connect(self.install_mod)
-            card.details_requested.connect(
-                lambda d, inst=m.get("is_installed", False): self._show_mod_details(d, inst)
-            )
+            card.details_requested.connect(lambda d, inst=m.get("is_installed", False): self._show_mod_details(d, inst))
             new_cards.append(card)
 
         self.card_grid.set_cards(new_cards)

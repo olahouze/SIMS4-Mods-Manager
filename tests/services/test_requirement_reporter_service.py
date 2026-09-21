@@ -67,8 +67,10 @@ def test_check_report_status_already_commented():
     mock_provider = MagicMock()
     mock_provider.check_user_already_commented.return_value = (True, "12/09/2026 à 14:32")
 
-    with patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider):
+    with (
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider),
+    ):
         res = RequirementReporterService.check_report_status(
             source="loverslab",
             page_url="https://www.loverslab.com/files/file/123-test/",
@@ -87,8 +89,10 @@ def test_check_report_status_can_report():
     mock_provider = MagicMock()
     mock_provider.check_user_already_commented.return_value = (False, None)
 
-    with patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider):
+    with (
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider),
+    ):
         res = RequirementReporterService.check_report_status(
             source="loverslab",
             page_url="https://www.loverslab.com/files/file/123-test/",
@@ -106,8 +110,10 @@ def test_submit_report_blocks_when_already_reported():
     mock_provider = MagicMock()
     mock_provider.check_user_already_commented.return_value = (True, "12/09/2026 à 14:32")
 
-    with patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider):
+    with (
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider),
+    ):
         res = RequirementReporterService.submit_report(
             source="loverslab",
             page_url="https://www.loverslab.com/files/file/123-test/",
@@ -126,8 +132,10 @@ def test_submit_report_success():
     mock_provider.check_user_already_commented.return_value = (False, None)
     mock_provider.post_mod_comment.return_value = (True, "Message publié avec succès sur le forum LoversLab.")
 
-    with patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True), \
-         patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider):
+    with (
+        patch("src.core.session_manager.SessionManager.is_member_authenticated", return_value=True),
+        patch("src.providers.ProviderRegistry.get_provider", return_value=mock_provider),
+    ):
         res = RequirementReporterService.submit_report(
             source="loverslab",
             page_url="https://www.loverslab.com/files/file/123-test/",

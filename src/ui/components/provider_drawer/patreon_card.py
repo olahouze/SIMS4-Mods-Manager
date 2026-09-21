@@ -1,6 +1,7 @@
 """
 PatreonDrawerCard: Encapsulates the Patreon provider status summary in the satellite drawer.
 """
+
 from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,

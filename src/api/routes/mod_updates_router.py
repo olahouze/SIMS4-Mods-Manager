@@ -267,6 +267,7 @@ def update_all_mods():
         )
 
     from src.api.routes import updates as legacy_updates
+
     updater = getattr(legacy_updates, "_update_one_mod", _update_one_mod)
 
     updated_count = 0
@@ -290,6 +291,7 @@ def update_all_mods():
 def update_mod(installed_id: int):
     """Updates a single installed mod to the latest version found in catalog."""
     from src.api.routes import updates as legacy_updates
+
     updater = getattr(legacy_updates, "_update_one_mod", _update_one_mod)
     ok, msg = updater(installed_id)
     if not ok:

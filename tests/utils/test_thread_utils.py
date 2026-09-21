@@ -1,6 +1,7 @@
 """
 Unit tests for thread_utils.py, BaseWorker, and safe_stop_thread lifecycle management.
 """
+
 import time
 from PySide6.QtCore import Signal, QThreadPool
 from src.utils.thread_utils import BaseWorker, safe_stop_thread, cleanup_all_threads

@@ -1,6 +1,7 @@
 """
 Reusable helper widgets for CatalogView (Sync banner and pagination bar).
 """
+
 from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
@@ -108,4 +109,3 @@ class CatalogPaginationBar(QWidget):
     def retranslate_ui(self):
         self.btn_prev.setText(tr("catalog.pagination_prev"))
         self.btn_next.setText(tr("catalog.pagination_next"))
-

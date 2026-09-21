@@ -111,9 +111,9 @@ def test_installed_mod_dependents_endpoint(client):
             title="Dependent Child Mod",
             page_url="https://example.com/child",
         )
-        child_cat.set_requirements_mods_list([
-            {"source": "loverslab", "remote_id": "prereq_99", "title": "Prerequisite Core Mod"}
-        ])
+        child_cat.set_requirements_mods_list(
+            [{"source": "loverslab", "remote_id": "prereq_99", "title": "Prerequisite Core Mod"}]
+        )
         child_inst = InstalledMod(
             source="loverslab",
             remote_id="child_99",
@@ -145,4 +145,3 @@ def test_installed_mod_dependents_endpoint(client):
     assert child_resp.status_code == 200
     assert child_resp.json()["has_dependents"] is False
     assert child_resp.json()["count"] == 0
-

@@ -1,6 +1,7 @@
 """
 Sidebar navigation widget with branding, navigation buttons, game detection status, and quick launch button.
 """
+
 from typing import List
 from PySide6.QtWidgets import (
     QFrame,

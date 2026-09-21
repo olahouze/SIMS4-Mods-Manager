@@ -111,13 +111,13 @@ class MainWindow(QMainWindow):
         self.settings_view = SettingsView()
         self.mod_detail_view = ModDetailView()
 
-        self.stacked_widget.addWidget(self.accounts_view)    # Index 0
-        self.stacked_widget.addWidget(self.catalog_view)     # Index 1
-        self.stacked_widget.addWidget(self.installed_view)   # Index 2
-        self.stacked_widget.addWidget(self.downloads_view)   # Index 3
-        self.stacked_widget.addWidget(self.updates_view)     # Index 4
-        self.stacked_widget.addWidget(self.logs_view)        # Index 5
-        self.stacked_widget.addWidget(self.settings_view)    # Index 6
+        self.stacked_widget.addWidget(self.accounts_view)  # Index 0
+        self.stacked_widget.addWidget(self.catalog_view)  # Index 1
+        self.stacked_widget.addWidget(self.installed_view)  # Index 2
+        self.stacked_widget.addWidget(self.downloads_view)  # Index 3
+        self.stacked_widget.addWidget(self.updates_view)  # Index 4
+        self.stacked_widget.addWidget(self.logs_view)  # Index 5
+        self.stacked_widget.addWidget(self.settings_view)  # Index 6
         self.stacked_widget.addWidget(self.mod_detail_view)  # Index 7
 
         content_layout.addWidget(self.stacked_widget)
@@ -293,7 +293,9 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logger.debug(f"Erreur retranslate_ui sur {type(view).__name__}: {e}")
 
-        if hasattr(self.catalog_view, "provider_drawer") and hasattr(self.catalog_view.provider_drawer, "retranslate_ui"):
+        if hasattr(self.catalog_view, "provider_drawer") and hasattr(
+            self.catalog_view.provider_drawer, "retranslate_ui"
+        ):
             try:
                 self.catalog_view.provider_drawer.retranslate_ui()
             except Exception as e:
@@ -319,9 +321,7 @@ class MainWindow(QMainWindow):
                 self, tr("nav.launch_game_title"), res.get("message", tr("nav.launch_game_success"))
             )
         except Exception as e:
-            QMessageBox.warning(
-                self, tr("dialogs.error_title"), tr("nav.launch_game_error", error=str(e))
-            )
+            QMessageBox.warning(self, tr("dialogs.error_title"), tr("nav.launch_game_error", error=str(e)))
 
     def auto_start_background_sync(self):
         try:

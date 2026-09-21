@@ -3,6 +3,7 @@ GameService: Facade providing Sims 4 user directories, Mods path,
 Resource.cfg verification, and game launching.
 Re-exports GameDetector and GameLauncher to maintain backwards compatibility.
 """
+
 from typing import Optional
 from pathlib import Path
 

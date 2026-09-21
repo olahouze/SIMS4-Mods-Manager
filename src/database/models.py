@@ -55,7 +55,9 @@ class CatalogMod(Base):
     requirements_text = Column(Text, nullable=True)
     requirements_status = Column(String(50), default="NONE")  # NONE, RESOLVED, PENDING_VERIFICATION
     requirements_mods_json = Column(JSON, default=list)  # JSON list of resolved LoversLab dependencies
-    requirements_overrides_json = Column(JSON, default=dict)  # JSON dict of user classification {title: "MOD"|"COMMENT"}
+    requirements_overrides_json = Column(
+        JSON, default=dict
+    )  # JSON dict of user classification {title: "MOD"|"COMMENT"}
     last_scraped_at = Column(DateTime, default=datetime.now)
 
     __table_args__ = (

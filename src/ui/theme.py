@@ -1,6 +1,7 @@
 """
 Dark modern styling system for SIMS4-Mods-Manager with rich aesthetics.
 """
+
 from src.ui.styles.global_qss import DARK_THEME_QSS
 
 __all__ = ["DARK_THEME_QSS", "Theme"]
@@ -32,9 +33,9 @@ class Theme:
     def badge_style(cls, variant: str = "neutral", font_size: int = 10, padding: str = "1px 6px") -> str:
         palette = cls.BADGE_PALETTES.get(variant, cls.BADGE_PALETTES["neutral"])
         return f"""
-            color: {palette['fg']};
-            background-color: {palette['bg']};
-            border: 1px solid {palette['border']};
+            color: {palette["fg"]};
+            background-color: {palette["bg"]};
+            border: 1px solid {palette["border"]};
             border-radius: 4px;
             padding: {padding};
             font-size: {font_size}px;
@@ -132,7 +133,9 @@ class Theme:
         """
 
     @classmethod
-    def subtle_toggle_button_style(cls, is_active: bool = False, active_color: str = "#93c5fd", border_color: str = "#2563eb") -> str:
+    def subtle_toggle_button_style(
+        cls, is_active: bool = False, active_color: str = "#93c5fd", border_color: str = "#2563eb"
+    ) -> str:
         if is_active:
             return f"""
                 QPushButton {{
@@ -252,4 +255,3 @@ class Theme:
                 background-color: #191c2b;
             }
         """
-

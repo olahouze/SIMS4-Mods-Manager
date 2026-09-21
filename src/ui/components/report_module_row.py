@@ -2,6 +2,7 @@
 Interactive row widget representing a module item in ReportPreviewDialog
 with a selection checkbox and radio buttons to mark as missing mod or comment/not a mod.
 """
+
 from PySide6.QtWidgets import (
     QFrame,
     QVBoxLayout,

@@ -2,6 +2,7 @@
 DetailRequirementsWidget: Collapsible requirements, DLCs, and dependencies section
 with integrated author interpellation for ModDetailView.
 """
+
 from typing import Dict, List, Any, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -190,7 +191,18 @@ class DetailRequirementsWidget(QWidget):
             else:
                 unfound.append(d)
 
-        if (not raw_deps and not game_dlcs and not already_installed and not to_install and not unfound and not comments) and req_text and req_text.strip():
+        if (
+            (
+                not raw_deps
+                and not game_dlcs
+                and not already_installed
+                and not to_install
+                and not unfound
+                and not comments
+            )
+            and req_text
+            and req_text.strip()
+        ):
             clean_req_text = clean_dependency_title(req_text)
             is_bg, is_dlc_text, _, _ = detect_game_dlc_or_base_game(clean_req_text)
             if not is_bg and not is_dlc_text:
@@ -249,7 +261,9 @@ class DetailRequirementsWidget(QWidget):
 
             def _add_section_header(title: str, color: str):
                 lbl = QLabel(title)
-                lbl.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {color}; margin-top: 4px; margin-bottom: 2px;")
+                lbl.setStyleSheet(
+                    f"font-size: 12px; font-weight: 700; color: {color}; margin-top: 4px; margin-bottom: 2px;"
+                )
                 self.deps_layout.addWidget(lbl)
 
             if game_dlcs:
@@ -258,7 +272,9 @@ class DetailRequirementsWidget(QWidget):
                     t = d.get("title") or d.get("dlc_name") or "DLC Sims 4"
                     is_detected = d.get("is_installed", False)
                     badge_t = "✅ Détecté dans le jeu" if is_detected else "🎮 DLC Jeu (À vérifier)"
-                    card = DependencyCardWidget(t, badge_t, badge_variant="success" if is_detected else "purple", prefix="🎮")
+                    card = DependencyCardWidget(
+                        t, badge_t, badge_variant="success" if is_detected else "purple", prefix="🎮"
+                    )
                     self.deps_layout.addWidget(card)
 
             if to_install:
@@ -285,12 +301,16 @@ class DetailRequirementsWidget(QWidget):
                     btn_comm.setCursor(Qt.CursorShape.PointingHandCursor)
                     btn_comm.setStyleSheet(Theme.subtle_toggle_button_style(is_active=False))
                     btn_comm.clicked.connect(lambda _, item=d: self.toggle_comment_requested.emit(item, True))
-                    card = DependencyCardWidget(t, "⚠️ Introuvable sur LoversLab", badge_variant="danger", prefix="⚠️", action_btn=btn_comm)
+                    card = DependencyCardWidget(
+                        t, "⚠️ Introuvable sur LoversLab", badge_variant="danger", prefix="⚠️", action_btn=btn_comm
+                    )
                     self.deps_layout.addWidget(card)
 
             if comments:
                 _add_section_header(f"💬 Notes & Commentaires identifiés ({len(comments)}) :", "#94a3b8")
-                comm_note = QLabel("Ces éléments ont été marqués comme simples commentaires textuels et ne bloqueront pas l'installation :")
+                comm_note = QLabel(
+                    "Ces éléments ont été marqués comme simples commentaires textuels et ne bloqueront pas l'installation :"
+                )
                 comm_note.setStyleSheet("font-size: 11px; color: #64748b; margin-bottom: 2px;")
                 comm_note.setWordWrap(True)
                 self.deps_layout.addWidget(comm_note)
@@ -300,7 +320,9 @@ class DetailRequirementsWidget(QWidget):
                     btn_mod.setCursor(Qt.CursorShape.PointingHandCursor)
                     btn_mod.setStyleSheet(Theme.subtle_toggle_button_style(is_active=True))
                     btn_mod.clicked.connect(lambda _, item=d: self.toggle_comment_requested.emit(item, False))
-                    card = DependencyCardWidget(t, "💬 Commentaire / Note", badge_variant="neutral", prefix="💬", action_btn=btn_mod)
+                    card = DependencyCardWidget(
+                        t, "💬 Commentaire / Note", badge_variant="neutral", prefix="💬", action_btn=btn_mod
+                    )
                     self.deps_layout.addWidget(card)
 
             if unfound or comments:
@@ -341,7 +363,11 @@ class DetailRequirementsWidget(QWidget):
 
     def _trigger_check_report_status(self, data: dict, comment_names: Optional[List[str]] = None):
         if comment_names is None:
-            comment_names = [(c.get("title") or f"Mod #{c.get('remote_id')}") for c in self._comment_deps if (c.get("title") or c.get("remote_id"))]
+            comment_names = [
+                (c.get("title") or f"Mod #{c.get('remote_id')}")
+                for c in self._comment_deps
+                if (c.get("title") or c.get("remote_id"))
+            ]
         self.interpellate_widget.check_status(data, self._unfound_dep_names, comment_names)
 
     def _on_report_status_ready(self, res: dict):

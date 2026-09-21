@@ -2,6 +2,7 @@
 AccountCardWidget: Reusable UI card for site provider authentication (LoversLab, Patreon).
 Encapsulates status badges, descriptions, action buttons and signal routing.
 """
+
 from typing import Optional
 from PySide6.QtWidgets import (
     QFrame,

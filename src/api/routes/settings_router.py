@@ -64,6 +64,7 @@ def update_settings(payload: SettingsUpdateRequest):
         config.language = payload.language
         try:
             from src.i18n import I18nManager
+
             I18nManager.instance().set_language(payload.language)
         except Exception as e:
             logger.debug(f"I18nManager set_language error in router: {e}")

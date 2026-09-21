@@ -1,6 +1,7 @@
 """
 Report-related asynchronous background workers for Qt UI.
 """
+
 from PySide6.QtCore import Signal
 
 from src.api.client import get_api_client
@@ -39,6 +40,7 @@ class SubmitReportWorker(BaseWorker):
 
 class CheckReportStatusWorker(BaseWorker):
     """Asynchronous worker to check missing report status from API."""
+
     status_ready = Signal(dict)
 
     def __init__(self, payload: dict, parent=None):
@@ -57,13 +59,15 @@ class CheckReportStatusWorker(BaseWorker):
         except Exception as e:
             if not self._is_cancelled:
                 logger.debug(f"CheckReportStatusWorker error: {e}")
-                self.status_ready.emit({
-                    "can_report": True,
-                    "already_reported": False,
-                    "reported_at": None,
-                    "formatted_message": "",
-                    "author": self.payload.get("author", ""),
-                    "is_authenticated": True,
-                })
+                self.status_ready.emit(
+                    {
+                        "can_report": True,
+                        "already_reported": False,
+                        "reported_at": None,
+                        "formatted_message": "",
+                        "author": self.payload.get("author", ""),
+                        "is_authenticated": True,
+                    }
+                )
         finally:
             self._is_running = False

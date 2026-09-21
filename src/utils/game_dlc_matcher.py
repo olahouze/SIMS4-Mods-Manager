@@ -176,11 +176,15 @@ class GameDlcMatcher:
         # Clean leading bullets, dashes, brackets, colons
         clean = re.sub(r"^[\s•\*\-\–\—\d\.\)\:\[\]\(\)\{\}\"\'\`]+", "", text).strip()
         # Clean leading requirement prefixes (e.g. "Requires:", "Requirements:", "Need:", "DLC:", "Pack:")
-        clean = re.sub(
-            r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
-            "",
-            clean,
-        ).strip().strip("'\"`[](){}")
+        clean = (
+            re.sub(
+                r"(?i)^(?:requirements?|pr[ée]requis|prerequisites?|needs?|required(?:\s*(?:mods?|packs?|dlcs?))?|requires?|dlcs?|packs?)\s*[:\-–—\s]\s*",
+                "",
+                clean,
+            )
+            .strip()
+            .strip("'\"`[](){}")
+        )
 
         if not clean or cls.is_base_game_only(clean):
             return False, None, None
@@ -208,7 +212,9 @@ class GameDlcMatcher:
                     if k_fp == clean_fp or (len(k_fp) >= 5 and k_fp in clean_fp):
                         dlc_candidate = clean
                         break
-            if not dlc_candidate and (DLC_KEYWORDS_REGEX.search(clean) or re.search(r"\b(?:ep|gp|sp)[\s\-_]?\d{1,2}\b", clean, re.I)):
+            if not dlc_candidate and (
+                DLC_KEYWORDS_REGEX.search(clean) or re.search(r"\b(?:ep|gp|sp)[\s\-_]?\d{1,2}\b", clean, re.I)
+            ):
                 dlc_candidate = clean
 
         if not dlc_candidate:

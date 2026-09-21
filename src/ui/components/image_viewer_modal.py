@@ -79,7 +79,9 @@ class ImageViewerModal(QDialog):
 
         self._init_ui()
         if self.images:
-            self.counter_lbl.setText(tr("image_viewer.photo_counter", current=self.current_index + 1, total=len(self.images)))
+            self.counter_lbl.setText(
+                tr("image_viewer.photo_counter", current=self.current_index + 1, total=len(self.images))
+            )
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -99,7 +101,9 @@ class ImageViewerModal(QDialog):
 
         # Header: Counter and Close button
         header_layout = QHBoxLayout()
-        self.counter_lbl = QLabel(tr("image_viewer.photo_counter", current=self.current_index + 1, total=len(self.images)))
+        self.counter_lbl = QLabel(
+            tr("image_viewer.photo_counter", current=self.current_index + 1, total=len(self.images))
+        )
         self.counter_lbl.setStyleSheet("font-size: 14px; font-weight: 700; color: #94a3b8;")
         header_layout.addWidget(self.counter_lbl)
 

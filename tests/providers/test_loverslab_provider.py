@@ -148,7 +148,7 @@ def test_loverslab_scrape_page1_titles():
     def mock_get(u, *args, **kwargs):
         resp = MagicMock()
         resp.status_code = 200
-        resp.text = '''
+        resp.text = """
         <html>
             <li class="ipsDataItem" data-rowid="1234">
                 <h4 class="ipsDataItem_title"><a href="https://www.loverslab.com/files/file/1234-mod-one/">Mod One</a></h4>
@@ -159,7 +159,7 @@ def test_loverslab_scrape_page1_titles():
                 <div class="ipsDataItem_meta"><a href="/profile/2">Author2</a></div>
             </li>
         </html>
-        '''
+        """
         return resp
 
     with patch("src.core.session_manager.SessionManager.get_http_session") as mock_get_sess:
@@ -211,6 +211,8 @@ def test_loverslab_download_mod_file_signature(tmp_path):
 
         # 2. Call with keyword arguments
         mock_dl.reset_mock()
-        ok2, msg2 = provider.download_mod_file(download_url="https://loverslab.com/files/file/123/", dest_path=tmp_path / "test2.zip")
+        ok2, msg2 = provider.download_mod_file(
+            download_url="https://loverslab.com/files/file/123/", dest_path=tmp_path / "test2.zip"
+        )
         assert ok2 is True
         mock_dl.assert_called_once()

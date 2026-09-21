@@ -40,7 +40,7 @@ class RequirementReporterService:
         clean_unnecessary = [m.strip() for m in (unnecessary_modules or []) if m and m.strip()]
 
         if not clean_missing and not clean_unnecessary:
-            return f"Hi {mention},\n\nCould you please review the Requirements section for \"{title_str}\"?\n\nThank you!"
+            return f'Hi {mention},\n\nCould you please review the Requirements section for "{title_str}"?\n\nThank you!'
 
         sections = []
 
@@ -55,7 +55,7 @@ class RequirementReporterService:
                 )
             else:
                 sections.append(
-                    f"In the Requirements section for \"{title_str}\", the following module(s) "
+                    f'In the Requirements section for "{title_str}", the following module(s) '
                     f"could not be identified or found in the catalog:\n"
                     f"{items_str}\n\n"
                     f"Could you please check or clarify the exact name or link for these requirements "
@@ -72,7 +72,7 @@ class RequirementReporterService:
                 )
             else:
                 sections.append(
-                    f"In the Requirements section for \"{title_str}\", the following item(s) are listed "
+                    f'In the Requirements section for "{title_str}", the following item(s) are listed '
                     f"but do not appear to be mods or required files (they appear to be comments or text notes):\n"
                     f"{items_str}\n\n"
                     f"Could you please remove these comments from the Requirements section "

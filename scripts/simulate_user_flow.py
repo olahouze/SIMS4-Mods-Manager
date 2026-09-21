@@ -44,11 +44,13 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
+
 def _safe_str(val: Any) -> str:
     """Encode une chaîne de façon sécurisée pour la console sans planter sur les émojis."""
     s = str(val or "")
     encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
     return s.encode(encoding, errors="replace").decode(encoding, errors="replace")
+
 
 import httpx
 
@@ -134,6 +136,7 @@ class SimulationRunner:
 
     def _setup_signal_handlers(self) -> None:
         """Capture Ctrl+C et terminaisons pour garantir le nettoyage."""
+
         def _handle_signal(sig, frame):
             if self._interrupted:
                 sys.exit(1)
@@ -267,10 +270,7 @@ class SimulationRunner:
         print("\n[NETTOYAGE] Recherche des mods de test LoversLab à désinstaller...")
         installed = self._get_installed_mods_list()
         # Ne pas toucher à WickedWhims officiel s'il était déjà présent
-        test_mods = [
-            m for m in installed
-            if m.get("source") == "loverslab" and str(m.get("remote_id")) != "807"
-        ]
+        test_mods = [m for m in installed if m.get("source") == "loverslab" and str(m.get("remote_id")) != "807"]
         if not test_mods:
             print(" -> Aucun mod de test orphelin à nettoyer.")
             return
@@ -430,7 +430,9 @@ class SimulationRunner:
         # Limitation de l'audit si demandé via --limit-audit
         if needed_audit:
             target_mods = all_mods
-            print(f" -> Limitation d'audit activée (--limit-audit {self.limit_audit}) : {len(target_mods)} mod(s) retenu(s).")
+            print(
+                f" -> Limitation d'audit activée (--limit-audit {self.limit_audit}) : {len(target_mods)} mod(s) retenu(s)."
+            )
         else:
             target_mods = all_mods
             print(f" -> Total de {len(target_mods)} mod(s) LoversLab à auditer.")
@@ -496,13 +498,15 @@ class SimulationRunner:
                 dl_ok, dl_err = self._check_loverslab_direct_download(page_url)
                 if dl_ok:
                     with self._lock:
-                        self.verified_downloadable_mods.append({
-                            "id": mod_id,
-                            "title": title,
-                            "source": source,
-                            "remote_id": remote_id,
-                            "page_url": page_url,
-                        })
+                        self.verified_downloadable_mods.append(
+                            {
+                                "id": mod_id,
+                                "title": title,
+                                "source": source,
+                                "remote_id": remote_id,
+                                "page_url": page_url,
+                            }
+                        )
                 else:
                     has_explicit_direct = bool(cm_obj and getattr(cm_obj, "get_download_urls_list", lambda: [])())
                     if has_explicit_direct:
@@ -516,7 +520,9 @@ class SimulationRunner:
 
             # 3.3 Cohérence du statut Patreon
             if patreon_status and patreon_status != "NONE":
-                ext_links = cm_obj.get_external_links_list() if cm_obj and hasattr(cm_obj, "get_external_links_list") else []
+                ext_links = (
+                    cm_obj.get_external_links_list() if cm_obj and hasattr(cm_obj, "get_external_links_list") else []
+                )
                 patreon_link = next((link for link in ext_links if "patreon.com" in link.lower()), None)
                 if patreon_link:
                     p_ok, p_actual, p_err = self._check_patreon_post_coherence(patreon_link, patreon_status)
@@ -550,13 +556,13 @@ class SimulationRunner:
             progress_tracker[0] += 1
             done = progress_tracker[0]
             self.stats["total_audited_mods"] += 1
-            safe_title_console = title[:35].encode(
-                sys.stdout.encoding or "utf-8", errors="replace"
-            ).decode(sys.stdout.encoding or "utf-8")
+            safe_title_console = (
+                title[:35]
+                .encode(sys.stdout.encoding or "utf-8", errors="replace")
+                .decode(sys.stdout.encoding or "utf-8")
+            )
             try:
-                sys.stdout.write(
-                    f"\r -> Audit [{done}/{total_count}] : {safe_title_console}...                    "
-                )
+                sys.stdout.write(f"\r -> Audit [{done}/{total_count}] : {safe_title_console}...                    ")
                 sys.stdout.flush()
             except Exception:
                 pass
@@ -666,9 +672,7 @@ class SimulationRunner:
                 return False, str(e)
             return True, ""
 
-    def _record_inconsistency(
-        self, title: str, url: str, app_status: str, internet_status: str, details: str
-    ) -> None:
+    def _record_inconsistency(self, title: str, url: str, app_status: str, internet_status: str, details: str) -> None:
         """Enregistre une incohérence avérée de manière thread-safe."""
         with self._lock:
             self.inconsistencies.append(
@@ -696,9 +700,7 @@ class SimulationRunner:
         # Mémoriser les mods déjà installés dans le jeu avant les installations
         if not self.installed_mod_ids_before:
             initial_installed = self._get_installed_mods_list()
-            self.installed_mod_ids_before = {
-                m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m
-            }
+            self.installed_mod_ids_before = {m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m}
         print(f" -> {len(self.installed_mod_ids_before)} mod(s) préexistant(s) mémorisé(s) dans le jeu.")
 
         candidate_mods: List[Dict[str, Any]] = []
@@ -748,13 +750,15 @@ class SimulationRunner:
                         dl_urls = cm.get_download_urls_list() if hasattr(cm, "get_download_urls_list") else []
                         if ext_links and not dl_urls:
                             continue
-                        candidate_mods.append({
-                            "id": cm.id,
-                            "source": cm.source,
-                            "remote_id": cm.remote_id,
-                            "title": cm.title,
-                            "page_url": cm.page_url,
-                        })
+                        candidate_mods.append(
+                            {
+                                "id": cm.id,
+                                "source": cm.source,
+                                "remote_id": cm.remote_id,
+                                "title": cm.title,
+                                "page_url": cm.page_url,
+                            }
+                        )
             except Exception:
                 pass
 
@@ -875,9 +879,9 @@ class SimulationRunner:
         curr_installed = self._get_installed_mods_list()
         # Mods ciblés : ceux identifiés durant cette session OU absents de l'état initial
         newly_installed = [
-            m for m in curr_installed
-            if (m.get("id") in self.installed_session_mod_ids)
-            or (m.get("id") not in self.installed_mod_ids_before)
+            m
+            for m in curr_installed
+            if (m.get("id") in self.installed_session_mod_ids) or (m.get("id") not in self.installed_mod_ids_before)
         ]
         if not newly_installed:
             print(" -> Aucun nouveau mod installé à nettoyer.")
@@ -899,20 +903,24 @@ class SimulationRunner:
                     self.stats["cleaned_mods_count"] += 1
                 else:
                     print(f" -> [FAIL] Échec nettoyage : '{safe_t}' : {_safe_str(msg)}")
-                self.cleanup_results.append({
-                    "title": title,
-                    "folder": folder_name,
-                    "success": success,
-                    "message": msg,
-                })
+                self.cleanup_results.append(
+                    {
+                        "title": title,
+                        "folder": folder_name,
+                        "success": success,
+                        "message": msg,
+                    }
+                )
             except Exception as e:
                 print(f" -> [FAIL] Exception nettoyage '{safe_t}' : {_safe_str(e)}")
-                self.cleanup_results.append({
-                    "title": title,
-                    "folder": folder_name,
-                    "success": False,
-                    "message": str(e),
-                })
+                self.cleanup_results.append(
+                    {
+                        "title": title,
+                        "folder": folder_name,
+                        "success": False,
+                        "message": str(e),
+                    }
+                )
 
     # =========================================================================
     # Étape 5 : Récupération séquentielle des logs & génération du rapport final
@@ -1034,7 +1042,9 @@ class SimulationRunner:
             rf.write(f"| Incohérences détectées | **{self.stats['inconsistencies_count']}** |\n")
             rf.write(f"| Installations tentées | **{self.stats['installations_attempted']}** |\n")
             rf.write(f"| Installations réussies (complètes) | **{self.stats['installations_succeeded']}** |\n")
-            rf.write(f"| Installations partielles (dépendances non résolues) | **{self.stats['installations_partial']}** |\n")
+            rf.write(
+                f"| Installations partielles (dépendances non résolues) | **{self.stats['installations_partial']}** |\n"
+            )
             rf.write(f"| Installations échouées | **{self.stats['installations_failed']}** |\n")
             rf.write(f"| Mods de test désinstallés (nettoyés) | **{self.stats['cleaned_mods_count']}** |\n")
             rf.write(f"| Erreurs d'application relevées dans les logs | **{self.stats['errors_logged_count']}** |\n\n")
@@ -1074,9 +1084,7 @@ class SimulationRunner:
                     safe_title = inst["title"].replace("|", "-")
                     safe_msg = inst["message"].replace("|", "-")
                     deps_str = ", ".join(inst["installed_dependencies"]) if inst["installed_dependencies"] else "Aucune"
-                    rf.write(
-                        f"| {safe_title} | {inst['duration_sec']}s | {status_icon} | {safe_msg} | {deps_str} |\n"
-                    )
+                    rf.write(f"| {safe_title} | {inst['duration_sec']}s | {status_icon} | {safe_msg} | {deps_str} |\n")
                 rf.write("\n")
 
             if self.cleanup_results:
@@ -1085,7 +1093,9 @@ class SimulationRunner:
                 rf.write("| :--- | :--- | :--- | :--- |\n")
                 for cl in self.cleanup_results:
                     st = "✅ Succès" if cl["success"] else "❌ Échec"
-                    rf.write(f"| {cl['title'].replace('|', '-')} | `{cl['folder']}` | {st} | {cl['message'].replace('|', '-')} |\n")
+                    rf.write(
+                        f"| {cl['title'].replace('|', '-')} | `{cl['folder']}` | {st} | {cl['message'].replace('|', '-')} |\n"
+                    )
                 rf.write("\n")
 
             # Section Erreurs d'application relevées
@@ -1112,10 +1122,7 @@ class SimulationRunner:
                 "skip_sync": self.skip_sync,
                 "keep_installed": self.keep_installed,
             },
-            "stats": {
-                k: (v.isoformat() if isinstance(v, datetime) else v)
-                for k, v in self.stats.items()
-            },
+            "stats": {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in self.stats.items()},
             "inconsistencies": self.inconsistencies,
             "installation_results": self.installation_results,
             "cleanup_results": self.cleanup_results,
@@ -1145,16 +1152,16 @@ class SimulationRunner:
             self.ensure_api_server()
             # Mémorisation stricte des mods déjà installés dans le jeu avant toute opération
             initial_installed = self._get_installed_mods_list()
-            self.installed_mod_ids_before = {
-                m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m
-            }
+            self.installed_mod_ids_before = {m["id"] for m in initial_installed if isinstance(m, dict) and "id" in m}
             print(f" -> {len(self.installed_mod_ids_before)} mod(s) déjà installé(s) au préalable dans le jeu.")
 
             self.setup_loverslab_session()
             if not self.skip_sync:
                 self.sync_catalog()
             else:
-                print("\n[ÉTAPE 2] Synchronisation LoversLab ignorée (--skip-sync actif). Réutilisation du catalogue existant.")
+                print(
+                    "\n[ÉTAPE 2] Synchronisation LoversLab ignorée (--skip-sync actif). Réutilisation du catalogue existant."
+                )
             self.audit_mods_consistency()
             self.install_mods_sequentially()
             self.cleanup_installed_test_mods()
@@ -1259,7 +1266,9 @@ def main():
         failed_installs = runner.stats.get("installations_failed", 0)
         logged_errors = runner.stats.get("errors_logged_count", 0)
         if failed_installs > 0 or logged_errors > 0:
-            print(f"\n[CI/CD ERROR] Échec de la simulation : {failed_installs} installation(s) échouée(s), {logged_errors} erreur(s) relevée(s).")
+            print(
+                f"\n[CI/CD ERROR] Échec de la simulation : {failed_installs} installation(s) échouée(s), {logged_errors} erreur(s) relevée(s)."
+            )
             sys.exit(1)
 
 

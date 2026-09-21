@@ -45,9 +45,7 @@ class DependenciesSummaryWidget(QFrame):
 
         for dep in self.dependencies[: self.max_show]:
             d_title = dep.get("title") if isinstance(dep, dict) else getattr(dep, "title", "Mod")
-            d_status = (
-                dep.get("status") if isinstance(dep, dict) else getattr(dep, "status", "DETECTED_NOT_INSTALLED")
-            )
+            d_status = dep.get("status") if isinstance(dep, dict) else getattr(dep, "status", "DETECTED_NOT_INSTALLED")
             is_inst = dep.get("is_installed") if isinstance(dep, dict) else getattr(dep, "is_installed", False)
             is_dlc = dep.get("is_game_dlc") if isinstance(dep, dict) else getattr(dep, "is_game_dlc", False)
 

@@ -110,12 +110,11 @@ def db_session(tmp_path):
         yield session
 
 
-
-
 @pytest.fixture(scope="session")
 def qapp():
     """QApplication session fixture for UI tests."""
     from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance()
     if not app:
         app = QApplication(["pytest", "-platform", "offscreen"])
@@ -144,15 +143,10 @@ def pytest_sessionfinish(session, exitstatus):
     try:
         from PySide6.QtCore import QThreadPool
         from PySide6.QtWidgets import QApplication
+
         QThreadPool.globalInstance().waitForDone(50)
         app = QApplication.instance()
         if app:
             app.quit()
     except Exception:
         pass
-
-
-
-
-
-

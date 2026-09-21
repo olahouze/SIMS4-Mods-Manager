@@ -1,6 +1,7 @@
 """
 Settings sub-package containing specialized section cards.
 """
+
 from src.ui.views.settings.settings_cards import (
     LanguageCardWidget,
     PathsCardWidget,

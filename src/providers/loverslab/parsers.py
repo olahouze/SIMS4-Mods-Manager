@@ -51,8 +51,10 @@ def extract_gallery_screenshots(soup: BeautifulSoup, base_url: str = "https://ww
         "a[data-ipsLightbox], a[href*='/screenshots/'], .cFileTop a[href$='.jpg'], .cFileTop a[href$='.png'], .cFileTop a[href$='.webp']"
     ):
         h = a.get("href")
-        if h and h.startswith("http") and not any(
-            j in h.lower() for j in ["/themes/", "/reactions/", "icon_", "avatar", "logo", ".svg"]
+        if (
+            h
+            and h.startswith("http")
+            and not any(j in h.lower() for j in ["/themes/", "/reactions/", "icon_", "avatar", "logo", ".svg"])
         ):
             if h not in gallery_screenshots:
                 gallery_screenshots.append(h)

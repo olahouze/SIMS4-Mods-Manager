@@ -2,7 +2,7 @@
 DependenciesDialog: Modal dialog displaying the dependency tree for a mod before installation.
 Uses DependencyCardWidget and AuthorInterpellateWidget for a DRY, unified UI.
 """
-import threading
+
 from typing import List, Optional
 from PySide6.QtWidgets import (
     QDialog,
@@ -38,14 +38,16 @@ class CheckReportStatusWorker(_BaseCheckReportStatusWorker):
             self.status_ready.emit(res)
         except Exception as e:
             logger.debug(f"CheckReportStatusWorker error: {e}")
-            self.status_ready.emit({
-                "can_report": True,
-                "already_reported": False,
-                "reported_at": None,
-                "formatted_message": "",
-                "author": self.payload.get("author", ""),
-                "is_authenticated": True,
-            })
+            self.status_ready.emit(
+                {
+                    "can_report": True,
+                    "already_reported": False,
+                    "reported_at": None,
+                    "formatted_message": "",
+                    "author": self.payload.get("author", ""),
+                    "is_authenticated": True,
+                }
+            )
 
 
 __all__ = ["DependenciesDialog", "CheckReportStatusWorker"]
@@ -298,16 +300,21 @@ class DependenciesDialog(QDialog):
 
         cat_id = self.mod_data.get("id") or self.mod_data.get("catalog_mod_id")
         if cat_id:
+            from src.ui.workers.generic_runnable import run_async_ui_task
+
             def _async_save():
                 try:
                     client = get_api_client()
-                    client.save_requirements_override({
-                        "catalog_mod_id": cat_id,
-                        "overrides": {title: "COMMENT" if to_comment else "MOD"},
-                    })
+                    client.save_requirements_override(
+                        {
+                            "catalog_mod_id": cat_id,
+                            "overrides": {title: "COMMENT" if to_comment else "MOD"},
+                        }
+                    )
                 except Exception as e:
                     logger.debug(f"Erreur enregistrement override: {e}")
-            threading.Thread(target=_async_save, daemon=True).start()
+
+            run_async_ui_task(_async_save)
 
         self.is_partial = bool(self.unfound)
         self._update_dialog_header_and_buttons()

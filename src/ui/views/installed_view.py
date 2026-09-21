@@ -217,7 +217,9 @@ class InstalledView(QWidget):
             res = self.api_client.uninstall_mod(mod_id)
             if res.get("success", False):
                 logger.info(f"Mod '{title}' désinstallé avec succès.")
-                DialogHelper.success(self, tr("installed.delete_success_title"), tr("installed.delete_success_msg", title=title))
+                DialogHelper.success(
+                    self, tr("installed.delete_success_title"), tr("installed.delete_success_msg", title=title)
+                )
                 self.mods_changed.emit()
             else:
                 logger.error(f"Échec de la suppression de '{title}': {res.get('message')}")

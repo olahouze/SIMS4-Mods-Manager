@@ -223,14 +223,12 @@ class ModCard(BaseModCard):
         else:
             dependencies = self.mod_data.get("dependencies", [])
             req_status = self.mod_data.get("requirements_status", "NONE")
-            has_unfound_deps = (
-                req_status == "PENDING_VERIFICATION"
-                or any(
-                    (d.get("status") if isinstance(d, dict) else getattr(d, "status", "")) in ["NOT_DETECTED_FINISHED", "NOT_DETECTED_SCANNING"]
-                    and not (d.get("is_game_dlc") if isinstance(d, dict) else getattr(d, "is_game_dlc", False))
-                    and (d.get("status") if isinstance(d, dict) else getattr(d, "status", "")) != "GAME_DLC"
-                    for d in dependencies
-                )
+            has_unfound_deps = req_status == "PENDING_VERIFICATION" or any(
+                (d.get("status") if isinstance(d, dict) else getattr(d, "status", ""))
+                in ["NOT_DETECTED_FINISHED", "NOT_DETECTED_SCANNING"]
+                and not (d.get("is_game_dlc") if isinstance(d, dict) else getattr(d, "is_game_dlc", False))
+                and (d.get("status") if isinstance(d, dict) else getattr(d, "status", "")) != "GAME_DLC"
+                for d in dependencies
             )
 
             if has_unfound_deps:

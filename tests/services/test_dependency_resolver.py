@@ -94,6 +94,7 @@ def test_resolve_mod_dependencies_four_statuses():
     """Tests that dependencies resolve to exactly one of the 4 requested statuses."""
     from src.services.dependency_resolver import resolve_mod_dependencies
     from src.services.catalog_sync_service import SyncTracker
+
     db = DatabaseManager.get_instance()
 
     with db.get_session() as session:
@@ -105,7 +106,9 @@ def test_resolve_mod_dependencies_four_statuses():
         # Add installed mod
         im = InstalledMod(source="loverslab", remote_id="inst_mod_1", title="Installed Dependency", folder_name="Dep1")
         # Add catalog mod (not installed)
-        cm = CatalogMod(source="loverslab", remote_id="cat_mod_1", title="Catalog Mod Not Installed", page_url="http://example.com")
+        cm = CatalogMod(
+            source="loverslab", remote_id="cat_mod_1", title="Catalog Mod Not Installed", page_url="http://example.com"
+        )
         session.add_all([im, cm])
         session.commit()
 
@@ -164,14 +167,16 @@ def test_check_dependencies_endpoint():
             requirements_status="RESOLVED",
             requirements_text="Needs Dep 1",
         )
-        m2.set_requirements_mods_list([
-            {
-                "source": "loverslab",
-                "remote_id": "dep_test_1",
-                "title": "Dependency 1",
-                "url": "https://loverslab.com/files/file/dep_test_1/",
-            }
-        ])
+        m2.set_requirements_mods_list(
+            [
+                {
+                    "source": "loverslab",
+                    "remote_id": "dep_test_1",
+                    "title": "Dependency 1",
+                    "url": "https://loverslab.com/files/file/dep_test_1/",
+                }
+            ]
+        )
 
         # Installed mod: dep_test_1 is already installed
         inst = InstalledMod(
@@ -300,6 +305,7 @@ def test_wickedwhims_all_naming_variations_recognition():
     wicked-whims, Wicked_Whims, wicked_whims, Wicked Whims, WiCkedWhIms, etc.
     """
     from src.providers.loverslab import is_wickedwhims_name, LoversLabProvider
+
     provider = LoversLabProvider()
 
     variations = [
@@ -422,13 +428,13 @@ def test_wickedwhims_variations_and_br_preservation():
     assert "City Living" in dlc_item.get("title")
 
 
-
 def test_mod_detail_view_requirements_loading_and_retractable():
     """Validates that ModDetailView shows a loading state during analysis and is collapsible/retractable."""
     from PySide6.QtWidgets import QApplication
     from src.ui.views.mod_detail_view import ModDetailView
 
     _app = QApplication.instance() or QApplication(["test", "-platform", "offscreen"])
+    assert _app is not None
 
     view = ModDetailView()
 
@@ -451,13 +457,15 @@ def test_mod_detail_view_requirements_loading_and_retractable():
     assert view.req_collapse_btn.text() == "▲ Réduire"
 
     # 4. Render requirements keeps section interactive and visible
-    view._render_requirements({
-        "requirements_status": "RESOLVED",
-        "requirements_text": "WickedWhims",
-        "dependencies": [
-            {"remote_id": "3169", "title": "WickedWhims", "status": "DETECTED_NOT_INSTALLED", "is_installed": False}
-        ]
-    })
+    view._render_requirements(
+        {
+            "requirements_status": "RESOLVED",
+            "requirements_text": "WickedWhims",
+            "dependencies": [
+                {"remote_id": "3169", "title": "WickedWhims", "status": "DETECTED_NOT_INSTALLED", "is_installed": False}
+            ],
+        }
+    )
     assert not view.req_frame.isHidden()
     assert not view.req_collapse_btn.isHidden()
     assert "Dépendances et DLCs identifiés" in view.req_title.text()
@@ -652,9 +660,7 @@ def test_find_dependent_installed_mods():
             title="Animations Pack",
             page_url="https://example.com/anim",
         )
-        anim_cat.set_requirements_mods_list([
-            {"source": "loverslab", "remote_id": "3169", "title": "WickedWhims"}
-        ])
+        anim_cat.set_requirements_mods_list([{"source": "loverslab", "remote_id": "3169", "title": "WickedWhims"}])
         anim_inst = InstalledMod(
             source="loverslab",
             remote_id="anim_pack_1",
@@ -725,6 +731,7 @@ def test_resolve_mod_dependencies_with_game_dlc():
     """Verifies that resolve_mod_dependencies returns status GAME_DLC and does not block install."""
     from src.services.dependency_resolver import resolve_mod_dependencies
     from src.services.catalog_sync_service import check_catalog_dependencies
+
     db = DatabaseManager.get_instance()
 
     with db.get_session() as session:
@@ -733,7 +740,9 @@ def test_resolve_mod_dependencies_with_game_dlc():
             {"title": "WickedWhims", "source": "loverslab", "remote_id": "3169"},
         ]
         # WickedWhims is installed
-        installed_by_remote = {("loverslab", "3169"): InstalledMod(source="loverslab", remote_id="3169", title="WickedWhims")}
+        installed_by_remote = {
+            ("loverslab", "3169"): InstalledMod(source="loverslab", remote_id="3169", title="WickedWhims")
+        }
         installed_by_title = {"wickedwhims": installed_by_remote[("loverslab", "3169")]}
 
         items = resolve_mod_dependencies(
@@ -808,5 +817,3 @@ def test_extract_requirements_splits_line_with_sims4_dlc_and_mods():
     codes = [m.get("dlc_code") for m in mods2]
     assert "EP04" in codes  # Cats & Dogs
     assert "EP15" in codes  # For Rent
-
-

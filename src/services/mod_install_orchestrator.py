@@ -1,6 +1,7 @@
 """
 Orchestrator for downloading and installing catalog mods and their dependency graph.
 """
+
 from pathlib import Path
 import tempfile
 from typing import Optional, Callable
@@ -77,9 +78,7 @@ def perform_mod_install(
         already_installed = [d for d in resolved_deps if d.is_installed or d.status == "INSTALLED"]
         missing_dependencies = [d for d in resolved_deps if not d.is_installed and d.status != "INSTALLED"]
 
-        not_detected_deps = [
-            d for d in missing_dependencies if d.status == "NOT_DETECTED_FINISHED" or not d.remote_id
-        ]
+        not_detected_deps = [d for d in missing_dependencies if d.status == "NOT_DETECTED_FINISHED" or not d.remote_id]
         if not_detected_deps:
             names = ", ".join(f"'{d.title}'" for d in not_detected_deps)
             logger.warning(
@@ -126,7 +125,9 @@ def perform_mod_install(
                 )
 
             if not dep_url:
-                logger.error(f"[INSTALL-DEP] ❌ URL introuvable pour '{dep_title}' (#{dep_remote_id}). Installation sautée.")
+                logger.error(
+                    f"[INSTALL-DEP] ❌ URL introuvable pour '{dep_title}' (#{dep_remote_id}). Installation sautée."
+                )
                 continue
 
             dep_payload = CatalogInstallRequest(
@@ -138,7 +139,9 @@ def perform_mod_install(
             )
             dep_res = perform_mod_install(dep_payload, progress_callback=progress_callback)
             if dep_res.success:
-                logger.info(f"[INSTALL-DEP] ✅ [{idx}/{total_missing}] Dépendance '{dep_title}' (#{dep_remote_id}) installée avec succès.")
+                logger.info(
+                    f"[INSTALL-DEP] ✅ [{idx}/{total_missing}] Dépendance '{dep_title}' (#{dep_remote_id}) installée avec succès."
+                )
                 installed_dependencies.append(dep_title)
             else:
                 err_msg = f"Échec de l'installation de la dépendance requise '{dep_title}': {dep_res.message}"
@@ -163,7 +166,9 @@ def perform_mod_install(
                         installed_dependencies=installed_dependencies,
                     )
 
-    logger.info(f"[INSTALL-MAIN] Démarrage de l'installation du mod principal : '{mod_title}' ({source} #{remote_id})...")
+    logger.info(
+        f"[INSTALL-MAIN] Démarrage de l'installation du mod principal : '{mod_title}' ({source} #{remote_id})..."
+    )
 
     provider = ProviderRegistry.get_provider(source)
     if not provider:
@@ -201,13 +206,25 @@ def perform_mod_install(
     file_to_install = Path(msg) if Path(msg).exists() else dest_file
     try:
         with open(file_to_install, "rb") as f:
-            magic = f.read(4)
-        if magic == b"DBPF" and file_to_install.suffix.lower() != ".package":
+            magic = f.read(7)
+        if magic.startswith(b"DBPF") and file_to_install.suffix.lower() != ".package":
             pkg_path = file_to_install.with_suffix(".package")
             file_to_install.replace(pkg_path)
             file_to_install = pkg_path
+        elif magic.startswith(b"Rar!") and file_to_install.suffix.lower() != ".rar":
+            rar_path = file_to_install.with_suffix(".rar")
+            file_to_install.replace(rar_path)
+            file_to_install = rar_path
+        elif magic.startswith(b"7z\xbc\xaf'\x1c") and file_to_install.suffix.lower() != ".7z":
+            sz_path = file_to_install.with_suffix(".7z")
+            file_to_install.replace(sz_path)
+            file_to_install = sz_path
+        elif magic.startswith(b"PK") and file_to_install.suffix.lower() != ".zip":
+            zip_path = file_to_install.with_suffix(".zip")
+            file_to_install.replace(zip_path)
+            file_to_install = zip_path
     except Exception as e:
-        logger.debug(f"Vérification DBPF échouée pour {file_to_install}: {e}")
+        logger.debug(f"Vérification de format binaire échouée pour {file_to_install}: {e}")
 
     install_ok, install_msg = ModInstaller.install_mod_from_file(
         file_path=file_to_install,

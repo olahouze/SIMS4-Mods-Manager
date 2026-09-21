@@ -11,6 +11,7 @@ def create_test_image_bytes() -> bytes:
     img = QImage(100, 100, QImage.Format.Format_RGB32)
     img.fill(QColor(255, 0, 0))
     from PySide6.QtCore import QBuffer, QIODevice
+
     buf = QBuffer()
     buf.open(QIODevice.OpenModeFlag.WriteOnly)
     img.save(buf, "JPG")
@@ -27,7 +28,8 @@ def test_gallery_batch_worker_disk_and_memory_cache(qapp, tmp_path):
 
     # Save to disk cache manually
     import hashlib
-    u_hash = hashlib.md5(test_url.encode("utf-8")).hexdigest()
+
+    u_hash = hashlib.md5(test_url.encode("utf-8"), usedforsecurity=False).hexdigest()
     cached_file = cache_dir / f"thumb_{u_hash}.jpg"
     cached_file.write_bytes(img_bytes)
 
@@ -42,6 +44,7 @@ def test_gallery_batch_worker_disk_and_memory_cache(qapp, tmp_path):
     assert idx == 0
     assert not pix.isNull()
     from src.ui.components.image_cache import ImageCache
+
     assert ImageCache.get(test_url) is not None
 
     # Second run: hits in-memory cache directly
@@ -74,6 +77,7 @@ def test_gallery_batch_worker_parallel_network_fetch(qapp, tmp_path, monkeypatch
 
     # Clear memory cache for these urls
     from src.ui.components.image_cache import ImageCache
+
     for u in urls:
         ImageCache.pop(u)
 
@@ -107,6 +111,7 @@ def test_gallery_batch_worker_cancellation(qapp, tmp_path):
 def test_mod_detail_view_immediate_reset_and_race_guard(qapp, monkeypatch):
     """Verifies that ModDetailView immediately resets the UI state on load_mod and protects against race conditions."""
     from src.ui.workers import FetchDetailsWorker, DescriptionImageLoaderWorker, GalleryBatchWorker
+
     monkeypatch.setattr(FetchDetailsWorker, "start", lambda self: None)
     monkeypatch.setattr(DescriptionImageLoaderWorker, "start", lambda self: None)
     monkeypatch.setattr(GalleryBatchWorker, "start", lambda self: None)
@@ -124,11 +129,14 @@ def test_mod_detail_view_immediate_reset_and_race_guard(qapp, monkeypatch):
         }
         view.load_mod(mod1)
         # Simulate fetch completed for mod 1
-        view._on_details_fetched({
-            "title": "Old Mod 1",
-            "description": "<p>Old Description of Mod 1</p>",
-            "screenshots": ["https://example.com/old.jpg"],
-        }, load_id=view._current_load_id)
+        view._on_details_fetched(
+            {
+                "title": "Old Mod 1",
+                "description": "<p>Old Description of Mod 1</p>",
+                "screenshots": ["https://example.com/old.jpg"],
+            },
+            load_id=view._current_load_id,
+        )
 
         assert "Old Description of Mod 1" in view.desc_browser.toHtml()
 
@@ -148,20 +156,26 @@ def test_mod_detail_view_immediate_reset_and_race_guard(qapp, monkeypatch):
         assert view.meta_author.text() == "👤 Auteur : Author 2"
 
         # 2. Obsolete callback from Mod 1 is ignored
-        view._on_details_fetched({
-            "title": "Old Mod 1 Delayed",
-            "description": "<p>Late Old Description</p>",
-        }, load_id=1)
+        view._on_details_fetched(
+            {
+                "title": "Old Mod 1 Delayed",
+                "description": "<p>Late Old Description</p>",
+            },
+            load_id=1,
+        )
 
         # Should still show loading state, not the late description
         assert "Late Old Description" not in view.desc_browser.toHtml()
 
         # 3. Proper callback with matching load_id is accepted
-        view._on_details_fetched({
-            "title": "New Mod 2",
-            "description": "<p>Fresh Description for Mod 2</p>",
-            "screenshots": [],
-        }, load_id=view._current_load_id)
+        view._on_details_fetched(
+            {
+                "title": "New Mod 2",
+                "description": "<p>Fresh Description for Mod 2</p>",
+                "screenshots": [],
+            },
+            load_id=view._current_load_id,
+        )
 
         assert "Fresh Description for Mod 2" in view.desc_browser.toHtml()
 

@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 try:
     from PySide6.QtCore import QObject, Signal
+
     HAS_PYSIDE = True
 except ImportError:
     HAS_PYSIDE = False

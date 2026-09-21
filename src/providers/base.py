@@ -46,9 +46,7 @@ class BaseSourceProvider(ABC):
         pass
 
     @abstractmethod
-    def check_user_already_commented(
-        self, page_url: str, required_keywords: List[str]
-    ) -> Tuple[bool, Optional[str]]:
+    def check_user_already_commented(self, page_url: str, required_keywords: List[str]) -> Tuple[bool, Optional[str]]:
         """
         Checks live on the provider's site/forum if the authenticated user has already
         posted a comment/message containing the given keywords.
@@ -63,4 +61,3 @@ class BaseSourceProvider(ABC):
         Returns (success, message_or_error).
         """
         pass
-

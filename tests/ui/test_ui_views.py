@@ -152,7 +152,7 @@ def test_updates_view(qapp, monkeypatch):
                 "new_version": "2.0",
                 "has_update": False,
             },
-        ]
+        ],
     }
     monkeypatch.setattr("src.ui.views.updates_view.get_api_client", lambda: mock_api)
 
@@ -244,4 +244,3 @@ def test_catalog_pagination_and_live_sync(qapp, monkeypatch):
         view.monitor_timer.stop()
         view.deleteLater()
         qapp.processEvents()
-

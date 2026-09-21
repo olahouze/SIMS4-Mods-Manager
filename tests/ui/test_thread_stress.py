@@ -3,6 +3,7 @@ Stress tests for background worker lifecycle and garbage collection under load.
 Ensures that abandoning, replacing, and cancelling workers in rapid succession
 never causes crashes or 'QThread: Destroyed while thread is still running'.
 """
+
 import time
 from unittest.mock import MagicMock
 from PySide6.QtCore import Signal, QThreadPool

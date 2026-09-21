@@ -45,6 +45,7 @@ def run_catalog_sync(max_pages: int) -> None:
         return
 
     try:
+
         def _category_worker(cat: Dict[str, Any]) -> int:
             nonlocal total_new
             cat_id = cat["id"]
@@ -86,14 +87,16 @@ def run_catalog_sync(max_pages: int) -> None:
                         break
                     except Exception as e:
                         if attempt < max_retries - 1:
-                            delay = base_delay * (2 ** attempt)
+                            delay = base_delay * (2**attempt)
                             logger.warning(
                                 f"Échec worker LoversLab [{cat_name}] page {p} "
                                 f"(tentative {attempt + 1}/{max_retries}). Réessai dans {delay:.1f}s... Erreur: {e}"
                             )
                             time.sleep(delay)
                         else:
-                            logger.error(f"Erreur définitive worker LoversLab [{cat_name}] page {p}: {e}", exc_info=True)
+                            logger.error(
+                                f"Erreur définitive worker LoversLab [{cat_name}] page {p}: {e}", exc_info=True
+                            )
 
                 SyncTracker.wait_if_paused()
                 if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
@@ -111,11 +114,7 @@ def run_catalog_sync(max_pages: int) -> None:
                             remote_ids = [m["remote_id"] for m in mods if m.get("remote_id")]
                             existing_map = {}
                             if remote_ids:
-                                found = (
-                                    session.query(CatalogMod)
-                                    .filter(CatalogMod.remote_id.in_(remote_ids))
-                                    .all()
-                                )
+                                found = session.query(CatalogMod).filter(CatalogMod.remote_id.in_(remote_ids)).all()
                                 existing_map = {(m.source, m.remote_id): m for m in found}
 
                             for m_data in mods:
@@ -171,13 +170,17 @@ def run_catalog_sync(max_pages: int) -> None:
                 time.sleep(0.3)
 
             if SyncTracker.stop_requested or ShutdownManager.is_shutting_down():
-                SyncTracker.update_category(cat_id, min(p, target_cat_pages), target_cat_pages, cat_mods_count, "STOPPED")
+                SyncTracker.update_category(
+                    cat_id, min(p, target_cat_pages), target_cat_pages, cat_mods_count, "STOPPED"
+                )
             else:
                 SyncTracker.update_category(cat_id, target_cat_pages, target_cat_pages, cat_mods_count, "COMPLETED")
             return cat_mods_count
 
         num_workers = min(len(categories), 8)
-        logger.info(f"Démarrage du scraping parallèle sur {len(categories)} sous-catégories avec {num_workers} workers.")
+        logger.info(
+            f"Démarrage du scraping parallèle sur {len(categories)} sous-catégories avec {num_workers} workers."
+        )
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             try:
                 list(executor.map(_category_worker, categories))
@@ -254,7 +257,8 @@ def check_catalog_dependencies(
         game_dlcs = [d for d in dep_items if d.is_game_dlc or d.status == "GAME_DLC"]
         comment_deps = [d for d in dep_items if d.is_comment or d.status == "COMMENT_NOISE"]
         mod_deps = [
-            d for d in dep_items
+            d
+            for d in dep_items
             if not (d.is_game_dlc or d.status == "GAME_DLC" or d.is_comment or d.status == "COMMENT_NOISE")
         ]
 

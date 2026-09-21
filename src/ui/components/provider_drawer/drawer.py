@@ -2,6 +2,7 @@
 ProviderDrawer: Modular retractable right-side satellite drawer for provider status,
 subcategory progress monitoring, and individual site scraping controls.
 """
+
 from typing import Dict, Any, Tuple, Optional
 from PySide6.QtWidgets import (
     QWidget,
@@ -26,10 +27,10 @@ class ProviderDrawer(QWidget):
     subcategory progress monitoring, and individual site scraping controls (Pause, Resume, Stop, Resync).
     """
 
-    start_requested = Signal(str)   # provider name
-    pause_requested = Signal(str)   # provider name
+    start_requested = Signal(str)  # provider name
+    pause_requested = Signal(str)  # provider name
     resume_requested = Signal(str)  # provider name
-    stop_requested = Signal(str)    # provider name
+    stop_requested = Signal(str)  # provider name
 
     def __init__(self, parent=None):
         super().__init__(parent)

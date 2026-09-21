@@ -1,6 +1,7 @@
 """
 UpdatesToolbarBuilder: Builds the header stats bar and the selection/search toolbar for UpdatesView.
 """
+
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,

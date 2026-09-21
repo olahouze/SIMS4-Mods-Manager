@@ -2,6 +2,7 @@
 Dependency string normalization and official Sims 4 DLC/base-game matching helpers.
 Consolidates duplicated parsing logic across dependency resolver and UI dialogs.
 """
+
 import re
 from typing import Tuple, Optional
 from src.utils.game_dlc_matcher import GameDlcMatcher, SIMS4_PREFIX_REGEX

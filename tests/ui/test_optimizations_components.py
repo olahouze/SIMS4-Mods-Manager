@@ -5,9 +5,6 @@ from src.ui.components.image_cache import ImageCache
 from src.ui.utils.dialog_helper import DialogHelper
 
 
-
-
-
 def test_dependencies_summary_widget_rendering(qapp):
     deps = [
         {"title": "WickedWhims", "is_installed": True, "status": "INSTALLED"},
@@ -50,6 +47,7 @@ def test_image_cache_scaled_caching_and_budget(qapp):
 
 def test_dialog_helper_dialog_creation(qapp, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
+
     monkeypatch.setattr(QMessageBox, "exec", lambda self: 0)
 
     # Test confirmation

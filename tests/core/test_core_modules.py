@@ -63,12 +63,14 @@ def test_core_dtos():
     assert d["title"] == "Test Mod"
     assert "published_date" in d
 
-    dto2 = ModDetailsDTO.from_dict({"remote_id": "456", "title": "Second Mod", "page_url": "https://example.com/2", "extra_ignored": "foo"})
+    dto2 = ModDetailsDTO.from_dict(
+        {"remote_id": "456", "title": "Second Mod", "page_url": "https://example.com/2", "extra_ignored": "foo"}
+    )
     assert dto2.remote_id == "456"
 
     res = DownloadResultDTO(
         success=True,
-        file_path="/tmp/mod.zip",
+        file_path="downloads/mod.zip",
         file_size_bytes=1024,
         message="OK",
     )

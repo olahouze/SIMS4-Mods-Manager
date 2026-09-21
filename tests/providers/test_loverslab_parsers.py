@@ -86,4 +86,3 @@ def test_requirements_negative_statements_and_settings_skipped():
     no_third_item = next((r for r in reqs if "No third-party" in r["title"]), None)
     assert no_third_item is not None
     assert no_third_item["remote_id"] == ""
-

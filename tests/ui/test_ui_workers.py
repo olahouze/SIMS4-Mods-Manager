@@ -11,9 +11,6 @@ from src.ui.workers import (
 from src.core.session_manager import SessionManager
 
 
-
-
-
 def test_sync_trigger_worker(qapp):
     mock_api = MagicMock()
     worker = SyncTriggerWorker(mock_api, max_pages=3)

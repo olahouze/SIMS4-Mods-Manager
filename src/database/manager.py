@@ -61,11 +61,15 @@ class DatabaseManager:
                 if "requirements_text" not in col_names:
                     conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_text TEXT"))
                 if "requirements_status" not in col_names:
-                    conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_status VARCHAR(50) DEFAULT 'NONE'"))
+                    conn.execute(
+                        text("ALTER TABLE catalog_mods ADD COLUMN requirements_status VARCHAR(50) DEFAULT 'NONE'")
+                    )
                 if "requirements_mods_json" not in col_names:
                     conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_mods_json TEXT DEFAULT '[]'"))
                 if "requirements_overrides_json" not in col_names:
-                    conn.execute(text("ALTER TABLE catalog_mods ADD COLUMN requirements_overrides_json TEXT DEFAULT '{}'"))
+                    conn.execute(
+                        text("ALTER TABLE catalog_mods ADD COLUMN requirements_overrides_json TEXT DEFAULT '{}'")
+                    )
                 conn.commit()
 
             with self.get_session() as session:
@@ -118,8 +122,7 @@ class DatabaseManager:
                 if installed_mods:
                     cat_ids = {im.catalog_mod_id for im in installed_mods if im.catalog_mod_id}
                     catalog_map = {
-                        cm.id: cm
-                        for cm in session.query(CatalogMod).filter(CatalogMod.id.in_(cat_ids)).all()
+                        cm.id: cm for cm in session.query(CatalogMod).filter(CatalogMod.id.in_(cat_ids)).all()
                     }
                     for im in installed_mods:
                         cm = catalog_map.get(im.catalog_mod_id)
@@ -132,7 +135,9 @@ class DatabaseManager:
                                 f"Réparation clé étrangère erronée : mod installé '{im.title}' (remote_id={im.remote_id}) "
                                 f"était faussement lié au mod catalogue #{cm.id} '{cm.title}' (remote_id={cm.remote_id}). Dissociation."
                             )
-                            true_match = session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
+                            true_match = (
+                                session.query(CatalogMod).filter_by(source=im.source, remote_id=im.remote_id).first()
+                            )
                             im.catalog_mod_id = true_match.id if true_match else None
                             repaired_links += 1
 

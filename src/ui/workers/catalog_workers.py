@@ -4,6 +4,7 @@ Workers d'arrière-plan (BaseWorker / QThreadPool) pour les opérations du catal
 - Récupération asynchrone du catalogue (CatalogFetchWorker)
 - Streaming de l'installation de mods (InstallWorker)
 """
+
 from PySide6.QtCore import Signal
 
 from src.api.client import get_api_client
@@ -36,6 +37,7 @@ class SyncTriggerWorker(BaseWorker):
 
 class CatalogFetchWorker(BaseWorker):
     """Fetches catalog page and accounts asynchronously to keep the UI thread 100% fluid."""
+
     data_ready = Signal(dict, list, int)  # res, accounts, fetch_id
     error_signal = Signal(str, int)
 
@@ -118,7 +120,9 @@ class InstallWorker(BaseWorker):
             self.finished.emit(True, "Installation terminée.")
         except Exception as e:
             if not self._is_cancelled:
-                logger.error(f"Erreur API lors de l'installation du mod '{self.mod_data.get('title')}': {e}", exc_info=True)
+                logger.error(
+                    f"Erreur API lors de l'installation du mod '{self.mod_data.get('title')}': {e}", exc_info=True
+                )
                 self.finished.emit(False, f"Erreur API lors de l'installation: {e}")
         finally:
             self._is_running = False

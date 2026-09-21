@@ -1,4 +1,3 @@
-
 from src.ui.components.filter_bar import FilterBar
 from src.ui.components.mod_card import ModCard
 from src.ui.components.installed_card import InstalledCard

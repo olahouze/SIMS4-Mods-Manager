@@ -61,26 +61,30 @@ def test_dependencies_dialog_report_button_lifecycle(qapp):
         assert hasattr(dlg, "btn_report_author")
 
         # Simulate receiving status: already reported
-        dlg._on_status_ready({
-            "can_report": False,
-            "already_reported": True,
-            "reported_at": "12/09/2026 à 14:32",
-            "formatted_message": "Hi @AuthorSims...",
-            "author": "@AuthorSims",
-            "is_authenticated": True,
-        })
+        dlg._on_status_ready(
+            {
+                "can_report": False,
+                "already_reported": True,
+                "reported_at": "12/09/2026 à 14:32",
+                "formatted_message": "Hi @AuthorSims...",
+                "author": "@AuthorSims",
+                "is_authenticated": True,
+            }
+        )
         assert dlg.btn_report_author.isEnabled() is False
         assert "12/09/2026" in dlg.btn_report_author.text()
 
         # Simulate receiving status: NOT yet reported
-        dlg._on_status_ready({
-            "can_report": True,
-            "already_reported": False,
-            "reported_at": None,
-            "formatted_message": "Hi @AuthorSims...",
-            "author": "@AuthorSims",
-            "is_authenticated": True,
-        })
+        dlg._on_status_ready(
+            {
+                "can_report": True,
+                "already_reported": False,
+                "reported_at": None,
+                "formatted_message": "Hi @AuthorSims...",
+                "author": "@AuthorSims",
+                "is_authenticated": True,
+            }
+        )
         assert dlg.btn_report_author.isEnabled() is True
         assert "Interpeler" in dlg.btn_report_author.text() or "Notify" in dlg.btn_report_author.text()
 
@@ -184,33 +188,39 @@ def test_mod_detail_view_report_author_lifecycle(qapp):
         assert "MissingCoreLibrary" in view._unfound_dep_names
 
         # Status ready: already reported
-        view._on_report_status_ready({
-            "can_report": False,
-            "already_reported": True,
-            "reported_at": "10/09/2026 à 10:00",
-            "formatted_message": "Hi @CreatorSims...",
-            "author": "@CreatorSims",
-            "is_authenticated": True,
-        })
+        view._on_report_status_ready(
+            {
+                "can_report": False,
+                "already_reported": True,
+                "reported_at": "10/09/2026 à 10:00",
+                "formatted_message": "Hi @CreatorSims...",
+                "author": "@CreatorSims",
+                "is_authenticated": True,
+            }
+        )
         assert view.btn_report_author.isEnabled() is False
         assert "10/09/2026" in view.btn_report_author.text()
 
         # Status ready: can report
-        view._on_report_status_ready({
-            "can_report": True,
-            "already_reported": False,
-            "reported_at": None,
-            "formatted_message": "Hi @CreatorSims...",
-            "author": "@CreatorSims",
-            "is_authenticated": True,
-        })
+        view._on_report_status_ready(
+            {
+                "can_report": True,
+                "already_reported": False,
+                "reported_at": None,
+                "formatted_message": "Hi @CreatorSims...",
+                "author": "@CreatorSims",
+                "is_authenticated": True,
+            }
+        )
         assert view.btn_report_author.isEnabled() is True
         assert "Interpeler" in view.btn_report_author.text() or "Notify" in view.btn_report_author.text()
 
         # Report sent successfully callback
         view._on_report_sent_success("à l'instant")
         assert view.btn_report_author.isEnabled() is False
-        assert "interpelé" in view.btn_report_author.text().lower() or "notified" in view.btn_report_author.text().lower()
+        assert (
+            "interpelé" in view.btn_report_author.text().lower() or "notified" in view.btn_report_author.text().lower()
+        )
 
 
 def test_mod_detail_view_categorized_dependencies_rendering(qapp):
@@ -383,5 +393,3 @@ def test_report_preview_dialog_scroll_and_bidirectional_sync(qapp):
     # The message should now contain the missing modules section
     new_message = dlg.text_edit.toPlainText()
     assert "could not be identified" in new_message.lower()
-
-

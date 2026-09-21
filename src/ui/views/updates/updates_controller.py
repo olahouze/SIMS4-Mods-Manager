@@ -1,6 +1,7 @@
 """
 UpdatesActionController: Orchestrates update confirmations, progress dialogs, and UpdateWorker threads.
 """
+
 from typing import List, Dict, Any, Callable, Optional
 from PySide6.QtWidgets import QWidget, QMessageBox
 

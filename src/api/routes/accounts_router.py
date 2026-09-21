@@ -1,17 +1,23 @@
+"""Routes API REST pour les comptes et sessions anti-bot (Front -> Back)."""
+
+from __future__ import annotations
+
 from fastapi import APIRouter, HTTPException
 
 from src.api.schemas.accounts import (
-    AccountListResponse,
-    AccountStatusItem,
     AccountActionResponse,
+    AccountListResponse,
     AccountLoginRequest,
     AccountLoginResponse,
+    AccountStatusItem,
 )
-from src.database.models import AccountSession
-from src.database.manager import DatabaseManager
 from src.core.session_manager import SessionManager
+from src.infrastructure.database.repositories.sqlalchemy_account_repository import (
+    SqlAlchemyAccountRepository,
+)
 
 router = APIRouter(prefix="/accounts", tags=["Accounts & Anti-Bot"])
+_account_repo = SqlAlchemyAccountRepository()
 
 PROVIDERS_LOGIN_URLS = {
     "loverslab": "https://www.loverslab.com/login/",
@@ -20,44 +26,42 @@ PROVIDERS_LOGIN_URLS = {
 
 
 @router.get("", response_model=AccountListResponse)
-def get_accounts():
-    """Lists authentication and anti-bot status for all supported providers."""
-    db = DatabaseManager.get_instance()
-    accounts_list = []
+def get_accounts() -> AccountListResponse:
+    """Liste le statut d'authentification et anti-bot de tous les providers supportés."""
+    accounts_list: list[AccountStatusItem] = []
 
-    with db.get_session() as session:
-        for p_name in ["loverslab", "patreon"]:
-            acc = session.query(AccountSession).filter_by(provider_name=p_name).first()
-            is_ready = SessionManager.is_session_ready(p_name)
-            is_member = SessionManager.is_member_authenticated(p_name)
-            cookies_dict = acc.get_cookies_dict() if acc else {}
+    for p_name in ["loverslab", "patreon"]:
+        acc = _account_repo.get_by_provider(p_name)
+        is_ready = SessionManager.is_session_ready(p_name)
+        is_member = SessionManager.is_member_authenticated(p_name)
+        cookies_dict = acc.cookies_data if acc else {}
 
-            user_display_name = ""
-            if acc and acc.user_display_name:
-                user_display_name = acc.user_display_name
-            elif is_member:
-                user_display_name = "Connecté"
-            elif is_ready:
-                user_display_name = "Anti-bot validé"
+        user_display_name = ""
+        if acc and acc.user_display_name:
+            user_display_name = acc.user_display_name
+        elif is_member:
+            user_display_name = "Connecté"
+        elif is_ready:
+            user_display_name = "Anti-bot validé"
 
-            accounts_list.append(
-                AccountStatusItem(
-                    provider_name=p_name,
-                    is_configured=acc is not None and len(cookies_dict) > 0,
-                    is_ready=is_ready,
-                    is_member=is_member,
-                    user_display_name=user_display_name,
-                    cookies_count=len(cookies_dict),
-                    last_verified=acc.last_verified if acc else None,
-                )
+        accounts_list.append(
+            AccountStatusItem(
+                provider_name=p_name,
+                is_configured=acc is not None and len(cookies_dict) > 0,
+                is_ready=is_ready,
+                is_member=is_member,
+                user_display_name=user_display_name,
+                cookies_count=len(cookies_dict),
+                last_verified=acc.last_verified if acc else None,
             )
+        )
 
     return AccountListResponse(accounts=accounts_list)
 
 
 @router.post("/{provider_name}/test", response_model=AccountActionResponse)
-def test_account(provider_name: str):
-    """Performs a live HTTP test of the session cookies for the specified provider."""
+def test_account(provider_name: str) -> AccountActionResponse:
+    """Effectue un test HTTP en direct des cookies de session pour le provider spécifié."""
     p_lower = provider_name.lower()
     if p_lower not in ["loverslab", "patreon"]:
         raise HTTPException(status_code=400, detail=f"Fournisseur non reconnu: {provider_name}")
@@ -67,8 +71,8 @@ def test_account(provider_name: str):
 
 
 @router.delete("/{provider_name}", response_model=AccountActionResponse)
-def clear_account(provider_name: str):
-    """Clears stored session cookies and removes persistent browser profile."""
+def clear_account(provider_name: str) -> AccountActionResponse:
+    """Efface les cookies de session stockés et supprime le profil de navigateur persistant."""
     p_lower = provider_name.lower()
     if p_lower not in ["loverslab", "patreon"]:
         raise HTTPException(status_code=400, detail=f"Fournisseur non reconnu: {provider_name}")
@@ -82,11 +86,8 @@ def clear_account(provider_name: str):
 
 
 @router.post("/{provider_name}/login", response_model=AccountLoginResponse)
-def login_account(provider_name: str, payload: AccountLoginRequest = AccountLoginRequest()):
-    """
-    Launches an interactive Playwright browser window to solve Cloudflare or log into account.
-    Blocks until the browser window is closed or verified.
-    """
+def login_account(provider_name: str, payload: AccountLoginRequest = AccountLoginRequest()) -> AccountLoginResponse:
+    """Lance une fenêtre Playwright interactive pour résoudre Cloudflare ou se connecter."""
     p_lower = provider_name.lower()
     if p_lower not in PROVIDERS_LOGIN_URLS:
         raise HTTPException(status_code=400, detail=f"Fournisseur non reconnu: {provider_name}")

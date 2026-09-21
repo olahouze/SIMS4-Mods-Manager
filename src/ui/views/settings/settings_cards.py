@@ -1,6 +1,7 @@
 """
 Specialized settings section card widgets for SIMS 4 Mods Manager.
 """
+
 from typing import Callable, Dict
 from PySide6.QtWidgets import (
     QFrame,

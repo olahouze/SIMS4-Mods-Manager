@@ -2,6 +2,7 @@
 Classifier and SQL filter generator for generic Sims 4 mod types across multiple source providers
 (LoversLab, Patreon, etc.).
 """
+
 from typing import Dict, List, Tuple, Any, Optional
 from sqlalchemy import or_
 
